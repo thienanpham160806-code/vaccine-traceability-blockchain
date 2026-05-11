@@ -1,7 +1,3 @@
-# vaccine-traceability-blockchain
-
-MVP blockchain backend for vaccine traceability using Solidity and Hardhat
-
 \# Vaccine Traceability Blockchain MVP
 
 
@@ -45,6 +41,4 @@ ignition/        Hardhat Ignition deployment modules
 deployments/     Contract addresses after deployment
 
 docs/            Technical notes and weekly progress
-
-
 
