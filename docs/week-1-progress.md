@@ -1,44 +1,29 @@
-\# Vaccine Traceability Blockchain MVP
+# Week 1 Progress
 
+## Day 1 - Project Setup
 
+### Completed
 
-This repository contains the blockchain backend layer for a vaccine traceability MVP.
+- Created GitHub repository
+- Cloned repository to local machine
+- Installed Git, Node.js dependencies, and Hardhat
+- Initialized Hardhat TypeScript project
+- Fixed dependency conflict between Hardhat versions
+- Configured npm scripts
+- Fixed TypeScript test configuration
+- Restructured the repository into a monorepo format
+- Moved the Hardhat project into `smart-contract/`
+- Added placeholder folders for `backend/`, `frontend/`, and `report/`
+- Removed generated Hardhat folders from Git tracking:
+  - `artifacts/`
+  - `cache/`
+  - `typechain-types/`
 
+### Commands Verified
 
-
-\## Tech Stack
-
-
-
-\- Solidity
-
-\- Hardhat
-
-\- TypeScript
-
-\- Ethers.js
-
-\- OpenZeppelin Contracts
-
-\- Sepolia Testnet
-
-
-
-\## Project Structure
-
-
-
-```text
-
-contracts/       Smart contracts
-
-test/            Unit and integration tests
-
-scripts/         Deployment scripts
-
-ignition/        Hardhat Ignition deployment modules
-
-deployments/     Contract addresses after deployment
-
-docs/            Technical notes and weekly progress
+```bash
+cd smart-contract
+npm install
+npm run compile
+npm run test
 

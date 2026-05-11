@@ -1,50 +1,12 @@
-# vaccine-traceability-blockchain
+# Vaccine Traceability System
 
-MVP blockchain backend for vaccine traceability using Solidity and Hardhat
+This repository contains the MVP system for blockchain-based vaccine traceability.
 
-\# Vaccine Traceability Blockchain MVP
-
-
-
-This repository contains the blockchain backend layer for a vaccine traceability MVP.
-
-
-
-\## Tech Stack
-
-
-
-\- Solidity
-
-\- Hardhat
-
-\- TypeScript
-
-\- Ethers.js
-
-\- OpenZeppelin Contracts
-
-\- Sepolia Testnet
-
-
-
-\## Project Structure
-
-
+## Project Structure
 
 ```text
-
-contracts/       Smart contracts
-
-test/            Unit and integration tests
-
-scripts/         Deployment scripts
-
-ignition/        Hardhat Ignition deployment modules
-
-deployments/     Contract addresses after deployment
-
-docs/            Technical notes and weekly progress
-
-
-
+smart-contract/   Solidity smart contracts, Hardhat tests, deployment scripts
+backend/          Backend API service
+frontend/         Web/mobile frontend interface
+docs/             Technical documentation
+report/           Final report and presentation materials
