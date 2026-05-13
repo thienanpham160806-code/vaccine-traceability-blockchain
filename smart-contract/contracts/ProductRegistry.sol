@@ -20,17 +20,31 @@ contract ProductRegistry {
         bytes32 batchHash;
         bytes32 metadataHash;
         bytes32 importDocHash;
+        address origin;
         address currentOwner;
         Status status;
+        Status previousStatus;
+        bool isImported;
+        bool zkpVerified;
+        uint8 riskLevel;
+        bytes32 flagReason;
         uint256 registeredAt;
         bool exists;
     }
 
+    bytes32 public constant DEFAULT_ADMIN_ROLE = bytes32(0);
     bytes32 public constant MANUFACTURER_ROLE = keccak256("MANUFACTURER_ROLE");
     bytes32 public constant IMPORTER_ROLE = keccak256("IMPORTER_ROLE");
     bytes32 public constant RECALL_AUTHORITY_ROLE = keccak256("RECALL_AUTHORITY_ROLE");
 
+    uint8 public constant RISK_NONE = 0;
+    uint8 public constant RISK_LOW = 1;
+    uint8 public constant RISK_MEDIUM = 2;
+    uint8 public constant RISK_HIGH = 3;
+    uint8 public constant RISK_CRITICAL = 4;
+
     ISupplyChainAccessControl public accessControl;
+    address public transferLedger;
 
     mapping(bytes32 => Product) private products;
     mapping(bytes32 => bytes32[]) private batchToSerials;
@@ -40,6 +54,8 @@ contract ProductRegistry {
         bytes32 indexed serialID,
         bytes32 indexed batchHash,
         address indexed owner,
+        bool isImported,
+        bool zkpVerified,
         Status status
     );
 
@@ -49,9 +65,36 @@ contract ProductRegistry {
         uint256 totalProducts
     );
 
+    event TransferLedgerUpdated(address indexed oldLedger, address indexed newLedger);
+
+    event ProductMarkedInTransit(
+        bytes32 indexed serialID,
+        address indexed currentOwner
+    );
+
+    event ProductTransferCompleted(
+        bytes32 indexed serialID,
+        address indexed oldOwner,
+        address indexed newOwner
+    );
+
+    event ProductFlagged(
+        bytes32 indexed serialID,
+        uint8 riskLevel,
+        bytes32 indexed reason
+    );
+
     constructor(address accessControlAddress) {
         require(accessControlAddress != address(0), "Invalid access control");
         accessControl = ISupplyChainAccessControl(accessControlAddress);
+    }
+
+    modifier onlyAdmin() {
+        require(
+            accessControl.hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Not admin"
+        );
+        _;
     }
 
     modifier onlyManufacturerOrImporter() {
@@ -70,6 +113,20 @@ contract ProductRegistry {
         _;
     }
 
+    modifier onlyTransferLedger() {
+        require(msg.sender == transferLedger, "Not transfer ledger");
+        _;
+    }
+
+    function setTransferLedger(address newTransferLedger) external onlyAdmin {
+        require(newTransferLedger != address(0), "Invalid transfer ledger");
+
+        address oldLedger = transferLedger;
+        transferLedger = newTransferLedger;
+
+        emit TransferLedgerUpdated(oldLedger, newTransferLedger);
+    }
+
     function registerProduct(
         bytes32 serialID,
         bytes32 batchHash,
@@ -84,10 +141,12 @@ contract ProductRegistry {
         require(!recalledBatches[batchHash], "Batch recalled");
 
         bool isImporter = accessControl.hasRole(IMPORTER_ROLE, msg.sender);
+        bool proofVerified = false;
 
         if (isImporter) {
             require(importDocHash != bytes32(0), "Missing import doc");
             require(verifyProof(importDocHash, zkpProof), "Invalid proof");
+            proofVerified = true;
         }
 
         products[serialID] = Product({
@@ -95,15 +154,28 @@ contract ProductRegistry {
             batchHash: batchHash,
             metadataHash: metadataHash,
             importDocHash: importDocHash,
+            origin: msg.sender,
             currentOwner: msg.sender,
             status: Status.VERIFIED,
+            previousStatus: Status.REGISTERED,
+            isImported: isImporter,
+            zkpVerified: proofVerified,
+            riskLevel: RISK_NONE,
+            flagReason: bytes32(0),
             registeredAt: block.timestamp,
             exists: true
         });
 
         batchToSerials[batchHash].push(serialID);
 
-        emit ProductRegistered(serialID, batchHash, msg.sender, Status.VERIFIED);
+        emit ProductRegistered(
+            serialID,
+            batchHash,
+            msg.sender,
+            isImporter,
+            proofVerified,
+            Status.VERIFIED
+        );
     }
 
     function verifyProof(
@@ -126,10 +198,77 @@ contract ProductRegistry {
         recalledBatches[batchHash] = true;
 
         for (uint256 i = 0; i < serials.length; i++) {
-            products[serials[i]].status = Status.RECALLED;
+            Product storage product = products[serials[i]];
+
+            product.previousStatus = product.status;
+            product.status = Status.RECALLED;
+            product.riskLevel = RISK_CRITICAL;
+            product.flagReason = reasonHash;
         }
 
         emit BatchRecalled(batchHash, reasonHash, serials.length);
+    }
+
+    function markInTransit(bytes32 serialID) external onlyTransferLedger {
+        require(products[serialID].exists, "Product not found");
+
+        Product storage product = products[serialID];
+
+        require(product.status != Status.RECALLED, "Product recalled");
+        require(product.status != Status.FLAGGED, "Product flagged");
+        require(
+            product.status == Status.VERIFIED || product.status == Status.DELIVERED,
+            "Invalid status"
+        );
+
+        product.previousStatus = product.status;
+        product.status = Status.IN_TRANSIT;
+
+        emit ProductMarkedInTransit(serialID, product.currentOwner);
+    }
+
+    function completeTransfer(
+        bytes32 serialID,
+        address newOwner
+    ) external onlyTransferLedger {
+        require(products[serialID].exists, "Product not found");
+        require(newOwner != address(0), "Invalid owner");
+
+        Product storage product = products[serialID];
+
+        require(product.status == Status.IN_TRANSIT, "Not in transit");
+
+        address oldOwner = product.currentOwner;
+
+        product.currentOwner = newOwner;
+        product.previousStatus = Status.IN_TRANSIT;
+        product.status = Status.DELIVERED;
+
+        emit ProductTransferCompleted(serialID, oldOwner, newOwner);
+    }
+
+    function flagProductFromLedger(
+        bytes32 serialID,
+        uint8 riskLevel,
+        bytes32 reason
+    ) external onlyTransferLedger {
+        require(products[serialID].exists, "Product not found");
+        require(reason != bytes32(0), "Invalid reason");
+        require(riskLevel > RISK_NONE, "Invalid risk level");
+
+        Product storage product = products[serialID];
+
+        require(product.status != Status.RECALLED, "Product recalled");
+
+        if (product.status != Status.FLAGGED) {
+            product.previousStatus = product.status;
+        }
+
+        product.status = Status.FLAGGED;
+        product.riskLevel = riskLevel;
+        product.flagReason = reason;
+
+        emit ProductFlagged(serialID, riskLevel, reason);
     }
 
     function getStatus(bytes32 serialID) external view returns (Status) {
@@ -153,5 +292,25 @@ contract ProductRegistry {
 
     function productExists(bytes32 serialID) external view returns (bool) {
         return products[serialID].exists;
+    }
+
+    function getRiskLevel(bytes32 serialID) external view returns (uint8) {
+        require(products[serialID].exists, "Product not found");
+        return products[serialID].riskLevel;
+    }
+
+    function getFlagReason(bytes32 serialID) external view returns (bytes32) {
+        require(products[serialID].exists, "Product not found");
+        return products[serialID].flagReason;
+    }
+
+    function isZkpVerified(bytes32 serialID) external view returns (bool) {
+        require(products[serialID].exists, "Product not found");
+        return products[serialID].zkpVerified;
+    }
+
+    function isImportedProduct(bytes32 serialID) external view returns (bool) {
+        require(products[serialID].exists, "Product not found");
+        return products[serialID].isImported;
     }
 }
