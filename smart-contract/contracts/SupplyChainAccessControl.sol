@@ -19,10 +19,34 @@ contract SupplyChainAccessControl is AccessControl {
     event UserRoleRevoked(address indexed account, bytes32 indexed role);
     event PrimaryRoleSet(address indexed account, bytes32 indexed role);
     event RouteUpdated(bytes32 indexed fromRole, bytes32 indexed toRole, bool allowed);
+    event MvpRoutesConfigured();
 
     constructor(address admin) {
         require(admin != address(0), "Invalid admin");
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
+    }
+
+    function isSupportedRole(bytes32 role) public pure returns (bool) {
+        return role == MANUFACTURER_ROLE ||
+            role == IMPORTER_ROLE ||
+            role == DISTRIBUTOR_ROLE ||
+            role == CLINIC_ROLE ||
+            role == PHARMACY_ROLE ||
+            role == AUDITOR_ROLE ||
+            role == RECALL_AUTHORITY_ROLE;
+    }
+
+    function canInitiateTransfer(bytes32 role) public pure returns (bool) {
+        return role == MANUFACTURER_ROLE ||
+            role == IMPORTER_ROLE ||
+            role == DISTRIBUTOR_ROLE;
+    }
+
+    function canReceiveTransfer(bytes32 role) public pure returns (bool) {
+        return role == IMPORTER_ROLE ||
+            role == DISTRIBUTOR_ROLE ||
+            role == CLINIC_ROLE ||
+            role == PHARMACY_ROLE;
     }
 
     function grantUserRole(address account, bytes32 role)
@@ -30,7 +54,7 @@ contract SupplyChainAccessControl is AccessControl {
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         require(account != address(0), "Invalid account");
-        require(role != bytes32(0), "Invalid role");
+        require(isSupportedRole(role), "Unsupported role");
 
         grantRole(role, account);
 
@@ -47,7 +71,7 @@ contract SupplyChainAccessControl is AccessControl {
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         require(account != address(0), "Invalid account");
-        require(role != bytes32(0), "Invalid role");
+        require(isSupportedRole(role), "Unsupported role");
 
         revokeRole(role, account);
 
@@ -64,6 +88,7 @@ contract SupplyChainAccessControl is AccessControl {
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
         require(account != address(0), "Invalid account");
+        require(isSupportedRole(role), "Unsupported role");
         require(hasRole(role, account), "Account does not have role");
 
         primaryRoles[account] = role;
@@ -78,11 +103,21 @@ contract SupplyChainAccessControl is AccessControl {
         external
         onlyRole(DEFAULT_ADMIN_ROLE)
     {
-        require(fromRole != bytes32(0), "Invalid from role");
-        require(toRole != bytes32(0), "Invalid to role");
+        require(canInitiateTransfer(fromRole), "Unsupported sender role");
+        require(canReceiveTransfer(toRole), "Unsupported receiver role");
 
-        routeMatrix[fromRole][toRole] = allowed;
-        emit RouteUpdated(fromRole, toRole, allowed);
+        _setRoute(fromRole, toRole, allowed);
+    }
+
+    function configureMvpRoutes() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _setRoute(MANUFACTURER_ROLE, IMPORTER_ROLE, true);
+        _setRoute(MANUFACTURER_ROLE, DISTRIBUTOR_ROLE, true);
+        _setRoute(IMPORTER_ROLE, DISTRIBUTOR_ROLE, true);
+        _setRoute(DISTRIBUTOR_ROLE, DISTRIBUTOR_ROLE, true);
+        _setRoute(DISTRIBUTOR_ROLE, CLINIC_ROLE, true);
+        _setRoute(DISTRIBUTOR_ROLE, PHARMACY_ROLE, true);
+
+        emit MvpRoutesConfigured();
     }
 
     function isValidRoute(bytes32 fromRole, bytes32 toRole)
@@ -91,5 +126,10 @@ contract SupplyChainAccessControl is AccessControl {
         returns (bool)
     {
         return routeMatrix[fromRole][toRole];
+    }
+
+    function _setRoute(bytes32 fromRole, bytes32 toRole, bool allowed) internal {
+        routeMatrix[fromRole][toRole] = allowed;
+        emit RouteUpdated(fromRole, toRole, allowed);
     }
 }
