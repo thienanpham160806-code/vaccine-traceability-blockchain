@@ -65,6 +65,12 @@ contract ProductRegistry {
         uint256 totalProducts
     );
 
+    event BatchStatusChecked(
+        bytes32 indexed batchHash,
+        bool recalled,
+        uint256 totalProducts
+    );
+
     event TransferLedgerUpdated(address indexed oldLedger, address indexed newLedger);
 
     event ProductMarkedInTransit(
@@ -191,6 +197,7 @@ contract ProductRegistry {
     ) external onlyRecallAuthority {
         require(batchHash != bytes32(0), "Invalid batch");
         require(reasonHash != bytes32(0), "Invalid reason");
+        require(!recalledBatches[batchHash], "Batch already recalled");
 
         bytes32[] storage serials = batchToSerials[batchHash];
         require(serials.length > 0, "Empty batch");
@@ -286,8 +293,43 @@ contract ProductRegistry {
         return products[serialID];
     }
 
-    function getBatchSerials(bytes32 batchHash) external view returns (bytes32[] memory) {
+    function getBatchSerials(
+        bytes32 batchHash
+    ) external view returns (bytes32[] memory) {
+        require(batchHash != bytes32(0), "Invalid batch");
         return batchToSerials[batchHash];
+    }
+
+    function isBatchRecalled(
+        bytes32 batchHash
+    ) external view returns (bool) {
+        require(batchHash != bytes32(0), "Invalid batch");
+        return recalledBatches[batchHash];
+    }
+
+    function getBatchSize(
+        bytes32 batchHash
+    ) external view returns (uint256) {
+        require(batchHash != bytes32(0), "Invalid batch");
+        return batchToSerials[batchHash].length;
+    }
+
+    function getBatchSummary(
+        bytes32 batchHash
+    )
+        external
+        view
+        returns (
+            bool recalled,
+            uint256 totalProducts
+        )
+    {
+        require(batchHash != bytes32(0), "Invalid batch");
+
+        return (
+            recalledBatches[batchHash],
+            batchToSerials[batchHash].length
+        );
     }
 
     function productExists(bytes32 serialID) external view returns (bool) {
