@@ -19,8 +19,8 @@ export const endpoints = {
   scanTransfer: "/transfers/scan",
   confirmTransfer: "/transfers/confirm",
 
-  verify: (serialId: string) => /verify/${serialId},
-  consumerVerify: (serialId: string) => /consumer/verify/${serialId},
+  verify: (serialId: string) => `/verify/${serialId}`,
+  consumerVerify: (serialId: string) => `/consumer/verify/${serialId}`,
 
   riskFlags: "/risk-flags",
   disputes: "/disputes",
