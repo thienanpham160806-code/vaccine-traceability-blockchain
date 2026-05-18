@@ -207,3 +207,4 @@ pnpm-debug.log*
 # OS / Editor
 .DS_Store
 .vscode
+**/deployments/hardhat.json
