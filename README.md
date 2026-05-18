@@ -1,12 +1,50 @@
 # Vaccine Traceability Blockchain MVP
 
-This repository contains the MVP system for blockchain-based vaccine traceability.
+MVP system for blockchain-based vaccine traceability.
 
 The project focuses on tracking vaccine products across the supply chain, including product registration, batch management, transfer, verification, risk detection, and batch recall.
 
 ## Project Structure
 
 ```text
+smart-contract/   Solidity smart contracts, Hardhat tests, deployment scripts
+backend/          Backend API service
+frontend/         Frontend dashboard and consumer verification UI
+docs/             Technical documentation and team handoff
+```
+
+## Team Setup
+
+Read the full handoff before running the project:
+
+```text
+docs/frontend-backend-handoff.md
+```
+
+Quick run summary:
+
+1. Start local Hardhat node in `smart-contract/`.
+2. Deploy contracts and copy printed contract addresses into `backend/.env`.
+3. Paste Firebase and Pinata secrets shared by the team lead into `backend/.env`.
+4. Start backend on `http://localhost:5000`.
+5. Start frontend on `http://localhost:3000`.
+
+Validation commands:
+
+```powershell
+cd backend
+npm.cmd run build
+```
+
+```powershell
+cd ../frontend
+npm.cmd run build
+```
+
+```powershell
+cd ../smart-contract
+npm.cmd test
+```
 vaccine-traceability-blockchain/
 ├── smart-contract/     Solidity contracts, Hardhat tests, deployment scripts
 ├── frontend/           Next.js frontend dashboard and consumer verification UI

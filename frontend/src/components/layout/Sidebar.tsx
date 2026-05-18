@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import {
   Activity,
   Boxes,
@@ -32,11 +36,6 @@ const menuItems = [
     icon: Truck,
   },
   {
-    title: "Verify Detail",
-    href: "/dashboard/verify/VCN-2026-000001",
-    icon: QrCode,
-  },
-  {
     title: "Risk & Dispute",
     href: "/dashboard/risk-dispute",
     icon: ShieldAlert,
@@ -49,6 +48,15 @@ const menuItems = [
 ];
 
 export function Sidebar() {
+  const router = useRouter();
+  const [serialId, setSerialId] = useState("");
+
+  const goVerify = () => {
+    if (serialId.trim()) {
+      router.push(`/dashboard/verify/${encodeURIComponent(serialId.trim())}`);
+    }
+  };
+
   return (
     <aside className="hidden min-h-screen w-72 border-r bg-zinc-950 px-4 py-6 text-white lg:block">
       <div className="mb-8 flex items-center gap-3 px-2">
@@ -78,6 +86,19 @@ export function Sidebar() {
           );
         })}
       </nav>
+
+      <div className="mt-6 rounded-xl border border-zinc-800 p-3">
+        <p className="mb-2 text-xs font-semibold uppercase text-zinc-500">Verify Serial</p>
+        <input
+          className="mb-2 w-full rounded-md border border-zinc-800 bg-zinc-900 px-2 py-2 text-sm text-white"
+          value={serialId}
+          onChange={(e) => setSerialId(e.target.value)}
+          placeholder="VCN-DEMO-001"
+        />
+        <button className="w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white" onClick={goVerify}>
+          Open Verify
+        </button>
+      </div>
     </aside>
   );
 }
