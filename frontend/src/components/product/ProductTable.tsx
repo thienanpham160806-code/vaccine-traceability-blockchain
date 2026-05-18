@@ -1,19 +1,26 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import { ProductStatusBadge, RiskLevelBadge } from "./ProductStatusBadge";
-
-const mockData = [
-  { serialId: "VCN-2026-000001", batchId: "BATCH-VCN-2026-001", productName: "Hexaxim Vaccine", status: "VERIFIED", riskLevel: "SAFE" },
-  { serialId: "VCN-2026-000002", batchId: "BATCH-VCN-2026-001", productName: "Hexaxim Vaccine", status: "PENDING_DELIVERY", riskLevel: "SAFE" },
-  { serialId: "VCN-2026-000003", batchId: "BATCH-VCN-2026-002", productName: "Local Vaccine A", status: "RECALLED", riskLevel: "HIGH" },
-];
+import { useEffect, useMemo, useState } from "react";
+import { getProducts } from "@/lib/api";
+import type { Product } from "@/lib/types";
+import { ProductStatusBadge } from "./ProductStatusBadge";
 
 export function ProductTable() {
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [products, setProducts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    getProducts()
+      .then(setProducts)
+      .catch((err) => setError(err?.response?.data?.error?.message || "Failed to load products."))
+      .finally(() => setIsLoading(false));
+  }, []);
+
   const filteredProducts = useMemo(() => {
-    return mockData.filter((p) => statusFilter === "ALL" || p.status === statusFilter);
-  }, [statusFilter]);
+    return products.filter((p) => statusFilter === "ALL" || p.status === statusFilter);
+  }, [products, statusFilter]);
 
   return (
     <div className="space-y-4">
@@ -26,6 +33,8 @@ export function ProductTable() {
         </select>
       </div>
       <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+        {isLoading ? <p className="p-4 text-sm text-gray-500">Loading products...</p> : null}
+        {error ? <p className="p-4 text-sm font-semibold text-red-600">{error}</p> : null}
         <table className="w-full text-sm text-left">
           <thead className="bg-gray-50 border-b font-bold">
             <tr>
@@ -33,7 +42,7 @@ export function ProductTable() {
               <th className="p-4">Batch ID</th>
               <th className="p-4">Product</th>
               <th className="p-4">Status</th>
-              <th className="p-4">Action</th>
+              <th className="p-4">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -43,9 +52,15 @@ export function ProductTable() {
                 <td className="p-4 text-gray-500">{p.batchId}</td>
                 <td className="p-4">{p.productName}</td>
                 <td className="p-4"><ProductStatusBadge status={p.status as any} /></td>
-                <td className="p-4">
+                <td className="flex flex-wrap gap-3 p-4">
                   <Link href={`/dashboard/verify/${p.serialId}`} className="text-blue-600 hover:underline font-medium">
-                    View Detail
+                    Detail
+                  </Link>
+                  <Link href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(p.serialId)}`} className="text-emerald-600 hover:underline font-medium">
+                    Transfer
+                  </Link>
+                  <Link href={`/consumer/verify/${p.serialId}`} className="text-zinc-600 hover:underline font-medium">
+                    Public
                   </Link>
                 </td>
               </tr>
