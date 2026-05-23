@@ -1,66 +1,116 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
+import fs from "fs";
+import path from "path";
 
 async function main() {
-  console.log("Deploying contracts to local Hardhat network...\n");
+  console.log("Deploying vaccine traceability smart contracts...");
+  console.log("Network:", network.name);
 
-  const [deployer, importer, distributor, clinic, pharmacy] = await ethers.getSigners();
-  console.log(`Deploying with: ${deployer.address}`);
+  const [deployer] = await ethers.getSigners();
 
-  try {
-    console.log("\n1. Deploying SupplyChainAccessControl...");
-    const AccessControl = await ethers.getContractFactory("SupplyChainAccessControl");
-    const accessControl = await AccessControl.deploy(deployer.address);
-    await accessControl.waitForDeployment();
-    const accessControlAddr = await accessControl.getAddress();
-    console.log(`OK ${accessControlAddr}`);
+  console.log("Deployer:", deployer.address);
 
-    console.log("\n2. Deploying ProductRegistry...");
-    const ProductRegistry = await ethers.getContractFactory("ProductRegistry");
-    const productRegistry = await ProductRegistry.deploy(accessControlAddr);
-    await productRegistry.waitForDeployment();
-    const productRegistryAddr = await productRegistry.getAddress();
-    console.log(`OK ${productRegistryAddr}`);
+  const balance = await ethers.provider.getBalance(deployer.address);
+  console.log("Deployer balance:", ethers.formatEther(balance), "ETH");
 
-    console.log("\n3. Deploying TransferLedger...");
-    const TransferLedger = await ethers.getContractFactory("TransferLedger");
-    const transferLedger = await TransferLedger.deploy(productRegistryAddr, accessControlAddr);
-    await transferLedger.waitForDeployment();
-    const transferLedgerAddr = await transferLedger.getAddress();
-    console.log(`OK ${transferLedgerAddr}`);
+  console.log("\n1. Deploying SupplyChainAccessControl...");
 
-    console.log("\n4. Linking TransferLedger to ProductRegistry...");
-    await productRegistry.setTransferLedger(transferLedgerAddr);
-    console.log("OK linked");
+  const AccessControlFactory = await ethers.getContractFactory(
+    "SupplyChainAccessControl"
+  );
 
-    console.log("\n5. Configuring local roles and MVP routes...");
-    await accessControl.grantUserRole(deployer.address, await accessControl.MANUFACTURER_ROLE());
-    await accessControl.grantUserRole(importer.address, await accessControl.IMPORTER_ROLE());
-    await accessControl.grantUserRole(distributor.address, await accessControl.DISTRIBUTOR_ROLE());
-    await accessControl.grantUserRole(clinic.address, await accessControl.CLINIC_ROLE());
-    await accessControl.grantUserRole(pharmacy.address, await accessControl.PHARMACY_ROLE());
-    await accessControl.grantUserRole(deployer.address, await accessControl.RECALL_AUTHORITY_ROLE());
-    await accessControl.configureMvpRoutes();
-    console.log("OK roles granted and routes configured");
+  const accessControl = await AccessControlFactory.deploy(deployer.address);
+  await accessControl.waitForDeployment();
 
-    console.log("\n" + "=".repeat(70));
-    console.log("Copy these to backend/.env:");
-    console.log("=".repeat(70));
-    console.log(`PRODUCT_REGISTRY_ADDRESS=${productRegistryAddr}`);
-    console.log(`TRANSFER_LEDGER_ADDRESS=${transferLedgerAddr}`);
-    console.log(`ACCESS_CONTROL_ADDRESS=${accessControlAddr}`);
-    console.log("BACKEND_PRIVATE_KEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80");
-    console.log("=".repeat(70) + "\n");
+  const accessControlAddress = await accessControl.getAddress();
 
-    console.log("Local actor addresses:");
-    console.log(`MANUFACTURER=${deployer.address}`);
-    console.log(`IMPORTER=${importer.address}`);
-    console.log(`DISTRIBUTOR=${distributor.address}`);
-    console.log(`CLINIC=${clinic.address}`);
-    console.log(`PHARMACY=${pharmacy.address}`);
-  } catch (error) {
-    console.error("Deploy error:", error);
-    process.exit(1);
+  console.log("SupplyChainAccessControl:", accessControlAddress);
+
+  console.log("\n2. Deploying ProductRegistry...");
+
+  const ProductRegistryFactory = await ethers.getContractFactory(
+    "ProductRegistry"
+  );
+
+  const productRegistry = await ProductRegistryFactory.deploy(
+    accessControlAddress
+  );
+
+  await productRegistry.waitForDeployment();
+
+  const productRegistryAddress = await productRegistry.getAddress();
+
+  console.log("ProductRegistry:", productRegistryAddress);
+
+  console.log("\n3. Deploying TransferLedger...");
+
+  const TransferLedgerFactory = await ethers.getContractFactory(
+    "TransferLedger"
+  );
+
+  const transferLedger = await TransferLedgerFactory.deploy(
+    productRegistryAddress,
+    accessControlAddress
+  );
+
+  await transferLedger.waitForDeployment();
+
+  const transferLedgerAddress = await transferLedger.getAddress();
+
+  console.log("TransferLedger:", transferLedgerAddress);
+
+  console.log("\n4. Linking TransferLedger to ProductRegistry...");
+
+  const setLedgerTx = await productRegistry.setTransferLedger(
+    transferLedgerAddress
+  );
+
+  await setLedgerTx.wait();
+
+  console.log("ProductRegistry linked with TransferLedger");
+
+  console.log("\n5. Configuring MVP routes...");
+
+  const configureRoutesTx = await accessControl.configureMvpRoutes();
+  await configureRoutesTx.wait();
+
+  console.log("MVP routes configured");
+
+  const deploymentInfo = {
+    network: network.name,
+    deployer: deployer.address,
+    deployedAt: new Date().toISOString(),
+    contracts: {
+      supplyChainAccessControl: accessControlAddress,
+      productRegistry: productRegistryAddress,
+      transferLedger: transferLedgerAddress,
+    },
+    setup: {
+      transferLedgerLinked: true,
+      mvpRoutesConfigured: true,
+    },
+  };
+
+  const deploymentsDir = path.join(__dirname, "..", "deployments");
+
+  if (!fs.existsSync(deploymentsDir)) {
+    fs.mkdirSync(deploymentsDir, { recursive: true });
   }
+
+  const outputPath = path.join(deploymentsDir, `${network.name}.json`);
+
+  fs.writeFileSync(outputPath, JSON.stringify(deploymentInfo, null, 2));
+
+  console.log("\nDeployment completed successfully.");
+  console.log("Deployment info saved to:", outputPath);
+
+  console.log("\nSummary:");
+  console.log("SupplyChainAccessControl:", accessControlAddress);
+  console.log("ProductRegistry:", productRegistryAddress);
+  console.log("TransferLedger:", transferLedgerAddress);
 }
 
-main();
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

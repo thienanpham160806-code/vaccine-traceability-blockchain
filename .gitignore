@@ -53,3 +53,12 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Environment variables
+.env
+**/.env
+.env.local
+**/.env.local
+
+# Local deployment output
+**/deployments/hardhat.json
