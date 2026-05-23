@@ -22,15 +22,29 @@ export type RiskLevel = "SAFE" | "ALERT" | "HIGH";
 export type Product = {
   serialId: string;
   batchId: string;
+  batchHash?: string;
   productName: string;
-  productType: ProductType;
+  productType?: ProductType;
   manufacturerName: string;
+  manufacturerAddress?: string;
   currentOwner: string;
   status: ProductStatus;
   riskLevel: RiskLevel;
   expiryDate: string;
   blockchainTx?: string;
   zkProofVerified?: boolean;
+  isImported?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+export type ApiResponse<T> = {
+  success: boolean;
+  data?: T;
+  error?: {
+    code: string;
+    message: string;
+  };
 };
 
 export type TransferEvent = {
