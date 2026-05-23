@@ -183,13 +183,26 @@ contract ProductRegistry {
             Status.VERIFIED
         );
     }
-
-    function verifyProof(
-        bytes32 importDocHash,
-        bytes calldata zkpProof
-    ) public pure returns (bool) {
-        return importDocHash != bytes32(0) && zkpProof.length > 0;
-    }
+    
+    /**
+ * @dev MVP mock ZKP verifier.
+ *
+ * In the current MVP, the contract only checks that:
+ * - import document hash is not empty
+ * - proof bytes are not empty
+ *
+ * This simulates an importer proving that an import document exists
+ * without exposing the full document on-chain.
+ *
+ * In production, this function should be replaced with a real verifier
+ * contract generated from a ZKP circuit, such as Groth16 or Plonk.
+ */
+function verifyProof(
+    bytes32 importDocHash,
+    bytes calldata zkpProof
+) public pure returns (bool) {
+    return importDocHash != bytes32(0) && zkpProof.length > 0;
+}
 
     function recallBatch(
         bytes32 batchHash,
