@@ -14,6 +14,7 @@ The smart contract layer is responsible for:
 - Confirming product transfers
 - Recording transfer history
 - Supporting product verification
+- Supporting mock ZKP verification for imported vaccines
 - Detecting high-risk double-scan activity
 
 The current deployed network is:
@@ -63,7 +64,7 @@ The MVP uses three main smart contracts:
 | Contract | Main purpose |
 |---|---|
 | `SupplyChainAccessControl` | Manages roles and valid transfer routes |
-| `ProductRegistry` | Registers products, stores product status, manages batch recall |
+| `ProductRegistry` | Registers products, stores product status, manages batch recall, and handles mock ZKP verification |
 | `TransferLedger` | Manages two-step transfer flow and transfer history |
 
 ---
@@ -163,7 +164,7 @@ These files contain ABI arrays only, not full Hardhat artifacts.
 
 Backend and frontend should use these files to create contract instances.
 
-Example structure:
+Example ABI structure:
 
 ```json
 [
@@ -179,7 +180,7 @@ Example structure:
 
 ---
 
-## 7. How to Use Contract Address and ABI in Backend
+## 7. How Backend Should Use Contract Address and ABI
 
 Example with Ethers.js:
 
@@ -227,17 +228,22 @@ Suggested variables:
 ```env
 SEPOLIA_RPC_URL=
 PRIVATE_KEY=
-SUPPLY_CHAIN_ACCESS_CONTROL_ADDRESS=
-PRODUCT_REGISTRY_ADDRESS=
-TRANSFER_LEDGER_ADDRESS=
 ```
 
-Alternative recommended approach:
+Recommended approach:
 
 ```text
 Use SEPOLIA_RPC_URL and PRIVATE_KEY from backend/.env
 Read contract addresses from smart-contract/deployments/sepolia.json
 Read ABI files from smart-contract/abis/
+```
+
+Optional variables if backend wants direct address access:
+
+```env
+SUPPLY_CHAIN_ACCESS_CONTROL_ADDRESS=
+PRODUCT_REGISTRY_ADDRESS=
+TRANSFER_LEDGER_ADDRESS=
 ```
 
 ### Security warning
@@ -318,15 +324,16 @@ configureMvpRoutes()
 
 Before registering or transferring products, backend should make sure actors have proper roles.
 
-Example flow:
+Example role setup flow:
 
 ```text
 Admin grants MANUFACTURER_ROLE to manufacturer
+Admin grants IMPORTER_ROLE to importer
 Admin grants DISTRIBUTOR_ROLE to distributor
+Admin grants CLINIC_ROLE to clinic
+Admin grants PHARMACY_ROLE to pharmacy
+Admin grants RECALL_AUTHORITY_ROLE to recall authority
 Admin calls configureMvpRoutes()
-Manufacturer registers product
-Manufacturer creates transfer request to distributor
-Distributor confirms transfer
 ```
 
 ---
@@ -343,8 +350,9 @@ Distributor confirms transfer
 - Batch grouping
 - Batch recall
 - Imported product proof state
+- Mock ZKP verification state
 - Risk state
-- Verification data
+- Product verification data
 
 ### Product status enum
 
@@ -425,11 +433,248 @@ flagProductFromLedger(bytes32 serialID, uint8 riskLevel, bytes32 reason)
 
 Backend should not call these directly for normal product movement.
 
-Use `TransferLedger.createTransferRequest()` and `TransferLedger.confirmTransfer()` instead.
+Use:
+
+```text
+TransferLedger.createTransferRequest()
+TransferLedger.confirmTransfer()
+```
+
+instead.
 
 ---
 
-## 11. Contract 3 - TransferLedger
+## 11. ZKP Design in MVP
+
+### Current implementation
+
+The current MVP uses a mock ZKP verification mechanism for imported vaccines.
+
+In `ProductRegistry.sol`, imported products require:
+
+```text
+importDocHash
+zkpProof
+```
+
+The contract checks that:
+
+```text
+importDocHash != bytes32(0)
+zkpProof.length > 0
+```
+
+If both conditions are true, the product is treated as ZKP verified.
+
+### Why mock ZKP is used in the MVP
+
+The purpose of this design is to simulate a privacy-preserving import verification flow without introducing the full complexity of a real ZKP circuit during the MVP phase.
+
+In the MVP:
+
+- The full import document is not stored on-chain.
+- Only `importDocHash` is stored on-chain.
+- `zkpProof` acts as a mock proof that the importer has a valid import document.
+- The contract records whether the imported product is ZKP verified.
+- The frontend can display `ZKP Verified: Yes / No`.
+
+This allows the project to demonstrate the intended architecture:
+
+```text
+Importer owns valid import document
+-> backend hashes the document
+-> backend sends importDocHash and mock zkpProof
+-> smart contract verifies non-empty hash and proof
+-> product is marked as ZKP verified
+```
+
+### Current smart contract logic
+
+The current verifier logic is:
+
+```solidity
+/**
+ * @dev MVP mock ZKP verifier.
+ *
+ * In the current MVP, the contract only checks that:
+ * - import document hash is not empty
+ * - proof bytes are not empty
+ *
+ * This simulates an importer proving that an import document exists
+ * without exposing the full document on-chain.
+ *
+ * In production, this function should be replaced with a real verifier
+ * contract generated from a ZKP circuit, such as Groth16 or Plonk.
+ */
+function verifyProof(
+    bytes32 importDocHash,
+    bytes calldata zkpProof
+) public pure returns (bool) {
+    return importDocHash != bytes32(0) && zkpProof.length > 0;
+}
+```
+
+### Imported vaccine registration logic
+
+For imported vaccines:
+
+```text
+Importer must provide importDocHash
+Importer must provide non-empty zkpProof
+verifyProof(importDocHash, zkpProof) must return true
+Product is stored with isImported = true
+Product is stored with zkpVerified = true
+```
+
+For local vaccines:
+
+```text
+Manufacturer can register without importDocHash
+Manufacturer can register without zkpProof
+Product is stored with isImported = false
+Product is stored with zkpVerified = false
+```
+
+### Backend responsibility in MVP
+
+Backend should:
+
+- Receive readable import document data or file reference
+- Store readable import document off-chain or on IPFS
+- Generate `importDocHash`
+- Generate or provide mock `zkpProof`
+- Send `importDocHash` and `zkpProof` to `ProductRegistry.registerProduct()`
+- Store readable metadata off-chain for dashboard display
+
+Example mock proof:
+
+```ts
+const importDocHash = ethers.keccak256(
+  ethers.toUtf8Bytes(JSON.stringify(importDocument))
+);
+
+const zkpProof = "0x1234";
+```
+
+### Frontend responsibility in MVP
+
+Frontend should display imported vaccine verification state:
+
+```text
+ZKP Verified: Yes
+```
+
+or:
+
+```text
+ZKP Verified: No
+```
+
+Suggested UI fields:
+
+```text
+Product Type: Local / Imported
+Import Verification: ZKP Verified / Not Verified
+Import Document Hash: 0x...
+```
+
+For consumer-facing pages, display only simplified information:
+
+```text
+Imported product verified
+```
+
+Avoid showing unnecessary technical details to end users.
+
+### Production upgrade path
+
+In a production version, the mock verifier should be replaced by a real verifier contract.
+
+Suggested production flow:
+
+```text
+1. Define the import verification statement
+2. Build a ZKP circuit
+3. Compile the circuit
+4. Generate proving key and verification key
+5. Generate Solidity verifier contract
+6. Deploy verifier contract
+7. Update ProductRegistry to call the verifier contract
+8. Backend generates proof off-chain
+9. Smart contract verifies proof on-chain
+```
+
+Possible tools:
+
+```text
+Circom
+snarkjs
+Groth16
+Plonk
+Solidity verifier contract
+```
+
+### Possible production verification statement
+
+A future ZKP circuit could prove that:
+
+```text
+The importer owns a valid import document
+The document was issued by an authorized authority
+The document matches the vaccine batch
+The document has not expired
+The document hash matches the on-chain importDocHash
+```
+
+without revealing the full import document on-chain.
+
+### Production architecture suggestion
+
+Production version could use:
+
+```text
+ImportDocumentVerifier.sol
+ProductRegistry.sol
+```
+
+Flow:
+
+```text
+Backend generates proof off-chain
+Backend sends proof and public signals to ProductRegistry
+ProductRegistry calls ImportDocumentVerifier.verifyProof()
+Verifier returns true or false
+ProductRegistry stores zkpVerified state
+```
+
+Example future interface:
+
+```solidity
+interface IImportDocumentVerifier {
+    function verifyProof(
+        bytes calldata proof,
+        uint256[] calldata publicSignals
+    ) external view returns (bool);
+}
+```
+
+### Important note
+
+The current MVP does not implement a real cryptographic ZKP verifier.
+
+The current design is a mock verifier intended to demonstrate:
+
+```text
+Privacy-preserving import verification concept
+On-chain storage of document hash
+On-chain storage of verification state
+Backend-driven proof generation flow
+Future upgrade path to real ZKP
+```
+
+---
+
+## 12. Contract 3 - TransferLedger
 
 ### Purpose
 
@@ -472,7 +717,7 @@ getTransferHistoryLength(bytes32 serialID)
 
 ---
 
-## 12. Backend Integration Flow 1 - Register Product
+## 13. Backend Integration Flow 1 - Register Product
 
 ### Frontend route
 
@@ -528,26 +773,29 @@ Step 2 - Convert readable data into hashes:
 ```ts
 const serialID = ethers.keccak256(ethers.toUtf8Bytes(serialId));
 const batchHash = ethers.keccak256(ethers.toUtf8Bytes(batchId));
-const metadataHash = ethers.keccak256(ethers.toUtf8Bytes(JSON.stringify(metadata)));
+const metadataHash = ethers.keccak256(
+  ethers.toUtf8Bytes(JSON.stringify(metadata))
+);
 ```
 
-Step 3 - Handle imported vaccine:
-
-For local product:
+Step 3 - Handle local vaccine:
 
 ```ts
 const importDocHash = ethers.ZeroHash;
 const zkpProof = "0x";
 ```
 
-For imported product:
+Step 4 - Handle imported vaccine:
 
 ```ts
-const importDocHash = ethers.keccak256(ethers.toUtf8Bytes(importDocument));
+const importDocHash = ethers.keccak256(
+  ethers.toUtf8Bytes(JSON.stringify(importDocument))
+);
+
 const zkpProof = "0x1234"; // mock proof for MVP
 ```
 
-Step 4 - Call contract:
+Step 5 - Call contract:
 
 ```ts
 const tx = await productRegistry.registerProduct(
@@ -561,7 +809,7 @@ const tx = await productRegistry.registerProduct(
 await tx.wait();
 ```
 
-Step 5 - Store readable data off-chain:
+Step 6 - Store readable data off-chain:
 
 Backend should store:
 
@@ -572,6 +820,8 @@ metadata
 serialID hash
 batchHash
 metadataHash
+importDocHash
+zkpVerified
 transaction hash
 contract address
 ```
@@ -595,9 +845,15 @@ Status: VERIFIED
 QR code generated
 ```
 
+For imported products, frontend should also display:
+
+```text
+ZKP Verified: Yes
+```
+
 ---
 
-## 13. Backend Integration Flow 2 - Create Transfer Request
+## 14. Backend Integration Flow 2 - Create Transfer Request
 
 ### Frontend route
 
@@ -687,7 +943,7 @@ Ownership does not change at this step.
 
 ---
 
-## 14. Backend Integration Flow 3 - Confirm Transfer
+## 15. Backend Integration Flow 3 - Confirm Transfer
 
 ### Frontend route
 
@@ -731,7 +987,9 @@ Step 2 - Convert fields into hashes:
 
 ```ts
 const serialID = ethers.keccak256(ethers.toUtf8Bytes(serialId));
-const receiverLocationHash = ethers.keccak256(ethers.toUtf8Bytes(receiverLocation));
+const receiverLocationHash = ethers.keccak256(
+  ethers.toUtf8Bytes(receiverLocation)
+);
 ```
 
 Step 3 - Call contract:
@@ -765,7 +1023,7 @@ Transfer completed
 
 ---
 
-## 15. Backend Integration Flow 4 - Verify Product
+## 16. Backend Integration Flow 4 - Verify Product
 
 ### Frontend routes
 
@@ -808,7 +1066,7 @@ Step 2 - Convert serial ID to hash:
 const serialID = ethers.keccak256(ethers.toUtf8Bytes(serialId));
 ```
 
-Step 3 - Read product:
+Step 3 - Read product existence:
 
 ```ts
 const exists = await productRegistry.productExists(serialID);
@@ -859,8 +1117,8 @@ const statusMap = {
   "origin": "0x...",
   "batchHash": "0x...",
   "metadataHash": "0x...",
-  "isImported": false,
-  "zkpVerified": false,
+  "isImported": true,
+  "zkpVerified": true,
   "riskLevel": 0,
   "flagReason": "0x...",
   "transferHistory": []
@@ -876,8 +1134,8 @@ const statusMap = {
   "status": "VERIFIED",
   "safe": true,
   "warning": null,
-  "isImported": false,
-  "zkpVerified": false
+  "isImported": true,
+  "zkpVerified": true
 }
 ```
 
@@ -887,7 +1145,7 @@ Consumer page should show simplified verification data.
 
 ---
 
-## 16. Backend Integration Flow 5 - Recall Batch
+## 17. Backend Integration Flow 5 - Recall Batch
 
 ### Frontend route
 
@@ -975,49 +1233,19 @@ Affected serial list
 
 ---
 
-## 17. Events for Backend Indexing
+## 18. Events for Backend Indexing
 
 Backend can listen to events to sync off-chain database.
 
 ### ProductRegistry events
 
 ```text
-ProductRegistered(
-  bytes32 indexed serialID,
-  bytes32 indexed batchHash,
-  address indexed owner,
-  bool isImported,
-  bool zkpVerified,
-  Status status
-)
-
-BatchRecalled(
-  bytes32 indexed batchHash,
-  bytes32 indexed reasonHash,
-  uint256 totalProducts
-)
-
-TransferLedgerUpdated(
-  address indexed oldLedger,
-  address indexed newLedger
-)
-
-ProductMarkedInTransit(
-  bytes32 indexed serialID,
-  address indexed currentOwner
-)
-
-ProductTransferCompleted(
-  bytes32 indexed serialID,
-  address indexed oldOwner,
-  address indexed newOwner
-)
-
-ProductFlagged(
-  bytes32 indexed serialID,
-  uint8 riskLevel,
-  bytes32 indexed reason
-)
+ProductRegistered
+BatchRecalled
+TransferLedgerUpdated
+ProductMarkedInTransit
+ProductTransferCompleted
+ProductFlagged
 ```
 
 ### TransferLedger events
@@ -1029,11 +1257,15 @@ TransferRejected
 DoubleScanDetected
 ```
 
+### AccessControl events
+
+Backend may also track role changes and route updates if events are emitted.
+
 Backend should check exact event signatures from ABI before implementation.
 
 ---
 
-## 18. Suggested Backend Contract Service Structure
+## 19. Suggested Backend Contract Service Structure
 
 Suggested backend structure:
 
@@ -1102,7 +1334,7 @@ export class BlockchainService {
 
 ---
 
-## 19. Frontend Alignment Requirements
+## 20. Frontend Alignment Requirements
 
 Frontend should call backend APIs, not smart contracts directly.
 
@@ -1122,6 +1354,7 @@ Show product table
 Show status badge
 Show QR code
 Distinguish local and imported products
+Display ZKP verification status for imported products
 ```
 
 ### Batch page
@@ -1221,12 +1454,13 @@ Status
 Recall warning
 Risk warning
 Basic origin
+ZKP verified status if imported
 Simplified timeline
 ```
 
 ---
 
-## 20. Local Development Commands
+## 21. Local Development Commands
 
 Return to project root:
 
@@ -1273,7 +1507,7 @@ cd C:\Users\Dell\vaccine-traceability-blockchain
 
 ---
 
-## 21. Verification Commands
+## 22. Verification Commands
 
 To verify contracts on Sepolia Etherscan, prepare:
 
@@ -1313,7 +1547,7 @@ smart-contract/deployments/sepolia.json
 
 ---
 
-## 22. Security Notes
+## 23. Security Notes
 
 Do not commit:
 
@@ -1341,7 +1575,7 @@ Do not use a wallet that contains real funds.
 
 ---
 
-## 23. Current Smart Contract Status
+## 24. Current Smart Contract Status
 
 Completed:
 
@@ -1366,6 +1600,7 @@ In progress or optional:
 
 ```text
 Etherscan verification
+Real ZKP verifier integration
 Slither audit
 Backend integration
 Frontend business UI completion
@@ -1373,7 +1608,7 @@ Frontend business UI completion
 
 ---
 
-## 24. Backend and Frontend Handoff Checklist
+## 25. Backend and Frontend Handoff Checklist
 
 Backend team should receive:
 
@@ -1391,6 +1626,7 @@ Frontend team should receive:
 [ ] Status mapping
 [ ] Route mapping
 [ ] Product verification fields
+[ ] ZKP verification explanation
 [ ] Transfer two-step explanation
 [ ] Recall flow explanation
 ```
@@ -1404,4 +1640,5 @@ Before backend/frontend integration, confirm:
 [ ] Backend has signer wallet
 [ ] Backend has role setup plan
 [ ] Frontend does not call private-key operations directly
+[ ] Imported product flow displays ZKP verification status
 ```
