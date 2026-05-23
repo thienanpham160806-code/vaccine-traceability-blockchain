@@ -1,0 +1,14 @@
+{
+  "network": "sepolia",
+  "deployer": "0xcd8E5cb88a3338970DfbfA914A98bC4a8dC0eeB6",
+  "deployedAt": "2026-05-23T12:12:24.514Z",
+  "contracts": {
+    "supplyChainAccessControl": "0x02CC4E73bd41AA9594a5B22712153a4234b40F2c",
+    "productRegistry": "0x16D4c1cEBdD0922bc9a58C43a682917A91Fb8208",
+    "transferLedger": "0x6fbaCa22CBD5c8fB7659C42b8D0800b142626f52"
+  },
+  "setup": {
+    "transferLedgerLinked": true,
+    "mvpRoutesConfigured": true
+  }
+}
