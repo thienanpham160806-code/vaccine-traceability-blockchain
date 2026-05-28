@@ -247,6 +247,21 @@ function verifyProof(
         emit ProductMarkedInTransit(serialID, product.currentOwner);
     }
 
+    event ProductTransferReverted(bytes32 indexed serialID, Status revertedTo);
+
+    function revertTransit(bytes32 serialID) external onlyTransferLedger {
+        require(products[serialID].exists, "Product not found");
+
+        Product storage product = products[serialID];
+        require(product.status == Status.IN_TRANSIT, "Not in transit");
+
+        Status revertTo = product.previousStatus;
+        product.status = revertTo;
+        product.previousStatus = Status.IN_TRANSIT;
+
+        emit ProductTransferReverted(serialID, revertTo);
+    }
+
     function completeTransfer(
         bytes32 serialID,
         address newOwner

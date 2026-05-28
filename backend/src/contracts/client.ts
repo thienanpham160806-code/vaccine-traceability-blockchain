@@ -36,6 +36,7 @@ try {
   TRANSFER_LEDGER_ABI = [
     'function createTransferRequest(bytes32 serialID, address receiver, bytes32 fromLocationHash, bytes32 toLocationHash) external',
     'function confirmTransfer(bytes32 serialID, bytes32 receiverLocationHash) external',
+    'function rejectTransfer(bytes32 serialID, bytes32 reason) external',
     'function getTransferHistory(bytes32 serialID) external view returns (tuple(bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, uint256)[])',
     'function getPendingTransfer(bytes32 serialID) external view returns (tuple(bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, bool))',
     'event TransferRequested(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 fromLocationHash, bytes32 toLocationHash, uint256 requestedAt)',
@@ -344,6 +345,38 @@ export class ContractClient {
       return receipt?.hash || tx.hash;
     } catch (error) {
       Logger.error('Failed to confirm transfer', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reject transfer on blockchain (receiver cancels pending transfer)
+   */
+  async rejectTransfer(
+    serialId: string,
+    reason: string,
+    signerRole: string = 'DISTRIBUTOR'
+  ): Promise<string> {
+    if (!this.transferLedger) {
+      throw new Error('TransferLedger contract not initialized');
+    }
+
+    try {
+      Logger.info(`📝 Rejecting transfer: ${serialId}`);
+
+      const reasonBytes = reason.startsWith('0x') && reason.length === 66
+        ? reason
+        : ethers.keccak256(ethers.toUtf8Bytes(reason));
+
+      const ledger = this.transferLedger.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const tx = await ledger.rejectTransfer(serialId, reasonBytes);
+
+      const receipt = await tx.wait();
+      Logger.success(`✅ Transfer rejected. TX: ${receipt?.hash}`);
+
+      return receipt?.hash || tx.hash;
+    } catch (error) {
+      Logger.error('Failed to reject transfer', error);
       throw error;
     }
   }
