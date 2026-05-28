@@ -14,7 +14,6 @@ import {
 } from "lucide-react";
 import { getDashboardOverview, getHealth, getProducts } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
-import type { Product } from "@/lib/types";
 
 const statusChip: Record<string, string> = {
   IN_TRANSIT: "bg-blue-50 text-blue-700 border-blue-200",
@@ -49,10 +48,10 @@ export default function DashboardPage() {
     staleTime: 15_000,
   });
 
-  const { data: products = [] } = useQuery<Product[]>({
+  const { data: products = [] } = useQuery({
     queryKey: ["products-recent"],
-    queryFn: getProducts,
-    select: (data) => data.slice(0, 6),
+    queryFn: () => getProducts({ page: 1, pageSize: 6, sort: "createdAt:desc" }),
+    select: (data) => data.items,
     staleTime: 15_000,
   });
 
@@ -137,7 +136,7 @@ export default function DashboardPage() {
       {/* Quick actions */}
       <div className="grid gap-3 sm:grid-cols-3">
         <Link
-          href="/dashboard/batches"
+          href="/dashboard/products/register"
           className="flex items-center justify-between rounded-xl border border-blue-100 bg-gradient-to-r from-blue-600 to-cyan-500 p-4 text-white shadow-sm transition hover:opacity-90"
         >
           <div>

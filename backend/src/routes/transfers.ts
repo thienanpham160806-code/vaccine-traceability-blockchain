@@ -5,6 +5,13 @@ import { ipfsService } from '../services/ipfs';
 import { CryptoUtils } from '../utils/crypto';
 import { Logger } from '../utils/logger';
 import { TransferRecord } from '../types';
+import { validateRequest } from '../middleware/validation';
+import {
+  transferConfirmSchema,
+  transferIdParamsSchema,
+  transferRejectSchema,
+  transferScanSchema,
+} from '../schemas/transferSchemas';
 
 const router = Router();
 const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
@@ -44,7 +51,7 @@ router.get('/', async (req: Request, res: Response) => {
  * GET /transfers/:transferId
  * Get single transfer by ID
  */
-router.get('/:transferId', async (req: Request, res: Response) => {
+router.get('/:transferId', validateRequest({ params: transferIdParamsSchema }), async (req: Request, res: Response) => {
   try {
     const { transferId } = req.params;
     const snapshot = await db.ref(`transfers/${transferId}`).once('value');
@@ -70,7 +77,7 @@ router.get('/:transferId', async (req: Request, res: Response) => {
  * POST /transfers/scan
  * Create transfer request (Scan QR to initiate delivery)
  */
-router.post('/scan', async (req: Request, res: Response) => {
+router.post('/scan', validateRequest({ body: transferScanSchema }), async (req: Request, res: Response) => {
   try {
     const {
       serialId,
@@ -193,7 +200,7 @@ router.post('/scan', async (req: Request, res: Response) => {
  * POST /transfers/confirm
  * Confirm transfer (Receiver accepts delivery)
  */
-router.post('/confirm', async (req: Request, res: Response) => {
+router.post('/confirm', validateRequest({ body: transferConfirmSchema }), async (req: Request, res: Response) => {
   try {
     const { serialId, receiverLocationHash } = req.body;
 
@@ -281,7 +288,7 @@ router.post('/confirm', async (req: Request, res: Response) => {
  * POST /transfers/reject
  * Reject transfer — reverts product status on-chain via rejectTransfer()
  */
-router.post('/reject', async (req: Request, res: Response) => {
+router.post('/reject', validateRequest({ body: transferRejectSchema }), async (req: Request, res: Response) => {
   try {
     const { serialId, rejectionReason } = req.body;
 

@@ -1,10 +1,18 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { RefreshCw, Zap } from "lucide-react";
+import { toast } from "sonner";
 import { QrResultCard } from "./QrResultCard";
 import { getApiErrorMessage, registerProduct } from "@/lib/api";
+import { getZodFieldErrors, productRegistrationSchema } from "@/lib/validation";
+
+type RegisterProductResult = {
+  txHash?: string;
+  ipfsCid?: string;
+  qrImage?: string;
+};
 
 function defaultExpiryDate() {
   const date = new Date();
@@ -26,18 +34,20 @@ const inputCls =
 const monoInputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
     <div className="space-y-1.5">
       <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500">{label}</p>
       {children}
+      {error ? <p className="text-xs font-semibold text-red-600">{error}</p> : null}
     </div>
   );
 }
 
 export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, serialId: string) => void }) {
-  const initialIds = useMemo(makeIds, []);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => {
+    const initialIds = makeIds();
+    return {
     productName: "Hexaxim Vaccine",
     productType: "LOCAL",
     batchId: initialIds.batchId,
@@ -45,12 +55,14 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
     manufacturerName: "Local Manufacturer",
     expiryDate: defaultExpiryDate(),
     quantity: "1",
+    };
   });
   const [generatedSerial, setGeneratedSerial] = useState<string | null>(null);
   const [generatedBatch, setGeneratedBatch] = useState<string | null>(null);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<RegisterProductResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
   const regenerate = () => {
@@ -60,50 +72,65 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
     setGeneratedBatch(null);
     setResult(null);
     setError(null);
+    setFieldErrors({});
     setStatusMsg(null);
   };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSubmitting) return;
-    const { productName, batchId, serialId, expiryDate, productType } = form;
-    if (!productName.trim() || !batchId.trim() || !serialId.trim() || !expiryDate) {
-      setError("Tên sản phẩm, mã lô, serial ID và ngày hết hạn là bắt buộc.");
+
+    const parsed = productRegistrationSchema.safeParse(form);
+    if (!parsed.success) {
+      const errors = getZodFieldErrors(parsed.error);
+      const message = errors.form || Object.values(errors)[0] || "Please fix the highlighted fields.";
+      setFieldErrors(errors);
+      setError(message);
+      toast.error(message);
       return;
     }
-    if (productType === "IMPORT") {
-      setError("Loại IMPORT yêu cầu ZK proof — dùng LOCAL cho demo.");
+
+    const values = parsed.data;
+    if (values.productType === "IMPORT") {
+      const message = "Sản phẩm IMPORT cần ZK proof. Với luồng demo hiện tại, hãy chọn LOCAL.";
+      setFieldErrors({ productType: message });
+      setError(message);
+      toast.error(message);
       return;
     }
+
     setIsSubmitting(true);
     setError(null);
-    setStatusMsg("Đang đăng ký on-chain và lưu metadata…");
+    setStatusMsg("Đang đăng ký on-chain và lưu metadata...");
+
     try {
       const data = await registerProduct({
-        serialId: serialId.trim(),
-        batchId: batchId.trim(),
-        productName: productName.trim(),
-        manufacturerName: form.manufacturerName.trim() || "Local Manufacturer",
-        expiryDate,
+        serialId: values.serialId,
+        batchId: values.batchId,
+        productName: values.productName,
+        manufacturerName: values.manufacturerName,
+        expiryDate: values.expiryDate,
         origin: "MANUFACTURED",
-        quantity: parseInt(form.quantity) || 1,
+        quantity: values.quantity,
       });
-      setGeneratedSerial(serialId.trim());
-      setGeneratedBatch(batchId.trim());
+      setGeneratedSerial(values.serialId);
+      setGeneratedBatch(values.batchId);
       setResult(data);
       setStatusMsg("Đăng ký thành công.");
-      onSuccess?.(batchId.trim(), serialId.trim());
-    } catch (err: any) {
-      setError(getApiErrorMessage(err, "Đăng ký thất bại."));
+      toast.success("Đã đăng ký sản phẩm.");
+      onSuccess?.(values.batchId, values.serialId);
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Đăng ký sản phẩm thất bại.");
+      setError(message);
+      toast.error(message);
       setStatusMsg(null);
     } finally {
       setIsSubmitting(false);
     }
   };
-
   return (
     <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-      <form onSubmit={handleSubmit} className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <form onChange={() => setFieldErrors({})} onSubmit={handleSubmit} className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
         {/* Header */}
         <div className="mb-5 flex items-center justify-between border-b border-zinc-100 pb-4">
           <div>
@@ -144,8 +171,8 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
               value={form.productType}
               onChange={(e) => setForm({ ...form, productType: e.target.value })}
             >
-              <option value="LOCAL">LOCAL — sản xuất trong nước</option>
-              <option value="IMPORT">IMPORT — yêu cầu ZK proof</option>
+              <option value="LOCAL">Sản xuất trong nước</option>
+              <option value="IMPORT">Nhập khẩu - yêu cầu ZK proof</option>
             </select>
           </Field>
           <Field label="Mã lô (Batch ID)">
@@ -189,6 +216,19 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
             </Field>
           </div>
         </div>
+
+        {Object.keys(fieldErrors).length > 0 ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+            <p>Vui lòng kiểm tra các trường sau:</p>
+            <ul className="mt-1 list-disc pl-4">
+              {Object.entries(fieldErrors).map(([field, message]) => (
+                <li key={field}>
+                  {field}: {message}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         {error && (
           <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">

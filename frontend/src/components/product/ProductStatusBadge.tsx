@@ -9,10 +9,18 @@ export function ProductStatusBadge({ status }: { status: ProductStatus }) {
     RECALLED: "bg-gray-100 text-gray-800",
   };
   const colorClass = colors[status] || "bg-blue-100 text-blue-800";
+  const labels: Record<ProductStatus, string> = {
+    VERIFIED: "Đã xác minh",
+    PENDING_DELIVERY: "Chờ giao",
+    DELIVERED: "Đã giao",
+    FLAGGED: "Có cảnh báo",
+    RECALLED: "Đã thu hồi",
+    INVALID: "Không hợp lệ",
+  };
 
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
-      {status}
+      {labels[status] || status}
     </span>
   );
 }
@@ -22,12 +30,19 @@ export function RiskLevelBadge({ riskLevel }: { riskLevel: RiskLevel }) {
     SAFE: "bg-green-100 text-green-800",
     ALERT: "bg-orange-100 text-orange-800",
     HIGH: "bg-red-100 text-red-800",
+    CRITICAL: "bg-red-100 text-red-900",
   };
   const colorClass = colors[riskLevel] || "bg-gray-100 text-gray-800";
+  const labels: Record<RiskLevel, string> = {
+    SAFE: "An toàn",
+    ALERT: "Cảnh báo",
+    HIGH: "Rủi ro cao",
+    CRITICAL: "Nghiêm trọng",
+  };
 
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
-      {riskLevel}
+      {labels[riskLevel] || riskLevel}
     </span>
   );
 }

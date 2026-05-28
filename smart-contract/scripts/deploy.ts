@@ -76,6 +76,57 @@ async function main() {
 
   console.log("MVP routes configured");
 
+  let localDemoRolesConfigured = false;
+
+  if (network.name === "localhost" || network.name === "hardhat") {
+    console.log("\n6. Granting local demo roles...");
+
+    const signers = await ethers.getSigners();
+    const roleAssignments = [
+      {
+        label: "MANUFACTURER",
+        account: signers[0],
+        role: await accessControl.MANUFACTURER_ROLE(),
+      },
+      {
+        label: "IMPORTER",
+        account: signers[1],
+        role: await accessControl.IMPORTER_ROLE(),
+      },
+      {
+        label: "DISTRIBUTOR",
+        account: signers[2],
+        role: await accessControl.DISTRIBUTOR_ROLE(),
+      },
+      {
+        label: "CLINIC",
+        account: signers[3],
+        role: await accessControl.CLINIC_ROLE(),
+      },
+      {
+        label: "PHARMACY",
+        account: signers[4],
+        role: await accessControl.PHARMACY_ROLE(),
+      },
+      {
+        label: "RECALL_AUTHORITY",
+        account: signers[0],
+        role: await accessControl.RECALL_AUTHORITY_ROLE(),
+      },
+    ];
+
+    for (const assignment of roleAssignments) {
+      const tx = await accessControl.grantUserRole(
+        assignment.account.address,
+        assignment.role
+      );
+      await tx.wait();
+      console.log(`${assignment.label}: ${assignment.account.address}`);
+    }
+
+    localDemoRolesConfigured = true;
+  }
+
   const deploymentInfo = {
     network: network.name,
     deployer: deployer.address,
@@ -88,6 +139,7 @@ async function main() {
     setup: {
       transferLedgerLinked: true,
       mvpRoutesConfigured: true,
+      localDemoRolesConfigured,
     },
   };
 

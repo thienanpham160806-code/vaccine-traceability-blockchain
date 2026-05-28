@@ -7,6 +7,7 @@ import {
   Activity,
   Boxes,
   ClipboardList,
+  PlusCircle,
   LayoutDashboard,
   ShieldAlert,
   Truck,
@@ -17,11 +18,13 @@ import {
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
 
 const menuItems = [
+  { title: "Đăng ký sản phẩm", href: "/dashboard/products/register", icon: PlusCircle },
   { title: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
   { title: "Quản lý lô hàng", href: "/dashboard/batches", icon: Boxes },
   { title: "Danh sách sản phẩm", href: "/dashboard/products", icon: ClipboardList },
   { title: "Chuyển & Nhận", href: "/dashboard/scan-transfer", icon: Truck },
-  { title: "Rủi ro & Tranh chấp", href: "/dashboard/risk-dispute", icon: ShieldAlert },
+  { title: "Cảnh báo rủi ro", href: "/dashboard/risk-flags", icon: ShieldAlert },
+  { title: "Khiếu nại", href: "/dashboard/disputes", icon: ShieldAlert },
   { title: "Thu hồi", href: "/dashboard/recall", icon: RotateCcw },
 ];
 
