@@ -2,109 +2,218 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Activity,
+  ArrowRight,
+  Boxes,
+  CheckCircle2,
+  ShieldAlert,
+  Truck,
+  Zap,
+} from "lucide-react";
 import { getDashboardOverview, getHealth, getProducts } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
-import type { DashboardStats, Product } from "@/lib/types";
+import type { Product } from "@/lib/types";
 
-const emptyStats: DashboardStats = {
-  totalBatches: 0,
-  totalSerials: 0,
-  pendingTransfers: 0,
-  riskAlerts: 0,
+const statusChip: Record<string, string> = {
+  IN_TRANSIT: "bg-blue-50 text-blue-700 border-blue-200",
+  VERIFIED: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  FLAGGED: "bg-red-50 text-red-700 border-red-200",
+  REGISTERED: "bg-zinc-100 text-zinc-600 border-zinc-200",
+};
+
+const statusLabel: Record<string, string> = {
+  IN_TRANSIT: "Đang vận chuyển",
+  VERIFIED: "Đã xác thực",
+  FLAGGED: "Bị gắn cờ",
+  REGISTERED: "Đã đăng ký",
 };
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<DashboardStats>(emptyStats);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [health, setHealth] = useState<string>("Checking backend...");
   const [user, setUser] = useState<DemoUser | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setUser(getStoredUser());
-    Promise.all([getHealth(), getDashboardOverview(), getProducts()])
-      .then(([backendHealth, overview, productList]) => {
-        setHealth(`Backend ${backendHealth.status} - ${backendHealth.environment}`);
-        setStats(overview || emptyStats);
-        setProducts(productList.slice(0, 5));
-      })
-      .catch((err) => {
-        setHealth("Backend unavailable");
-        setError(err?.response?.data?.error?.message || "Failed to load dashboard.");
-      });
   }, []);
+
+  const { data: health } = useQuery({
+    queryKey: ["health"],
+    queryFn: getHealth,
+    staleTime: 30_000,
+  });
+
+  const { data: stats } = useQuery({
+    queryKey: ["dashboard-overview"],
+    queryFn: getDashboardOverview,
+    staleTime: 15_000,
+  });
+
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["products-recent"],
+    queryFn: getProducts,
+    select: (data) => data.slice(0, 6),
+    staleTime: 15_000,
+  });
+
+  const statCards = [
+    {
+      label: "Tổng lô hàng",
+      value: stats?.totalBatches ?? "—",
+      icon: Boxes,
+      color: "text-blue-500",
+      bg: "bg-blue-50",
+    },
+    {
+      label: "Tổng serial",
+      value: stats?.totalSerials ?? "—",
+      icon: Activity,
+      color: "text-emerald-500",
+      bg: "bg-emerald-50",
+    },
+    {
+      label: "Chờ xác nhận",
+      value: stats?.pendingTransfers ?? "—",
+      icon: Truck,
+      color: "text-amber-500",
+      bg: "bg-amber-50",
+    },
+    {
+      label: "Cảnh báo rủi ro",
+      value: stats?.riskAlerts ?? "—",
+      icon: ShieldAlert,
+      color: "text-red-500",
+      bg: "bg-red-50",
+    },
+  ];
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">B2B Overview</h1>
-        <p className="text-muted-foreground">Monitor batches, serials, transfers, and risk alerts.</p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-900">
+            {user ? `Chào mừng, ${user.role}` : "Bảng điều khiển"}
+          </h1>
+          <p className="text-sm text-zinc-500">
+            Giám sát lô vaccine, chuyển giao và cảnh báo rủi ro.
+          </p>
+        </div>
+
+        {/* System status */}
+        <div className="flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm shadow-sm">
+          <span
+            className={`h-2 w-2 rounded-full ${
+              health?.status === "ok" ? "bg-emerald-500" : "bg-red-400"
+            }`}
+          />
+          <span className="font-mono text-xs text-zinc-600">
+            {health?.status === "ok" ? "BACKEND ONLINE" : "BACKEND OFFLINE"}
+          </span>
+        </div>
       </div>
 
-      {error ? <p className="text-sm font-semibold text-red-600">{error}</p> : null}
+      {/* Stat cards */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <div
+              key={card.label}
+              className="flex items-center gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"
+            >
+              <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${card.bg}`}>
+                <Icon className={`h-5 w-5 ${card.color}`} />
+              </div>
+              <div>
+                <p className="text-2xl font-bold text-zinc-900">{card.value}</p>
+                <p className="text-xs text-zinc-500">{card.label}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-xl border bg-white p-4 text-sm shadow-sm">
-          <p className="font-semibold">System Status</p>
-          <p className="text-muted-foreground">{health}</p>
+      {/* Quick actions */}
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Link
+          href="/dashboard/batches"
+          className="flex items-center justify-between rounded-xl border border-blue-100 bg-gradient-to-r from-blue-600 to-cyan-500 p-4 text-white shadow-sm transition hover:opacity-90"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Bắt đầu</p>
+            <p className="font-bold">Đăng ký lô hàng</p>
+          </div>
+          <ArrowRight className="h-5 w-5 opacity-70" />
+        </Link>
+
+        <Link
+          href="/dashboard/scan-transfer"
+          className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:bg-zinc-50"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Thao tác</p>
+            <p className="font-bold text-zinc-800">Tạo lệnh chuyển</p>
+          </div>
+          <Truck className="h-5 w-5 text-zinc-400" />
+        </Link>
+
+        <Link
+          href="/dashboard/products"
+          className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white p-4 shadow-sm transition hover:bg-zinc-50"
+        >
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-zinc-400">Xem</p>
+            <p className="font-bold text-zinc-800">Danh sách sản phẩm</p>
+          </div>
+          <CheckCircle2 className="h-5 w-5 text-zinc-400" />
+        </Link>
+      </div>
+
+      {/* Recent products */}
+      <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-blue-500" />
+            <h3 className="font-semibold text-zinc-800">Sản phẩm gần đây</h3>
+          </div>
+          <Link
+            href="/dashboard/products"
+            className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+          >
+            Xem tất cả <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
-        <div className="rounded-xl border bg-white p-4 text-sm shadow-sm">
-          <p className="font-semibold">Current Demo User</p>
-          {user ? (
-            <p className="break-all text-muted-foreground">{user.role} - {user.address}</p>
+
+        <div className="divide-y divide-zinc-100">
+          {products.length === 0 ? (
+            <p className="px-6 py-8 text-center text-sm text-zinc-400">
+              Chưa có sản phẩm nào được đăng ký.
+            </p>
           ) : (
-            <p className="text-muted-foreground">Not logged in. Use the Login button to select a role.</p>
+            products.map((product) => (
+              <div
+                key={product.serialId}
+                className="flex items-center justify-between px-6 py-3 hover:bg-zinc-50"
+              >
+                <div>
+                  <p className="font-medium text-zinc-800">{product.productName}</p>
+                  <p className="font-mono text-xs text-zinc-400">
+                    {product.serialId} · Lô {product.batchId}
+                  </p>
+                </div>
+                <span
+                  className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                    statusChip[product.status] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
+                  }`}
+                >
+                  {statusLabel[product.status] ?? product.status}
+                </span>
+              </div>
+            ))
           )}
         </div>
       </div>
-
-      <div className="flex flex-wrap gap-3">
-        <Link className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white" href="/dashboard/batches">
-          Register Product
-        </Link>
-        <Link className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white" href="/dashboard/products">
-          View Products
-        </Link>
-        <Link className="rounded-md border px-4 py-2 text-sm font-semibold" href="/dashboard/scan-transfer">
-          Transfer
-        </Link>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Total Batches</CardTitle></CardHeader>
-          <CardContent className="text-3xl font-bold">{stats.totalBatches}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Total Serials</CardTitle></CardHeader>
-          <CardContent className="text-3xl font-bold">{stats.totalSerials}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Pending Transfers</CardTitle></CardHeader>
-          <CardContent className="text-3xl font-bold">{stats.pendingTransfers}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Risk Alerts</CardTitle></CardHeader>
-          <CardContent className="text-3xl font-bold">{stats.riskAlerts}</CardContent>
-        </Card>
-      </div>
-
-      <Card>
-        <CardHeader><CardTitle>Recent Products</CardTitle></CardHeader>
-        <CardContent className="space-y-3">
-          {products.map((product) => (
-            <div key={product.serialId} className="flex items-center justify-between rounded-xl border p-4">
-              <div>
-                <p className="font-medium">{product.productName}</p>
-                <p className="text-sm text-muted-foreground">{product.serialId} - {product.batchId}</p>
-              </div>
-              <p className="text-sm">{product.status}</p>
-            </div>
-          ))}
-          {products.length === 0 ? <p className="text-sm text-muted-foreground">No products yet.</p> : null}
-        </CardContent>
-      </Card>
     </div>
   );
 }

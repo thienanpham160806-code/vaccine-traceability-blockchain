@@ -26,6 +26,8 @@ interface IProductRegistry {
         uint8 riskLevel,
         bytes32 reason
     ) external;
+
+    function revertTransit(bytes32 serialID) external;
 }
 
 interface ISupplyChainAccessControl {
@@ -262,6 +264,24 @@ contract TransferLedger {
             pendingTransfer.receiver,
             block.timestamp
         );
+    }
+
+    function rejectTransfer(bytes32 serialID, bytes32 reason) external {
+        require(serialID != bytes32(0), "Invalid serial");
+        require(reason != bytes32(0), "Invalid reason");
+
+        PendingTransfer memory pending = pendingTransfers[serialID];
+        require(pending.exists, "No pending transfer");
+        require(msg.sender == pending.receiver, "Not receiver");
+
+        address sender = pending.sender;
+        address receiver = pending.receiver;
+
+        delete pendingTransfers[serialID];
+
+        productRegistry.revertTransit(serialID);
+
+        emit TransferRejected(serialID, sender, receiver, reason);
     }
 
     function getTransferHistory(

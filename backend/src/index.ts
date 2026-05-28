@@ -12,6 +12,7 @@ import { errorHandler, requestLogger } from './middleware/auth';
 import authRoutes from './routes/auth';
 import dashboardRoutes from './routes/dashboard';
 import productsRoutes from './routes/products';
+import batchesRoutes from './routes/batches';
 import transfersRoutes from './routes/transfers';
 import verifyRoutes from './routes/verify';
 import opsRoutes from './routes/ops';
@@ -68,6 +69,7 @@ app.get('/health', (req, res) => {
 app.use('/auth', authRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/products', productsRoutes);
+app.use('/batches', batchesRoutes);
 app.use('/transfers', transfersRoutes);
 app.use('/verify', verifyRoutes);
 app.use('/', opsRoutes);

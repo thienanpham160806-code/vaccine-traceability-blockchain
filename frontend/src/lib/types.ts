@@ -5,7 +5,9 @@ export type UserRole =
   | "IMPORTER"
   | "DISTRIBUTOR"
   | "CLINIC"
-  | "PUBLIC";
+  | "PHARMACY"
+  | "PUBLIC"
+  | "RECALL_AUTHORITY";
 
 export type ProductType = "LOCAL" | "IMPORT";
 
@@ -70,4 +72,44 @@ export type DashboardStats = {
   totalSerials: number;
   pendingTransfers: number;
   riskAlerts: number;
+};
+
+export type Batch = {
+  id: string;
+  batchHash: string;
+  batchQR: string;
+  metadataHash?: string;
+  productName: string;
+  quantity: number;
+  manufacturerAddress: string;
+  manufacturerName: string;
+  expiryDate: string;
+  origin: "MANUFACTURED" | "IMPORTED";
+  ipfsCid?: string;
+  recalledAt?: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type TransferStatus = "PENDING" | "CONFIRMED" | "REJECTED" | "RETURNED";
+
+export type TransferRecord = {
+  id: string;
+  serialId: string;
+  batchId?: string;
+  fromAddress: string;
+  toAddress: string;
+  fromRole: UserRole;
+  toRole: UserRole;
+  status: TransferStatus;
+  fromLocationHash?: string;
+  toLocationHash?: string;
+  ipfsCid?: string;
+  blockchainTx?: string;
+  rejectedReason?: string;
+  confirmedAt?: number;
+  rejectedAt?: number;
+  returnedAt?: number;
+  createdAt: number;
+  updatedAt: number;
 };

@@ -19,6 +19,54 @@ function getErrorMessage(error: any, fallback: string): string {
 }
 
 /**
+ * GET /transfers
+ * List all transfer records from Firebase
+ */
+router.get('/', async (req: Request, res: Response) => {
+  try {
+    const snapshot = await db.ref('transfers').once('value');
+    const data = snapshot.val() || {};
+    const transfers = Object.values(data) as TransferRecord[];
+
+    transfers.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    res.json({ success: true, data: transfers });
+  } catch (error) {
+    Logger.error('Get transfers error', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'GET_TRANSFERS_ERROR', message: 'Failed to fetch transfers' },
+    });
+  }
+});
+
+/**
+ * GET /transfers/:transferId
+ * Get single transfer by ID
+ */
+router.get('/:transferId', async (req: Request, res: Response) => {
+  try {
+    const { transferId } = req.params;
+    const snapshot = await db.ref(`transfers/${transferId}`).once('value');
+
+    if (!snapshot.exists()) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'TRANSFER_NOT_FOUND', message: `Transfer ${transferId} not found` },
+      });
+    }
+
+    res.json({ success: true, data: snapshot.val() });
+  } catch (error) {
+    Logger.error('Get transfer error', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'GET_TRANSFER_ERROR', message: 'Failed to fetch transfer' },
+    });
+  }
+});
+
+/**
  * POST /transfers/scan
  * Create transfer request (Scan QR to initiate delivery)
  */
@@ -231,7 +279,7 @@ router.post('/confirm', async (req: Request, res: Response) => {
 
 /**
  * POST /transfers/reject
- * Reject transfer and return to sender
+ * Reject transfer — reverts product status on-chain via rejectTransfer()
  */
 router.post('/reject', async (req: Request, res: Response) => {
   try {
@@ -248,6 +296,16 @@ router.post('/reject', async (req: Request, res: Response) => {
     }
 
     Logger.info(`Transfer reject for: ${serialId}`);
+
+    if (!contractClient.isInitialized()) {
+      return res.status(503).json({
+        success: false,
+        error: {
+          code: 'CONTRACTS_NOT_READY',
+          message: 'Smart contracts are not initialized',
+        },
+      });
+    }
 
     const serialHash = toBytes32(serialId);
     const transfersSnapshot = await db.ref('transfers').once('value');
@@ -267,24 +325,34 @@ router.post('/reject', async (req: Request, res: Response) => {
       });
     }
 
-    const [transferId] = pendingEntry as [string, TransferRecord];
+    const [transferId, pendingTransfer] = pendingEntry as [string, TransferRecord];
+
+    // Call smart contract — receiver role signs the rejection
+    const txHash = await contractClient.rejectTransfer(serialHash, rejectionReason, pendingTransfer.toRole);
     const now = Date.now();
 
-    await db.ref(`transfers/${transferId}`).update({
-      status: 'REJECTED',
-      rejectedReason: rejectionReason,
-      rejectedAt: now,
-      updatedAt: now,
-    });
+    await Promise.all([
+      db.ref(`transfers/${transferId}`).update({
+        status: 'REJECTED',
+        rejectedReason: rejectionReason,
+        rejectedAt: now,
+        blockchainTx: txHash,
+        updatedAt: now,
+      }),
+      db.ref(`products/${serialHash}`).update({
+        status: 'VERIFIED',
+        updatedAt: now,
+      }),
+    ]);
 
     res.json({
       success: true,
       data: {
-        message: 'Transfer rejected in Firebase only; smart contract has no cancel/reject pending-transfer function yet',
         transferId,
         serialId,
         serialHash,
         rejectionReason,
+        txHash,
       },
     });
   } catch (error) {
@@ -293,7 +361,7 @@ router.post('/reject', async (req: Request, res: Response) => {
       success: false,
       error: {
         code: 'TRANSFER_REJECT_ERROR',
-        message: 'Failed to reject transfer',
+        message: getErrorMessage(error, 'Failed to reject transfer'),
       },
     });
   }
