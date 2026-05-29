@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { ApiResponse, Batch, DashboardStats, Product, TransferRecord, VerifyResult } from "./types";
+import type { ApiResponse, Batch, DashboardActivity, DashboardStats, Product, TransferRecord, VerifyResult } from "./types";
 
 export const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
@@ -23,8 +23,12 @@ api.interceptors.request.use((config) => {
 export const endpoints = {
   health: "/health",
   login: "/auth/login",
+  demoActors: "/auth/demo-actors",
+  authNonce: "/auth/nonce",
+  loginWithSignature: "/auth/login-with-signature",
 
   overview: "/dashboard/overview",
+  recentActivity: "/dashboard/recent-activity",
 
   getBatches: "/batches",
   getBatch: (batchId: string) => `/batches/${batchId}`,
@@ -49,9 +53,25 @@ export const endpoints = {
 };
 
 export function getApiErrorMessage(err: any, fallback = "Request failed.") {
-  if (err?.code === "ECONNABORTED") return "Backend request timed out. Check backend and Hardhat are running.";
-  if (!err?.response) return "Cannot reach backend. Start backend on http://localhost:5000 and refresh.";
-  return err?.response?.data?.error?.message || fallback;
+  if (err?.code === "ECONNABORTED") return "Yêu cầu đến backend quá thời gian. Hãy kiểm tra backend và RPC.";
+  if (!err?.response) return "Không kết nối được backend. Hãy kiểm tra http://localhost:5000.";
+
+  const code = err?.response?.data?.error?.code;
+  const message = err?.response?.data?.error?.message;
+  const messages: Record<string, string> = {
+    FORBIDDEN: "Bạn không có quyền thực hiện thao tác này.",
+    ROLE_MISMATCH: message || "Vai trò hiện tại không khớp với thao tác này.",
+    MISSING_TOKEN: "Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.",
+    INVALID_TOKEN: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+    INVALID_ADDRESS: "Địa chỉ ví không hợp lệ.",
+    NONCE_NOT_FOUND: "Phiên ký MetaMask đã hết hạn. Vui lòng thử lại.",
+    NONCE_EXPIRED: "Phiên ký MetaMask đã hết hạn. Vui lòng thử lại.",
+    SIGNATURE_MISMATCH: "Chữ ký MetaMask không khớp với ví đang đăng nhập.",
+    INVALID_SERIAL_ID: "Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
+    INVALID_BATCH_ID: "Mã lô chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
+  };
+
+  return messages[code] || message || fallback;
 }
 
 export async function getHealth() {
@@ -64,9 +84,33 @@ export async function login(payload: { address: string; role: string }) {
   return res.data.data;
 }
 
+export async function getDemoActors() {
+  const res = await api.get<ApiResponse<Array<{ role: string; label: string; address: string }>>>(endpoints.demoActors);
+  return res.data.data || [];
+}
+
+export async function requestAuthNonce(address: string) {
+  const res = await api.post<ApiResponse<{ message: string; expiresAt: number }>>(endpoints.authNonce, {
+    address,
+  });
+  return res.data.data;
+}
+
+export async function loginWithSignature(payload: { address: string; signature: string }) {
+  const res = await api.post<ApiResponse<any>>(endpoints.loginWithSignature, payload);
+  return res.data.data;
+}
+
 export async function getDashboardOverview() {
   const res = await api.get<ApiResponse<DashboardStats>>(endpoints.overview);
   return res.data.data;
+}
+
+export async function getDashboardRecentActivity(limit = 10) {
+  const res = await api.get<ApiResponse<DashboardActivity[]>>(endpoints.recentActivity, {
+    params: { limit },
+  });
+  return res.data.data || [];
 }
 
 // ============= Batches =============

@@ -3,6 +3,7 @@ import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { CryptoUtils } from '../utils/crypto';
 import { Logger } from '../utils/logger';
+import { verifyToken, requireRole } from '../middleware/auth';
 
 const router = Router();
 
@@ -30,7 +31,7 @@ router.get('/recalls', async (_req: Request, res: Response) => {
   }
 });
 
-router.post('/recalls', async (req: Request, res: Response) => {
+router.post('/recalls', verifyToken, requireRole(['RECALL_AUTHORITY', 'ADMIN', 'MANUFACTURER']), async (req: Request, res: Response) => {
   try {
     const { batchHash, reason, serials = [] } = req.body;
 
@@ -90,7 +91,7 @@ router.get('/disputes', async (_req: Request, res: Response) => {
   }
 });
 
-router.post('/disputes', async (req: Request, res: Response) => {
+router.post('/disputes', verifyToken, requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']), async (req: Request, res: Response) => {
   try {
     const { relatedSerialId, reportedBy = 'demo-user', reason, evidenceIpfsCid } = req.body;
 

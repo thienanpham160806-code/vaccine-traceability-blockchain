@@ -1,18 +1,12 @@
 import type { ProductStatus, RiskLevel } from "@/lib/types";
+import { getProductStatusLabel, getStatusChipClass } from "@/lib/status";
 
 export function ProductStatusBadge({ status }: { status: ProductStatus }) {
-  const colors: Record<string, string> = {
-    VERIFIED: "bg-green-100 text-green-800",
-    DELIVERED: "bg-green-100 text-green-800",
-    PENDING_DELIVERY: "bg-yellow-100 text-yellow-800",
-    FLAGGED: "bg-red-100 text-red-800",
-    RECALLED: "bg-gray-100 text-gray-800",
-  };
-  const colorClass = colors[status] || "bg-blue-100 text-blue-800";
+  const colorClass = getStatusChipClass(status).replace("border", "");
 
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
-      {status}
+      {getProductStatusLabel(status)}
     </span>
   );
 }
@@ -27,7 +21,7 @@ export function RiskLevelBadge({ riskLevel }: { riskLevel: RiskLevel }) {
 
   return (
     <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
-      {riskLevel}
+      {riskLevel === "SAFE" ? "An toàn" : riskLevel === "ALERT" ? "Cảnh báo" : "Nguy cơ cao"}
     </span>
   );
 }

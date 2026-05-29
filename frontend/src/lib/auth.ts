@@ -21,12 +21,18 @@ export const demoActors = [
     label: "Clinic",
     address: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
   },
+  {
+    role: "PHARMACY",
+    label: "Pharmacy",
+    address: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+  },
 ];
 
 export type DemoUser = {
   id: string;
   address: string;
   role: string;
+  roles?: string[];
 };
 
 export function getStoredUser(): DemoUser | null {

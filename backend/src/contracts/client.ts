@@ -66,6 +66,15 @@ export class ContractClient {
   public productRegistry: ethers.Contract | null = null;
   public transferLedger: ethers.Contract | null = null;
   public accessControl: ethers.Contract | null = null;
+  private readonly roleNames = [
+    'MANUFACTURER',
+    'IMPORTER',
+    'DISTRIBUTOR',
+    'CLINIC',
+    'PHARMACY',
+    'AUDITOR',
+    'RECALL_AUTHORITY',
+  ];
 
   constructor() {
     try {
@@ -213,6 +222,44 @@ export class ContractClient {
    */
   getProvider(): ethers.JsonRpcProvider {
     return this.provider;
+  }
+
+  roleNameToBytes32(role: string): string {
+    return ethers.keccak256(ethers.toUtf8Bytes(`${role.toUpperCase()}_ROLE`));
+  }
+
+  bytes32ToRoleName(roleHash: string): string | null {
+    const normalizedHash = roleHash.toLowerCase();
+    return this.roleNames.find((role) => this.roleNameToBytes32(role).toLowerCase() === normalizedHash) || null;
+  }
+
+  async getAccountRoles(address: string): Promise<{ roles: string[]; primaryRole: string | null }> {
+    if (!this.accessControl) {
+      throw new Error('AccessControl contract not initialized');
+    }
+
+    const roles: string[] = [];
+    for (const role of this.roleNames) {
+      const roleHash = this.roleNameToBytes32(role);
+      if (await this.accessControl.hasRole(roleHash, address)) {
+        roles.push(role);
+      }
+    }
+
+    let primaryRole: string | null = null;
+    try {
+      const primaryRoleHash = await this.accessControl.getPrimaryRole(address);
+      if (primaryRoleHash && primaryRoleHash !== ethers.ZeroHash) {
+        primaryRole = this.bytes32ToRoleName(primaryRoleHash);
+      }
+    } catch (error) {
+      Logger.warn('Failed to read primary role', error);
+    }
+
+    return {
+      roles,
+      primaryRole: primaryRole || roles[0] || null,
+    };
   }
 
   /**

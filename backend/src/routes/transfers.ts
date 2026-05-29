@@ -5,9 +5,11 @@ import { ipfsService } from '../services/ipfs';
 import { CryptoUtils } from '../utils/crypto';
 import { Logger } from '../utils/logger';
 import { TransferRecord } from '../types';
+import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
+const SAFE_ID_PATTERN = /^[a-zA-Z0-9_-]{3,80}$/;
 
 function toBytes32(value?: string): string {
   if (!value) return ZERO_BYTES32;
@@ -70,7 +72,11 @@ router.get('/:transferId', async (req: Request, res: Response) => {
  * POST /transfers/scan
  * Create transfer request (Scan QR to initiate delivery)
  */
-router.post('/scan', async (req: Request, res: Response) => {
+router.post(
+  '/scan',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  async (req: AuthRequest, res: Response) => {
   try {
     const {
       serialId,
@@ -87,6 +93,26 @@ router.post('/scan', async (req: Request, res: Response) => {
         error: {
           code: 'MISSING_FIELDS',
           message: 'Missing required fields: serialId, fromRole, toRole',
+        },
+      });
+    }
+
+    if (!SAFE_ID_PATTERN.test(serialId)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_SERIAL_ID',
+          message: 'Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.',
+        },
+      });
+    }
+
+    if (req.user?.role !== 'ADMIN' && req.user?.role !== fromRole) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ROLE_MISMATCH',
+          message: `Only ${fromRole} can create this transfer`,
         },
       });
     }
@@ -163,7 +189,7 @@ router.post('/scan', async (req: Request, res: Response) => {
     await Promise.all([
       db.ref(`transfers/${transferId}`).set(transfer),
       db.ref(`products/${serialHash}`).update({
-        status: 'PENDING_DELIVERY',
+        status: 'IN_TRANSIT',
         currentOwner: senderAddress,
         updatedAt: now,
       }),
@@ -187,13 +213,18 @@ router.post('/scan', async (req: Request, res: Response) => {
       },
     });
   }
-});
+  }
+);
 
 /**
  * POST /transfers/confirm
  * Confirm transfer (Receiver accepts delivery)
  */
-router.post('/confirm', async (req: Request, res: Response) => {
+router.post(
+  '/confirm',
+  verifyToken,
+  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  async (req: AuthRequest, res: Response) => {
   try {
     const { serialId, receiverLocationHash } = req.body;
 
@@ -238,6 +269,16 @@ router.post('/confirm', async (req: Request, res: Response) => {
     }
 
     const [transferId, pendingTransfer] = pendingEntry as [string, TransferRecord];
+    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ROLE_MISMATCH',
+          message: `Only ${pendingTransfer.toRole} can confirm this transfer`,
+        },
+      });
+    }
+
     const locationHash = toBytes32(receiverLocationHash || pendingTransfer.toLocationHash);
     const txHash = await contractClient.confirmTransfer(serialHash, locationHash, pendingTransfer.toRole);
     const now = Date.now();
@@ -275,13 +316,18 @@ router.post('/confirm', async (req: Request, res: Response) => {
       },
     });
   }
-});
+  }
+);
 
 /**
  * POST /transfers/reject
  * Reject transfer — reverts product status on-chain via rejectTransfer()
  */
-router.post('/reject', async (req: Request, res: Response) => {
+router.post(
+  '/reject',
+  verifyToken,
+  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  async (req: AuthRequest, res: Response) => {
   try {
     const { serialId, rejectionReason } = req.body;
 
@@ -327,6 +373,16 @@ router.post('/reject', async (req: Request, res: Response) => {
 
     const [transferId, pendingTransfer] = pendingEntry as [string, TransferRecord];
 
+    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ROLE_MISMATCH',
+          message: `Only ${pendingTransfer.toRole} can reject this transfer`,
+        },
+      });
+    }
+
     // Call smart contract — receiver role signs the rejection
     const txHash = await contractClient.rejectTransfer(serialHash, rejectionReason, pendingTransfer.toRole);
     const now = Date.now();
@@ -365,6 +421,7 @@ router.post('/reject', async (req: Request, res: Response) => {
       },
     });
   }
-});
+  }
+);
 
 export default router;

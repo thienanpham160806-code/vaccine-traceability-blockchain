@@ -25,6 +25,7 @@ const inputCls =
 
 const monoInputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
+const safeIdPattern = /^[a-zA-Z0-9_-]{3,80}$/;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -69,6 +70,14 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
     const { productName, batchId, serialId, expiryDate, productType } = form;
     if (!productName.trim() || !batchId.trim() || !serialId.trim() || !expiryDate) {
       setError("Tên sản phẩm, mã lô, serial ID và ngày hết hạn là bắt buộc.");
+      return;
+    }
+    if (!safeIdPattern.test(batchId.trim())) {
+      setError("Mã lô chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.");
+      return;
+    }
+    if (!safeIdPattern.test(serialId.trim())) {
+      setError("Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.");
       return;
     }
     if (productType === "IMPORT") {

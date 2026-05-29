@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CheckCircle2, ExternalLink, RefreshCw, Truck, XCircle } from "lucide-react";
+import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
 import { confirmTransfer, getApiErrorMessage, getTransfers, rejectTransfer, scanTransfer } from "@/lib/api";
 import type { TransferRecord } from "@/lib/types";
 
@@ -25,6 +25,7 @@ const roleOptions = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARM
 
 const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
+const safeIdPattern = /^[a-zA-Z0-9_-]{3,80}$/;
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -210,6 +211,10 @@ export default function ScanTransferPage() {
 
   const create = async () => {
     if (!serialId.trim() || isBusy) return;
+    if (!safeIdPattern.test(serialId.trim())) {
+      setError("Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.");
+      return;
+    }
     setIsBusy(true);
     setError(null);
     setStatusMsg(`Đang tạo lệnh ${fromRole} → ${toRole} on-chain…`);
@@ -230,6 +235,10 @@ export default function ScanTransferPage() {
 
   const confirm = async () => {
     if (!serialId.trim() || isBusy) return;
+    if (!safeIdPattern.test(serialId.trim())) {
+      setError("Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.");
+      return;
+    }
     setIsBusy(true);
     setError(null);
     setStatusMsg(`Đang xác nhận giao hàng cho ${toRole}…`);
@@ -249,6 +258,21 @@ export default function ScanTransferPage() {
   };
 
   return (
+    <div className="space-y-5 pb-20 lg:pb-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-900">Create transfer</h1>
+          <p className="text-sm text-zinc-500">Create a blockchain-backed delivery request.</p>
+        </div>
+        <Link
+          href="/dashboard/transfers"
+          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-bold text-zinc-700 hover:bg-zinc-50"
+        >
+          <ListChecks className="h-4 w-4" />
+          All transfers
+        </Link>
+      </div>
+
     <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
       {/* Left: Create transfer form */}
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
@@ -354,6 +378,12 @@ export default function ScanTransferPage() {
             <Truck className="h-4 w-4 text-blue-500" />
             <h2 className="font-semibold text-zinc-800">Lệnh gần đây</h2>
           </div>
+          <Link
+            href="/dashboard/transfers"
+            className="flex min-h-9 items-center gap-1 rounded-lg border border-zinc-200 px-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
+          >
+            View all <ArrowRight className="h-3 w-3" />
+          </Link>
           <button
             onClick={() => qc.invalidateQueries({ queryKey: ["transfers"] })}
             className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
@@ -363,6 +393,7 @@ export default function ScanTransferPage() {
         </div>
         <TransferList />
       </div>
+    </div>
     </div>
   );
 }

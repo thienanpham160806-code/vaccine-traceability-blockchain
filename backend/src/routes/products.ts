@@ -6,9 +6,11 @@ import { CryptoUtils } from '../utils/crypto';
 import { QRCodeGenerator } from '../utils/qr';
 import { Logger } from '../utils/logger';
 import { Batch, Product } from '../types';
+import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
+const SAFE_ID_PATTERN = /^[a-zA-Z0-9_-]{3,80}$/;
 
 function toBytes32(value: string): string {
   return CryptoUtils.isValidHash(value) ? value : CryptoUtils.keccak256(value);
@@ -100,7 +102,11 @@ router.get('/:serialId', async (req: Request, res: Response) => {
  * POST /products/register
  * Register new product (batch)
  */
-router.post('/register', async (req: Request, res: Response) => {
+router.post(
+  '/register',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'ADMIN']),
+  async (req: AuthRequest, res: Response) => {
   try {
     const {
       serialId,
@@ -123,6 +129,26 @@ router.post('/register', async (req: Request, res: Response) => {
         error: {
           code: 'MISSING_FIELDS',
           message: 'Missing required fields: serialId, productName, expiryDate',
+        },
+      });
+    }
+
+    if (!SAFE_ID_PATTERN.test(serialId)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_SERIAL_ID',
+          message: 'Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.',
+        },
+      });
+    }
+
+    if (batchId && !SAFE_ID_PATTERN.test(batchId)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_BATCH_ID',
+          message: 'Mã lô chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.',
         },
       });
     }
@@ -161,6 +187,17 @@ router.post('/register', async (req: Request, res: Response) => {
     const importDocHash = rawImportDocHash ? toBytes32(rawImportDocHash) : ZERO_BYTES32;
     const proofBytes = zkpProof || '0x';
     const signerRole = origin === 'IMPORTED' ? 'IMPORTER' : 'MANUFACTURER';
+
+    if (req.user?.role !== 'ADMIN' && req.user?.role !== signerRole) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'ROLE_MISMATCH',
+          message: `This registration requires ${signerRole} role`,
+        },
+      });
+    }
+
     const qrContent = QRCodeGenerator.encodeQRContent(batchHash, metadataHash);
     const qrImage = await QRCodeGenerator.generateQRImage(qrContent);
     const ipfsResult = await ipfsService.pinJson(`batch-${batchQR}-${serialId}`, {
@@ -243,6 +280,7 @@ router.post('/register', async (req: Request, res: Response) => {
       },
     });
   }
-});
+  }
+);
 
 export default router;
