@@ -20,7 +20,7 @@ export type ProductStatus =
   | "RECALLED"
   | "INVALID";
 
-export type RiskLevel = "SAFE" | "ALERT" | "HIGH";
+export type RiskLevel = "SAFE" | "ALERT" | "HIGH" | "CRITICAL";
 
 export type Product = {
   serialId: string;
@@ -34,9 +34,17 @@ export type Product = {
   status: ProductStatus;
   riskLevel: RiskLevel;
   expiryDate: string;
-  blockchainTx?: string;
-  zkProofVerified?: boolean;
+
   isImported?: boolean;
+  zkpVerified?: boolean;
+  blockchainTx?: string;
+
+  metadataHash?: string;
+  ipfsCid?: string;
+  qrImage?: string;
+  notes?: string;
+  registeredAt?: number;
+
   createdAt?: number;
   updatedAt?: number;
 };
@@ -47,6 +55,31 @@ export type ApiResponse<T> = {
   error?: {
     code: string;
     message: string;
+    details?: unknown;
+  };
+  timestamp?: number;
+};
+
+export type ProductListResponse = {
+  items: Product[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
+
+export type ProductDetailResponse = {
+  product: Product;
+  batch?: Batch | null;
+  timeline: TransferRecord[];
+  riskFlags: RiskFlag[];
+  recall?: RecallRecord | null;
+  blockchain: {
+    serialHash: string;
+    txHash?: string;
+    currentOwner: string;
+    status: string;
+    transferHistory: unknown[];
+    available: boolean;
   };
 };
 
@@ -58,14 +91,6 @@ export type TransferEvent = {
   status: "REGISTERED" | "VERIFIED" | "IN_TRANSIT" | "PENDING_DELIVERY" | "DELIVERED" | "FLAGGED" | "RECALLED";
   timestamp: string;
   txHash?: string;
-};
-
-export type VerifyResult = {
-  product: Product;
-  origin: string;
-  recallStatus: boolean;
-  zkProofVerified: boolean;
-  timeline: TransferEvent[];
 };
 
 export type DashboardStats = {
@@ -94,18 +119,51 @@ export type DashboardActivity = {
 export type Batch = {
   id: string;
   batchHash: string;
-  batchQR: string;
+  batchQR?: string;
   metadataHash?: string;
   productName: string;
   quantity: number;
-  manufacturerAddress: string;
-  manufacturerName: string;
+  manufacturerAddress?: string;
+  manufacturerName?: string;
   expiryDate: string;
-  origin: "MANUFACTURED" | "IMPORTED";
+  origin?: "MANUFACTURED" | "IMPORTED";
   ipfsCid?: string;
   recalledAt?: number;
-  createdAt: number;
-  updatedAt: number;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+export type VerifyResult = {
+  product: Product;
+  batch?: Batch;
+  timeline: TransferEvent[];
+  recallStatus: boolean;
+  zkProofVerified: boolean;
+};
+
+export type RiskFlag = {
+  id?: string;
+  serialId?: string;
+  reason?: string;
+  flagReason?: string;
+  level?: string | number;
+  riskLevel?: RiskLevel;
+  status?: "OPEN" | "RESOLVED";
+  resolutionNote?: string;
+  resolvedBy?: string;
+  createdAt?: number;
+  updatedAt?: number;
+  resolvedAt?: number;
+};
+
+export type RecallRecord = {
+  id?: string;
+  batchHash?: string;
+  reason?: string;
+  serials?: string[];
+  txHash?: string;
+  createdAt?: number;
+  recalledAt?: number;
 };
 
 export type TransferStatus = "PENDING" | "CONFIRMED" | "REJECTED" | "RETURNED";

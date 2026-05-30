@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
 import { confirmTransfer, getApiErrorMessage, getTransfers, rejectTransfer, scanTransfer } from "@/lib/api";
 import type { TransferRecord } from "@/lib/types";
+import { getZodFieldErrors, transferConfirmFormSchema, transferRejectFormSchema, transferScanFormSchema } from "@/lib/validation";
 
 const statusChip: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-700 border-amber-200",
@@ -67,7 +68,14 @@ function TransferList() {
     setBusy(true);
     setError(null);
     try {
-      await rejectTransfer(serialId, rejectReason.trim());
+      const parsed = transferRejectFormSchema.safeParse({ serialId, rejectionReason: rejectReason });
+      if (!parsed.success) {
+        const errors = getZodFieldErrors(parsed.error);
+        setError(Object.values(errors)[0] || "Please enter a valid rejection reason.");
+        return;
+      }
+
+      await rejectTransfer(parsed.data.serialId, parsed.data.rejectionReason);
       setRejectingId(null);
       setRejectReason("");
       qc.invalidateQueries({ queryKey: ["transfers"] });
@@ -201,6 +209,7 @@ export default function ScanTransferPage() {
   const [txHash, setTxHash] = useState<string | null>(null);
   const [transferId, setTransferId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isBusy, setIsBusy] = useState(false);
 
   useEffect(() => {
@@ -220,8 +229,17 @@ export default function ScanTransferPage() {
     setStatusMsg(`Đang tạo lệnh ${fromRole} → ${toRole} on-chain…`);
     setTxHash(null);
     try {
-      const data = await scanTransfer({ serialId: serialId.trim(), fromRole, toRole });
-      setTxHash(data.txHash);
+      const parsed = transferScanFormSchema.safeParse({ serialId, fromRole, toRole });
+      if (!parsed.success) {
+        const errors = getZodFieldErrors(parsed.error);
+        setFieldErrors(errors);
+        setError(Object.values(errors)[0] || "Please fix the highlighted fields.");
+        setStatusMsg(null);
+        return;
+      }
+
+      const data = await scanTransfer(parsed.data);
+      setTxHash(data.txHash ?? null);
       setTransferId(data.transfer?.id ?? null);
       setStatusMsg("Đã tạo lệnh. Xác nhận giao hàng ở danh sách bên phải.");
       qc.invalidateQueries({ queryKey: ["transfers"] });
@@ -244,8 +262,17 @@ export default function ScanTransferPage() {
     setStatusMsg(`Đang xác nhận giao hàng cho ${toRole}…`);
     setTxHash(null);
     try {
-      const data = await confirmTransfer(serialId.trim());
-      setTxHash(data.txHash);
+      const parsed = transferConfirmFormSchema.safeParse({ serialId });
+      if (!parsed.success) {
+        const errors = getZodFieldErrors(parsed.error);
+        setFieldErrors(errors);
+        setError(Object.values(errors)[0] || "Please fix the highlighted fields.");
+        setStatusMsg(null);
+        return;
+      }
+
+      const data = await confirmTransfer(parsed.data.serialId);
+      setTxHash(data.txHash ?? null);
       setTransferId(data.transferId ?? transferId);
       setStatusMsg("Xác nhận thành công.");
       qc.invalidateQueries({ queryKey: ["transfers"] });
@@ -286,7 +313,10 @@ export default function ScanTransferPage() {
             <input
               className={`${inputCls} font-mono`}
               value={serialId}
-              onChange={(e) => setSerialId(e.target.value)}
+              onChange={(e) => {
+                setFieldErrors({});
+                setSerialId(e.target.value);
+              }}
               placeholder="VCN-…"
             />
           </Field>
@@ -296,7 +326,10 @@ export default function ScanTransferPage() {
               <select
                 className={inputCls}
                 value={fromRole}
-                onChange={(e) => setFromRole(e.target.value)}
+                onChange={(e) => {
+                  setFieldErrors({});
+                  setFromRole(e.target.value);
+                }}
               >
                 {roleOptions.map((r) => (
                   <option key={r} value={r}>{r}</option>
@@ -307,7 +340,10 @@ export default function ScanTransferPage() {
               <select
                 className={inputCls}
                 value={toRole}
-                onChange={(e) => setToRole(e.target.value)}
+                onChange={(e) => {
+                  setFieldErrors({});
+                  setToRole(e.target.value);
+                }}
               >
                 {roleOptions.map((r) => (
                   <option key={r} value={r}>{r}</option>
@@ -327,6 +363,15 @@ export default function ScanTransferPage() {
         {error && (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
             {error}
+            {Object.keys(fieldErrors).length > 0 ? (
+              <ul className="mt-1 list-disc pl-4">
+                {Object.entries(fieldErrors).map(([field, validationMessage]) => (
+                  <li key={field}>
+                    {field}: {validationMessage}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         )}
 

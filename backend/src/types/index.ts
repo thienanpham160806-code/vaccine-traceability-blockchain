@@ -39,6 +39,13 @@ export interface Product {
   isImported: boolean;
   zkpVerified: boolean;
   blockchainTx?: string;
+
+  metadataHash?: string;
+  ipfsCid?: string;
+  qrImage?: string;
+  notes?: string;
+  registeredAt?: number;
+
   createdAt: number;
   updatedAt: number;
 }

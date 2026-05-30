@@ -26,6 +26,7 @@ export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction)
           code: 'MISSING_TOKEN',
           message: 'Missing or invalid authorization header',
         },
+        timestamp: Date.now(),
       });
     }
 
@@ -48,6 +49,7 @@ export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction)
         code: 'INVALID_TOKEN',
         message: 'Invalid or expired token',
       },
+      timestamp: Date.now(),
     });
   }
 };
@@ -64,6 +66,7 @@ export const requireRole = (roles: string[]) => {
           code: 'UNAUTHORIZED',
           message: 'User not authenticated',
         },
+        timestamp: Date.now(),
       });
     }
 
@@ -75,6 +78,7 @@ export const requireRole = (roles: string[]) => {
           code: 'FORBIDDEN',
           message: `Bạn cần một trong các quyền sau để thực hiện thao tác này: ${roles.join(', ')}`,
         },
+        timestamp: Date.now(),
       });
     }
 
@@ -86,18 +90,41 @@ export const requireRole = (roles: string[]) => {
  * Global error handler middleware
  */
 export const errorHandler = (err: any, req: Request, res: Response, next: NextFunction) => {
-  Logger.error('Unhandled error', err);
-
-  const statusCode = err.statusCode || 500;
+  const statusCode = err.statusCode || err.status || 500;
   const errorCode = err.code || 'INTERNAL_ERROR';
   const message = err.message || 'Internal server error';
+  const timestamp = Date.now();
+  const authReq = req as AuthRequest;
+
+  Logger.error('Unhandled error', {
+    method: req.method,
+    path: req.path,
+    statusCode,
+    errorCode,
+    message,
+    stack: err.stack,
+    user: authReq.user
+      ? {
+          id: authReq.user.id,
+          address: authReq.user.address,
+          role: authReq.user.role,
+        }
+      : null,
+    timestamp,
+  });
 
   res.status(statusCode).json({
     success: false,
     error: {
       code: errorCode,
       message,
+      ...(config.nodeEnv !== 'production'
+        ? {
+            details: err.details || err.stack || err,
+          }
+        : {}),
     },
+    timestamp,
   });
 };
 
