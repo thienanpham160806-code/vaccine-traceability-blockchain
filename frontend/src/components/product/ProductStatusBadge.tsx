@@ -11,6 +11,7 @@ export function ProductStatusBadge({ status }: { status: ProductStatus }) {
   const colorClass = colors[status] || "bg-blue-100 text-blue-800";
   const labels: Record<ProductStatus, string> = {
     VERIFIED: "Đã xác minh",
+    IN_TRANSIT: "Đang vận chuyển",
     PENDING_DELIVERY: "Chờ giao",
     DELIVERED: "Đã giao",
     FLAGGED: "Có cảnh báo",

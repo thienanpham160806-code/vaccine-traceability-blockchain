@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { z } from 'zod';
 import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { ipfsService } from '../services/ipfs';
@@ -6,6 +7,7 @@ import { CryptoUtils } from '../utils/crypto';
 import { QRCodeGenerator } from '../utils/qr';
 import { Logger } from '../utils/logger';
 import { Batch, Product } from '../types';
+import { verifyToken, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
 import {
   bulkProductsSchema,
@@ -24,6 +26,32 @@ function toBytes32(value: string): string {
 
 function getErrorMessage(error: any, fallback: string): string {
   return error?.shortMessage || error?.reason || error?.message || fallback;
+}
+
+async function requireSuccessfulTx(txHash: string, expectedTo?: string) {
+  if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+    const error: any = new Error('Invalid transaction hash');
+    error.statusCode = 400;
+    error.code = 'INVALID_TX_HASH';
+    throw error;
+  }
+
+  const receipt = await contractClient.getProvider().getTransactionReceipt(txHash);
+  if (!receipt || receipt.status !== 1) {
+    const error: any = new Error('Transaction is not confirmed successfully on-chain');
+    error.statusCode = 400;
+    error.code = 'TX_NOT_CONFIRMED';
+    throw error;
+  }
+
+  if (expectedTo && receipt.to && receipt.to.toLowerCase() !== expectedTo.toLowerCase()) {
+    const error: any = new Error('Transaction target does not match the active contract');
+    error.statusCode = 400;
+    error.code = 'TX_CONTRACT_MISMATCH';
+    throw error;
+  }
+
+  return receipt;
 }
 
 function normalizeText(value?: string): string {
@@ -577,6 +605,18 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
     const importDocHash = rawImportDocHash ? toBytes32(rawImportDocHash) : ZERO_BYTES32;
     const proofBytes = zkpProof || '0x';
     const signerRole = origin === 'IMPORTED' ? 'IMPORTER' : 'MANUFACTURER';
+    const signerHasRequiredRole = await contractClient.signerHasRole(signerRole);
+    if (!signerHasRequiredRole) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'SIGNER_ROLE_NOT_GRANTED',
+          message: `Backend ${signerRole} signer does not have ${signerRole}_ROLE on the active AccessControl contract. Grant the role or update the role private key for the current network.`,
+        },
+        timestamp: Date.now(),
+      });
+    }
+
     const qrContent = QRCodeGenerator.encodeQRContent(batchHash, metadataHash);
     const qrImage = await QRCodeGenerator.generateQRImage(qrContent);
     const ipfsResult = await ipfsService.pinJson(`batch-${batchQR}-${serialId}`, {
@@ -657,6 +697,143 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
         code: 'REGISTER_ERROR',
         message: getErrorMessage(error, 'Failed to register product'),
       },
+    });
+  }
+});
+
+/**
+ * POST /products/sync-wallet-register
+ * Sync Firebase/IPFS after a user-signed ProductRegistry.registerProduct tx.
+ */
+router.post('/sync-wallet-register', verifyToken, validateRequest({ body: registerProductSchema.extend({
+  txHash: z.string().trim().regex(/^0x[a-fA-F0-9]{64}$/, 'txHash must be a transaction hash'),
+}) }), async (req: AuthRequest, res: Response) => {
+  try {
+    const {
+      txHash,
+      serialId,
+      batchId,
+      batchHash: rawBatchHash,
+      metadataHash: rawMetadataHash,
+      productName,
+      manufacturerName = 'Unknown manufacturer',
+      expiryDate,
+      quantity = 1,
+      origin = 'MANUFACTURED',
+      importDocHash: rawImportDocHash,
+      zkpProof,
+    } = req.body;
+
+    if (!contractClient.isInitialized()) {
+      return res.status(503).json({
+        success: false,
+        error: { code: 'CONTRACTS_NOT_READY', message: 'Smart contracts are not initialized' },
+      });
+    }
+
+    await requireSuccessfulTx(txHash, contractClient.productRegistry?.target as string);
+
+    const serialHash = toBytes32(serialId);
+    const existsOnChain = await contractClient.productExists(serialHash);
+    if (!existsOnChain) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'PRODUCT_NOT_FOUND_ON_CHAIN', message: 'Transaction confirmed but product was not found on-chain.' },
+      });
+    }
+
+    const existingProductSnapshot = await db.ref(`products/${serialHash}`).once('value');
+    if (existingProductSnapshot.exists()) {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'SERIAL_ALREADY_EXISTS', message: `Product with serial ID ${serialId} already exists` },
+      });
+    }
+
+    const batchQR = batchId || QRCodeGenerator.generateBatchId();
+    const batchHash = rawBatchHash ? toBytes32(rawBatchHash) : toBytes32(batchQR);
+    const metadataPayload = {
+      serialId,
+      serialHash,
+      batchId: batchQR,
+      batchHash,
+      productName,
+      manufacturerName,
+      manufacturerAddress: req.user?.address || contractClient.getWalletAddress(),
+      expiryDate,
+      quantity,
+      origin,
+      createdAt: Date.now(),
+    };
+    const metadataHash = rawMetadataHash
+      ? toBytes32(rawMetadataHash)
+      : toBytes32(JSON.stringify(metadataPayload));
+    const importDocHash = rawImportDocHash ? toBytes32(rawImportDocHash) : ZERO_BYTES32;
+    const qrContent = QRCodeGenerator.encodeQRContent(batchHash, metadataHash);
+    const qrImage = await QRCodeGenerator.generateQRImage(qrContent);
+    const ipfsResult = await ipfsService.pinJson(`wallet-batch-${batchQR}-${serialId}`, {
+      ...metadataPayload,
+      metadataHash,
+      qrContent,
+    });
+
+    const now = Date.now();
+    const batch: Batch = {
+      id: batchQR,
+      batchHash,
+      batchQR,
+      metadataHash,
+      productName,
+      quantity,
+      manufacturerAddress: metadataPayload.manufacturerAddress,
+      manufacturerName,
+      expiryDate,
+      origin: origin === 'IMPORTED' ? 'IMPORTED' : 'MANUFACTURED',
+      ipfsCid: ipfsResult?.cid,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const product: Product = {
+      serialId,
+      batchId: batchQR,
+      batchHash,
+      productName,
+      manufacturerName,
+      manufacturerAddress: batch.manufacturerAddress,
+      currentOwner: batch.manufacturerAddress,
+      status: 'VERIFIED',
+      riskLevel: 'SAFE',
+      expiryDate,
+      isImported: origin === 'IMPORTED',
+      zkpVerified: Boolean(zkpProof && importDocHash !== ZERO_BYTES32),
+      blockchainTx: txHash,
+      metadataHash,
+      ipfsCid: ipfsResult?.cid,
+      qrImage,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await Promise.all([
+      db.ref(`batches/${batchHash}`).update(batch),
+      db.ref(`products/${serialHash}`).set(product),
+      db.ref(`serial-index/${serialId}`).set(serialHash),
+    ]);
+
+    res.json({
+      success: true,
+      data: { product, batch, batchHash, metadataHash, serialHash, ipfsCid: ipfsResult?.cid, qrContent, qrImage, txHash },
+    });
+  } catch (error: any) {
+    Logger.error('Sync wallet product registration error', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      error: {
+        code: error.code || 'WALLET_REGISTER_SYNC_ERROR',
+        message: error.message || 'Failed to sync wallet registration',
+      },
+      timestamp: Date.now(),
     });
   }
 });
@@ -765,6 +942,12 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
             ? rawProduct.zkpProof
             : '0x';
         const signerRole = origin === 'IMPORTED' ? 'IMPORTER' : 'MANUFACTURER';
+        const signerHasRequiredRole = await contractClient.signerHasRole(signerRole);
+        if (!signerHasRequiredRole) {
+          throw new Error(
+            `Backend ${signerRole} signer does not have ${signerRole}_ROLE on the active AccessControl contract`
+          );
+        }
 
         const metadataPayload = {
           serialId,

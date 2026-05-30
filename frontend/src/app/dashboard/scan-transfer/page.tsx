@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CheckCircle2, ExternalLink, RefreshCw, Truck, XCircle } from "lucide-react";
-import { confirmTransfer, getApiErrorMessage, getTransfers, rejectTransfer, scanTransfer } from "@/lib/api";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
+import { confirmTransfer, getApiErrorMessage, getDemoActors, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferCreate } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 import type { TransferRecord } from "@/lib/types";
 import { getZodFieldErrors, transferConfirmFormSchema, transferRejectFormSchema, transferScanFormSchema } from "@/lib/validation";
+import { getTransferLedgerAddress, toBytes32, transferLedgerAbi } from "@/lib/wallet-contracts";
 
 const statusChip: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-700 border-amber-200",
@@ -26,6 +29,8 @@ const roleOptions = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARM
 
 const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
+const safeIdPattern = /^[A-Za-z0-9._:-]{3,128}$/;
+const safeIdMessage = "Chỉ dùng chữ, số, dấu chấm, gạch dưới, dấu hai chấm hoặc gạch ngang.";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -53,7 +58,14 @@ function TransferList() {
     setBusy(true);
     setError(null);
     try {
-      await confirmTransfer(serialId);
+      const parsed = transferConfirmFormSchema.safeParse({ serialId });
+      if (!parsed.success) {
+        const errors = getZodFieldErrors(parsed.error);
+        setError(Object.values(errors)[0] || "Serial của lệnh chuyển không hợp lệ.");
+        return;
+      }
+
+      await confirmTransfer(parsed.data.serialId);
       qc.invalidateQueries({ queryKey: ["transfers"] });
     } catch (err: any) {
       setError(getApiErrorMessage(err, "Xác nhận thất bại."));
@@ -164,14 +176,14 @@ function TransferList() {
             ) : (
               <div className="flex gap-2 flex-wrap">
                 <button
-                  disabled={busy}
+                  disabled={busy || !transferConfirmFormSchema.safeParse({ serialId: t.serialId }).success}
                   onClick={() => handleConfirm(t.serialId)}
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" /> Xác nhận
                 </button>
                 <button
-                  disabled={busy}
+                  disabled={busy || !transferRejectFormSchema.safeParse({ serialId: t.serialId, rejectionReason: "valid reason" }).success}
                   onClick={() => setRejectingId(t.id)}
                   className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
                 >
@@ -201,6 +213,9 @@ function TransferList() {
 
 export default function ScanTransferPage() {
   const qc = useQueryClient();
+  const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
   const [serialId, setSerialId] = useState("");
   const [fromRole, setFromRole] = useState("MANUFACTURER");
   const [toRole, setToRole] = useState("DISTRIBUTOR");
@@ -219,6 +234,10 @@ export default function ScanTransferPage() {
 
   const create = async () => {
     if (!serialId.trim() || isBusy) return;
+    if (!safeIdPattern.test(serialId.trim())) {
+      setError(safeIdMessage);
+      return;
+    }
     setIsBusy(true);
     setError(null);
     setStatusMsg(`Đang tạo lệnh ${fromRole} → ${toRole} on-chain…`);
@@ -233,7 +252,37 @@ export default function ScanTransferPage() {
         return;
       }
 
-      const data = await scanTransfer(parsed.data);
+      let data;
+      const user = getStoredUser();
+      if (user?.authMode === "wallet") {
+        if (!address) throw new Error("Chua ket noi MetaMask.");
+        if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
+        const actors = await getDemoActors();
+        const receiverAddress = actors.find((actor) => actor.role === parsed.data.toRole)?.address;
+        if (!receiverAddress) throw new Error(`Chua co dia chi nhan cho role ${parsed.data.toRole}.`);
+        const txHash = await writeContractAsync({
+          address: getTransferLedgerAddress(),
+          abi: transferLedgerAbi,
+          functionName: "createTransferRequest",
+          args: [
+            toBytes32(parsed.data.serialId),
+            receiverAddress as `0x${string}`,
+            toBytes32(`from:${address}`),
+            toBytes32(`to:${receiverAddress}`),
+          ],
+        });
+        setStatusMsg("Da gui giao dich. Dang cho Sepolia xac nhan...");
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        data = await syncWalletTransferCreate({
+          ...parsed.data,
+          receiverAddress,
+          fromLocationHash: toBytes32(`from:${address}`),
+          toLocationHash: toBytes32(`to:${receiverAddress}`),
+          txHash,
+        });
+      } else {
+        data = await scanTransfer(parsed.data);
+      }
       setTxHash(data.txHash ?? null);
       setTransferId(data.transfer?.id ?? null);
       setStatusMsg("Đã tạo lệnh. Xác nhận giao hàng ở danh sách bên phải.");
@@ -248,6 +297,10 @@ export default function ScanTransferPage() {
 
   const confirm = async () => {
     if (!serialId.trim() || isBusy) return;
+    if (!safeIdPattern.test(serialId.trim())) {
+      setError(safeIdMessage);
+      return;
+    }
     setIsBusy(true);
     setError(null);
     setStatusMsg(`Đang xác nhận giao hàng cho ${toRole}…`);
@@ -276,6 +329,21 @@ export default function ScanTransferPage() {
   };
 
   return (
+    <div className="space-y-5 pb-20 lg:pb-0">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-zinc-900">Create transfer</h1>
+          <p className="text-sm text-zinc-500">Create a blockchain-backed delivery request.</p>
+        </div>
+        <Link
+          href="/dashboard/transfers"
+          className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-bold text-zinc-700 hover:bg-zinc-50"
+        >
+          <ListChecks className="h-4 w-4" />
+          All transfers
+        </Link>
+      </div>
+
     <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
       {/* Left: Create transfer form */}
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
@@ -399,6 +467,12 @@ export default function ScanTransferPage() {
             <Truck className="h-4 w-4 text-blue-500" />
             <h2 className="font-semibold text-zinc-800">Lệnh gần đây</h2>
           </div>
+          <Link
+            href="/dashboard/transfers"
+            className="flex min-h-9 items-center gap-1 rounded-lg border border-zinc-200 px-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
+          >
+            View all <ArrowRight className="h-3 w-3" />
+          </Link>
           <button
             onClick={() => qc.invalidateQueries({ queryKey: ["transfers"] })}
             className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
@@ -408,6 +482,7 @@ export default function ScanTransferPage() {
         </div>
         <TransferList />
       </div>
+    </div>
     </div>
   );
 }

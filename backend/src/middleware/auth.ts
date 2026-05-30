@@ -7,6 +7,7 @@ export interface AuthRequest extends Request {
   user?: {
     address: string;
     role: string;
+    roles?: string[];
     id: string;
   };
 }
@@ -35,6 +36,7 @@ export const verifyToken = (req: AuthRequest, res: Response, next: NextFunction)
     req.user = {
       address: decoded.address,
       role: decoded.role,
+      roles: Array.isArray(decoded.roles) ? decoded.roles : [decoded.role],
       id: decoded.id,
     };
 
@@ -68,12 +70,13 @@ export const requireRole = (roles: string[]) => {
       });
     }
 
-    if (!roles.includes(req.user.role)) {
+    const userRoles = req.user.roles?.length ? req.user.roles : [req.user.role];
+    if (!userRoles.some((role) => roles.includes(role))) {
       return res.status(403).json({
         success: false,
         error: {
           code: 'FORBIDDEN',
-          message: `This operation requires one of roles: ${roles.join(', ')}`,
+          message: `Bạn cần một trong các quyền sau để thực hiện thao tác này: ${roles.join(', ')}`,
         },
         timestamp: Date.now(),
       });

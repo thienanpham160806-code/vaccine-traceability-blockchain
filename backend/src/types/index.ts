@@ -14,6 +14,7 @@ export interface User {
   id: string;
   address: string;
   role: UserRole;
+  roles?: UserRole[];
   name?: string;
   email?: string;
   createdAt: number;
@@ -21,7 +22,7 @@ export interface User {
 }
 
 // ============= Product & Batch =============
-export type ProductStatus = 'VERIFIED' | 'PENDING_DELIVERY' | 'DELIVERED' | 'FLAGGED' | 'RECALLED';
+export type ProductStatus = 'REGISTERED' | 'VERIFIED' | 'IN_TRANSIT' | 'PENDING_DELIVERY' | 'DELIVERED' | 'FLAGGED' | 'RECALLED';
 export type RiskLevel = 'SAFE' | 'ALERT' | 'HIGH' | 'CRITICAL';
 
 export interface Product {
@@ -105,7 +106,22 @@ export interface DashboardStats {
   totalSerials: number;
   pendingTransfers: number;
   riskAlerts: number;
+  totalProducts?: number;
   recalledBatches?: number;
+  last7DaysTrend?: Array<{
+    date: string;
+    count: number;
+  }>;
+}
+
+export interface DashboardActivity {
+  id: string;
+  type: 'PRODUCT' | 'TRANSFER' | 'RISK' | 'RECALL';
+  title: string;
+  subtitle: string;
+  status?: string;
+  href: string;
+  timestamp: number;
 }
 
 // ============= Verify =============

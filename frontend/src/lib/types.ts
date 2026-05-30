@@ -13,6 +13,7 @@ export type ProductType = "LOCAL" | "IMPORT";
 
 export type ProductStatus =
   | "VERIFIED"
+  | "IN_TRANSIT"
   | "PENDING_DELIVERY"
   | "DELIVERED"
   | "FLAGGED"
@@ -87,7 +88,7 @@ export type TransferEvent = {
   from: string;
   to: string;
   location: string;
-  status: "REGISTERED" | "PENDING_DELIVERY" | "DELIVERED" | "FLAGGED" | "RECALLED";
+  status: "REGISTERED" | "VERIFIED" | "IN_TRANSIT" | "PENDING_DELIVERY" | "DELIVERED" | "FLAGGED" | "RECALLED";
   timestamp: string;
   txHash?: string;
 };
@@ -97,6 +98,22 @@ export type DashboardStats = {
   totalSerials: number;
   pendingTransfers: number;
   riskAlerts: number;
+  totalProducts?: number;
+  recalledBatches?: number;
+  last7DaysTrend?: Array<{
+    date: string;
+    count: number;
+  }>;
+};
+
+export type DashboardActivity = {
+  id: string;
+  type: "PRODUCT" | "TRANSFER" | "RISK" | "RECALL";
+  title: string;
+  subtitle: string;
+  status?: string;
+  href: string;
+  timestamp: number;
 };
 
 export type Batch = {

@@ -2,11 +2,15 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
+import { keccak256, toBytes, type Hex } from "viem";
 import { RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { QrResultCard } from "./QrResultCard";
-import { getApiErrorMessage, registerProduct } from "@/lib/api";
+import { getApiErrorMessage, registerProduct, syncWalletProductRegistration } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 import { getZodFieldErrors, productRegistrationSchema } from "@/lib/validation";
+import { emptyBytes32, getProductRegistryAddress, productRegistryAbi, toBytes32 } from "@/lib/wallet-contracts";
 
 type RegisterProductResult = {
   txHash?: string;
@@ -45,6 +49,9 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 }
 
 export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, serialId: string) => void }) {
+  const { address } = useAccount();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
   const [form, setForm] = useState(() => {
     const initialIds = makeIds();
     return {
@@ -104,6 +111,56 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
     setStatusMsg("Đang đăng ký on-chain và lưu metadata...");
 
     try {
+      const user = getStoredUser();
+      if (user?.authMode === "wallet") {
+        if (!address) throw new Error("Chua ket noi MetaMask.");
+        if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
+
+        const serialHash = toBytes32(values.serialId);
+        const batchHash = toBytes32(values.batchId);
+        const metadataPayload = {
+          serialId: values.serialId,
+          serialHash,
+          batchId: values.batchId,
+          batchHash,
+          productName: values.productName,
+          manufacturerName: values.manufacturerName,
+          manufacturerAddress: address,
+          expiryDate: values.expiryDate,
+          quantity: values.quantity,
+          origin: "MANUFACTURED",
+          createdAt: Date.now(),
+        };
+        const metadataHash = keccak256(toBytes(JSON.stringify(metadataPayload))) as Hex;
+        const txHash = await writeContractAsync({
+          address: getProductRegistryAddress(),
+          abi: productRegistryAbi,
+          functionName: "registerProduct",
+          args: [serialHash, batchHash, metadataHash, emptyBytes32(), "0x"],
+        });
+
+        setStatusMsg("Da gui giao dich. Dang cho Sepolia xac nhan...");
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        const data = await syncWalletProductRegistration({
+          serialId: values.serialId,
+          batchId: values.batchId,
+          productName: values.productName,
+          manufacturerName: values.manufacturerName,
+          manufacturerAddress: address,
+          expiryDate: values.expiryDate,
+          origin: "MANUFACTURED",
+          quantity: values.quantity,
+          txHash,
+        });
+        setGeneratedSerial(values.serialId);
+        setGeneratedBatch(values.batchId);
+        setResult(data);
+        setStatusMsg("Dang ky thanh cong.");
+        toast.success("Da dang ky san pham.");
+        onSuccess?.(values.batchId, values.serialId);
+        return;
+      }
+
       const data = await registerProduct({
         serialId: values.serialId,
         batchId: values.batchId,

@@ -21,12 +21,19 @@ export const demoActors = [
     label: "Clinic",
     address: "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
   },
+  {
+    role: "PHARMACY",
+    label: "Pharmacy",
+    address: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+  },
 ];
 
 export type DemoUser = {
   id: string;
   address: string;
   role: string;
+  roles?: string[];
+  authMode?: "demo" | "wallet";
 };
 
 export function getStoredUser(): DemoUser | null {
@@ -35,9 +42,9 @@ export function getStoredUser(): DemoUser | null {
   return raw ? JSON.parse(raw) : null;
 }
 
-export function setSession(token: string, user: DemoUser) {
+export function setSession(token: string, user: DemoUser, authMode: "demo" | "wallet" = "demo") {
   window.localStorage.setItem("demoToken", token);
-  window.localStorage.setItem("demoUser", JSON.stringify(user));
+  window.localStorage.setItem("demoUser", JSON.stringify({ ...user, authMode }));
 }
 
 export function clearSession() {
@@ -47,6 +54,6 @@ export function clearSession() {
 
 export async function loginDemo(actor: { address: string; role: string }) {
   const { token, user } = await login(actor);
-  setSession(token, user);
+  setSession(token, user, "demo");
   return user as DemoUser;
 }

@@ -66,6 +66,15 @@ export class ContractClient {
   public productRegistry: ethers.Contract | null = null;
   public transferLedger: ethers.Contract | null = null;
   public accessControl: ethers.Contract | null = null;
+  private readonly roleNames = [
+    'MANUFACTURER',
+    'IMPORTER',
+    'DISTRIBUTOR',
+    'CLINIC',
+    'PHARMACY',
+    'AUDITOR',
+    'RECALL_AUTHORITY',
+  ];
 
   constructor() {
     try {
@@ -215,6 +224,54 @@ export class ContractClient {
     return this.provider;
   }
 
+  roleNameToBytes32(role: string): string {
+    return ethers.keccak256(ethers.toUtf8Bytes(`${role.toUpperCase()}_ROLE`));
+  }
+
+  bytes32ToRoleName(roleHash: string): string | null {
+    const normalizedHash = roleHash.toLowerCase();
+    return this.roleNames.find((role) => this.roleNameToBytes32(role).toLowerCase() === normalizedHash) || null;
+  }
+
+  async getAccountRoles(address: string): Promise<{ roles: string[]; primaryRole: string | null }> {
+    if (!this.accessControl) {
+      throw new Error('AccessControl contract not initialized');
+    }
+
+    const roles: string[] = [];
+    for (const role of this.roleNames) {
+      const roleHash = this.roleNameToBytes32(role);
+      if (await this.accessControl.hasRole(roleHash, address)) {
+        roles.push(role);
+      }
+    }
+
+    let primaryRole: string | null = null;
+    try {
+      const primaryRoleHash = await this.accessControl.getPrimaryRole(address);
+      if (primaryRoleHash && primaryRoleHash !== ethers.ZeroHash) {
+        primaryRole = this.bytes32ToRoleName(primaryRoleHash);
+      }
+    } catch (error) {
+      Logger.warn('Failed to read primary role', error);
+    }
+
+    return {
+      roles,
+      primaryRole: primaryRole || roles[0] || null,
+    };
+  }
+
+  async signerHasRole(signerRole: string, requiredRole: string = signerRole): Promise<boolean> {
+    if (!this.accessControl) {
+      throw new Error('AccessControl contract not initialized');
+    }
+
+    const signerAddress = this.getRoleAddress(signerRole);
+    const roleHash = this.roleNameToBytes32(requiredRole);
+    return this.accessControl.hasRole(roleHash, signerAddress);
+  }
+
   /**
    * Register product on blockchain
    */
@@ -265,6 +322,22 @@ export class ContractClient {
       return product;
     } catch (error) {
       Logger.error('Failed to get product', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check whether a product exists in the active ProductRegistry contract.
+   */
+  async productExists(serialId: string): Promise<boolean> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    try {
+      return await this.productRegistry.productExists(serialId);
+    } catch (error) {
+      Logger.error('Failed to check product existence', error);
       throw error;
     }
   }

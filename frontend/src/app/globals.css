@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@source "../**/*.{js,ts,jsx,tsx,mdx}";
+
 @layer utilities {
   /* Glassmorphism card — matches Figma login card */
   .glass-card {

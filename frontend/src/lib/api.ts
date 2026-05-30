@@ -2,6 +2,7 @@ import axios from "axios";
 import type {
   ApiResponse,
   Batch,
+  DashboardActivity,
   DashboardStats,
   Product,
   ProductDetailResponse,
@@ -17,7 +18,9 @@ type ApiErrorLike = {
   response?: {
     data?: {
       error?: {
+        code?: string;
         message?: string;
+        details?: Array<{ path?: string; message?: string }>;
       };
     };
   };
@@ -102,6 +105,7 @@ export type LoginResponse = {
     id: string;
     address: string;
     role: string;
+    roles?: string[];
   };
 };
 
@@ -127,14 +131,19 @@ api.interceptors.request.use((config) => {
 export const endpoints = {
   health: "/health",
   login: "/auth/login",
+  demoActors: "/auth/demo-actors",
+  authNonce: "/auth/nonce",
+  loginWithSignature: "/auth/login-with-signature",
 
   overview: "/dashboard/overview",
+  recentActivity: "/dashboard/recent-activity",
 
   getBatches: "/batches",
   getBatch: (batchId: string) => `/batches/${batchId}`,
   getBatchSerials: (batchId: string) => `/batches/${batchId}/serials`,
   createBatch: "/batches",
   registerProduct: "/products/register",
+  syncWalletProductRegistration: "/products/sync-wallet-register",
   bulkRegisterProducts: "/products/bulk",
   getProducts: "/products",
   getProductDetail: (serialId: string) => `/products/${serialId}/detail`,
@@ -145,6 +154,9 @@ export const endpoints = {
   scanTransfer: "/transfers/scan",
   confirmTransfer: "/transfers/confirm",
   rejectTransfer: "/transfers/reject",
+  syncWalletTransferCreate: "/transfers/sync-wallet-create",
+  syncWalletTransferConfirm: "/transfers/sync-wallet-confirm",
+  syncWalletTransferReject: "/transfers/sync-wallet-reject",
 
   verify: (serialId: string) => `/verify/${serialId}`,
   consumerVerify: (serialId: string) => `/consumer/verify/${serialId}`,
@@ -162,9 +174,29 @@ export const endpoints = {
 
 export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
   const error = err as ApiErrorLike;
-  if (error?.code === "ECONNABORTED") return "Backend request timed out. Check backend and Hardhat are running.";
-  if (!error?.response) return "Cannot reach backend. Start backend on http://localhost:5000 and refresh.";
-  return error.response.data?.error?.message || fallback;
+  if (error?.code === "ECONNABORTED") return "Yêu cầu đến backend quá thời gian. Hãy kiểm tra backend và RPC.";
+  if (!error?.response) return "Không kết nối được backend. Hãy kiểm tra http://localhost:5000.";
+
+  const code = error.response.data?.error?.code;
+  const message = error.response.data?.error?.message;
+  const details = error.response.data?.error?.details;
+  const messages: Record<string, string> = {
+    FORBIDDEN: "Bạn không có quyền thực hiện thao tác này.",
+    ROLE_MISMATCH: message || "Vai trò hiện tại không khớp với thao tác này.",
+    MISSING_TOKEN: "Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.",
+    INVALID_TOKEN: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+    INVALID_ADDRESS: "Địa chỉ ví không hợp lệ.",
+    INVALID_SERIAL_ID: "Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
+    INVALID_BATCH_ID: "Mã lô chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
+  };
+
+  if (code === "VALIDATION_ERROR" && Array.isArray(details) && details.length > 0) {
+    return details
+      .map((detail) => `${detail.path || "field"}: ${detail.message || "không hợp lệ"}`)
+      .join("; ");
+  }
+
+  return (code && messages[code]) || message || fallback;
 }
 
 export async function getHealth() {
@@ -177,9 +209,35 @@ export async function login(payload: { address: string; role: string }) {
   return requireApiData(res.data.data, "Login response did not include data.");
 }
 
+export async function getDemoActors() {
+  const res = await api.get<ApiResponse<Array<{ role: string; label: string; address: string; source?: string }>>>(
+    endpoints.demoActors
+  );
+  return res.data.data || [];
+}
+
+export async function requestAuthNonce(address: string) {
+  const res = await api.post<ApiResponse<{ message: string; expiresAt: number }>>(endpoints.authNonce, {
+    address,
+  });
+  return requireApiData(res.data.data, "Nonce response did not include data.");
+}
+
+export async function loginWithSignature(payload: { address: string; signature: string }) {
+  const res = await api.post<ApiResponse<LoginResponse>>(endpoints.loginWithSignature, payload);
+  return requireApiData(res.data.data, "Login response did not include data.");
+}
+
 export async function getDashboardOverview() {
   const res = await api.get<ApiResponse<DashboardStats>>(endpoints.overview);
   return requireApiData(res.data.data, "Dashboard response did not include data.");
+}
+
+export async function getDashboardRecentActivity(limit = 10) {
+  const res = await api.get<ApiResponse<DashboardActivity[]>>(endpoints.recentActivity, {
+    params: { limit },
+  });
+  return res.data.data || [];
 }
 
 // ============= Batches =============
@@ -262,6 +320,23 @@ export async function registerProduct(payload: {
   return requireApiData(res.data.data, "Register product response did not include data.");
 }
 
+export async function syncWalletProductRegistration(payload: {
+  txHash: string;
+  serialId: string;
+  batchId: string;
+  productName: string;
+  manufacturerName?: string;
+  manufacturerAddress?: string;
+  expiryDate: string;
+  origin?: "MANUFACTURED" | "IMPORTED";
+  quantity?: number;
+  importDocHash?: string;
+  zkpProof?: string;
+}) {
+  const res = await api.post<ApiResponse<RegisterProductResponse>>(endpoints.syncWalletProductRegistration, payload);
+  return requireApiData(res.data.data, "Wallet registration sync response did not include data.");
+}
+
 export async function bulkRegisterProducts(products: Array<{
   serialId: string;
   batchId?: string;
@@ -310,6 +385,34 @@ export async function confirmTransfer(serialId: string) {
 export async function rejectTransfer(serialId: string, rejectionReason: string) {
   const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.rejectTransfer, { serialId, rejectionReason });
   return requireApiData(res.data.data, "Reject transfer response did not include data.");
+}
+
+export async function syncWalletTransferCreate(payload: {
+  txHash: string;
+  serialId: string;
+  fromRole: string;
+  toRole: string;
+  receiverAddress: string;
+  batchId?: string;
+  fromLocationHash?: string;
+  toLocationHash?: string;
+}) {
+  const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.syncWalletTransferCreate, payload);
+  return requireApiData(res.data.data, "Wallet transfer sync response did not include data.");
+}
+
+export async function syncWalletTransferConfirm(serialId: string, txHash: string) {
+  const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.syncWalletTransferConfirm, { serialId, txHash });
+  return requireApiData(res.data.data, "Wallet confirm sync response did not include data.");
+}
+
+export async function syncWalletTransferReject(serialId: string, rejectionReason: string, txHash: string) {
+  const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.syncWalletTransferReject, {
+    serialId,
+    rejectionReason,
+    txHash,
+  });
+  return requireApiData(res.data.data, "Wallet reject sync response did not include data.");
 }
 
 // ============= Risk & Disputes =============
