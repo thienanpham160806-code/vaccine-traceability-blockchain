@@ -262,6 +262,16 @@ export class ContractClient {
     };
   }
 
+  async signerHasRole(signerRole: string, requiredRole: string = signerRole): Promise<boolean> {
+    if (!this.accessControl) {
+      throw new Error('AccessControl contract not initialized');
+    }
+
+    const signerAddress = this.getRoleAddress(signerRole);
+    const roleHash = this.roleNameToBytes32(requiredRole);
+    return this.accessControl.hasRole(roleHash, signerAddress);
+  }
+
   /**
    * Register product on blockchain
    */
@@ -312,6 +322,22 @@ export class ContractClient {
       return product;
     } catch (error) {
       Logger.error('Failed to get product', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check whether a product exists in the active ProductRegistry contract.
+   */
+  async productExists(serialId: string): Promise<boolean> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    try {
+      return await this.productRegistry.productExists(serialId);
+    } catch (error) {
+      Logger.error('Failed to check product existence', error);
       throw error;
     }
   }

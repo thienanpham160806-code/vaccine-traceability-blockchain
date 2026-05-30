@@ -94,7 +94,7 @@ export default function LoginPage() {
       if (!nonce?.message) throw new Error("Backend không trả về nội dung ký MetaMask.");
       const signature = await signMessageAsync({ message: nonce.message });
       const { token, user } = await loginWithSignature({ address: walletAddress, signature });
-      setSession(token, user);
+      setSession(token, user, "wallet");
       router.push("/dashboard");
     } catch (err: any) {
       if (err?.message?.includes("User rejected")) {

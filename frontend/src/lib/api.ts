@@ -20,6 +20,7 @@ type ApiErrorLike = {
       error?: {
         code?: string;
         message?: string;
+        details?: Array<{ path?: string; message?: string }>;
       };
     };
   };
@@ -104,6 +105,7 @@ export type LoginResponse = {
     id: string;
     address: string;
     role: string;
+    roles?: string[];
   };
 };
 
@@ -141,6 +143,7 @@ export const endpoints = {
   getBatchSerials: (batchId: string) => `/batches/${batchId}/serials`,
   createBatch: "/batches",
   registerProduct: "/products/register",
+  syncWalletProductRegistration: "/products/sync-wallet-register",
   bulkRegisterProducts: "/products/bulk",
   getProducts: "/products",
   getProductDetail: (serialId: string) => `/products/${serialId}/detail`,
@@ -151,6 +154,9 @@ export const endpoints = {
   scanTransfer: "/transfers/scan",
   confirmTransfer: "/transfers/confirm",
   rejectTransfer: "/transfers/reject",
+  syncWalletTransferCreate: "/transfers/sync-wallet-create",
+  syncWalletTransferConfirm: "/transfers/sync-wallet-confirm",
+  syncWalletTransferReject: "/transfers/sync-wallet-reject",
 
   verify: (serialId: string) => `/verify/${serialId}`,
   consumerVerify: (serialId: string) => `/consumer/verify/${serialId}`,
@@ -173,6 +179,7 @@ export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
 
   const code = error.response.data?.error?.code;
   const message = error.response.data?.error?.message;
+  const details = error.response.data?.error?.details;
   const messages: Record<string, string> = {
     FORBIDDEN: "Bạn không có quyền thực hiện thao tác này.",
     ROLE_MISMATCH: message || "Vai trò hiện tại không khớp với thao tác này.",
@@ -182,6 +189,12 @@ export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
     INVALID_SERIAL_ID: "Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
     INVALID_BATCH_ID: "Mã lô chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
   };
+
+  if (code === "VALIDATION_ERROR" && Array.isArray(details) && details.length > 0) {
+    return details
+      .map((detail) => `${detail.path || "field"}: ${detail.message || "không hợp lệ"}`)
+      .join("; ");
+  }
 
   return (code && messages[code]) || message || fallback;
 }
@@ -307,6 +320,23 @@ export async function registerProduct(payload: {
   return requireApiData(res.data.data, "Register product response did not include data.");
 }
 
+export async function syncWalletProductRegistration(payload: {
+  txHash: string;
+  serialId: string;
+  batchId: string;
+  productName: string;
+  manufacturerName?: string;
+  manufacturerAddress?: string;
+  expiryDate: string;
+  origin?: "MANUFACTURED" | "IMPORTED";
+  quantity?: number;
+  importDocHash?: string;
+  zkpProof?: string;
+}) {
+  const res = await api.post<ApiResponse<RegisterProductResponse>>(endpoints.syncWalletProductRegistration, payload);
+  return requireApiData(res.data.data, "Wallet registration sync response did not include data.");
+}
+
 export async function bulkRegisterProducts(products: Array<{
   serialId: string;
   batchId?: string;
@@ -355,6 +385,34 @@ export async function confirmTransfer(serialId: string) {
 export async function rejectTransfer(serialId: string, rejectionReason: string) {
   const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.rejectTransfer, { serialId, rejectionReason });
   return requireApiData(res.data.data, "Reject transfer response did not include data.");
+}
+
+export async function syncWalletTransferCreate(payload: {
+  txHash: string;
+  serialId: string;
+  fromRole: string;
+  toRole: string;
+  receiverAddress: string;
+  batchId?: string;
+  fromLocationHash?: string;
+  toLocationHash?: string;
+}) {
+  const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.syncWalletTransferCreate, payload);
+  return requireApiData(res.data.data, "Wallet transfer sync response did not include data.");
+}
+
+export async function syncWalletTransferConfirm(serialId: string, txHash: string) {
+  const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.syncWalletTransferConfirm, { serialId, txHash });
+  return requireApiData(res.data.data, "Wallet confirm sync response did not include data.");
+}
+
+export async function syncWalletTransferReject(serialId: string, rejectionReason: string, txHash: string) {
+  const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.syncWalletTransferReject, {
+    serialId,
+    rejectionReason,
+    txHash,
+  });
+  return requireApiData(res.data.data, "Wallet reject sync response did not include data.");
 }
 
 // ============= Risk & Disputes =============

@@ -33,6 +33,7 @@ export type DemoUser = {
   address: string;
   role: string;
   roles?: string[];
+  authMode?: "demo" | "wallet";
 };
 
 export function getStoredUser(): DemoUser | null {
@@ -41,9 +42,9 @@ export function getStoredUser(): DemoUser | null {
   return raw ? JSON.parse(raw) : null;
 }
 
-export function setSession(token: string, user: DemoUser) {
+export function setSession(token: string, user: DemoUser, authMode: "demo" | "wallet" = "demo") {
   window.localStorage.setItem("demoToken", token);
-  window.localStorage.setItem("demoUser", JSON.stringify(user));
+  window.localStorage.setItem("demoUser", JSON.stringify({ ...user, authMode }));
 }
 
 export function clearSession() {
@@ -53,6 +54,6 @@ export function clearSession() {
 
 export async function loginDemo(actor: { address: string; role: string }) {
   const { token, user } = await login(actor);
-  setSession(token, user);
+  setSession(token, user, "demo");
   return user as DemoUser;
 }

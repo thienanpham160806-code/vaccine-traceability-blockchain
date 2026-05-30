@@ -3,11 +3,13 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePublicClient, useWriteContract } from "wagmi";
 import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, XCircle } from "lucide-react";
-import { confirmTransfer, getApiErrorMessage, getTransfer, rejectTransfer } from "@/lib/api";
+import { confirmTransfer, getApiErrorMessage, getTransfer, rejectTransfer, syncWalletTransferConfirm, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { TransferRecord } from "@/lib/types";
+import { getTransferLedgerAddress, toBytes32, transferLedgerAbi } from "@/lib/wallet-contracts";
 
 interface PageProps {
   params: Promise<{ transferId: string }>;
@@ -59,6 +61,8 @@ export default function TransferDetailPage({ params }: PageProps) {
   const { transferId } = use(params);
   const decoded = decodeURIComponent(transferId);
   const qc = useQueryClient();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
 
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
@@ -82,7 +86,20 @@ export default function TransferDetailPage({ params }: PageProps) {
     setActionError(null);
     setActionSuccess(null);
     try {
-      const result = await confirmTransfer(transfer.serialId);
+      let result;
+      if (user?.authMode === "wallet") {
+        if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
+        const txHash = await writeContractAsync({
+          address: getTransferLedgerAddress(),
+          abi: transferLedgerAbi,
+          functionName: "confirmTransfer",
+          args: [toBytes32(transfer.serialId), toBytes32(transfer.toLocationHash || `to:${transfer.toAddress}`)],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        result = await syncWalletTransferConfirm(transfer.serialId, txHash);
+      } else {
+        result = await confirmTransfer(transfer.serialId);
+      }
       setActionSuccess(`Đã xác nhận. TX: ${result.txHash}`);
       qc.invalidateQueries({ queryKey: ["transfer", decoded] });
       qc.invalidateQueries({ queryKey: ["transfers"] });
@@ -99,7 +116,20 @@ export default function TransferDetailPage({ params }: PageProps) {
     setActionError(null);
     setActionSuccess(null);
     try {
-      const result = await rejectTransfer(transfer.serialId, rejectReason.trim());
+      let result;
+      if (user?.authMode === "wallet") {
+        if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
+        const txHash = await writeContractAsync({
+          address: getTransferLedgerAddress(),
+          abi: transferLedgerAbi,
+          functionName: "rejectTransfer",
+          args: [toBytes32(transfer.serialId), toBytes32(rejectReason.trim())],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        result = await syncWalletTransferReject(transfer.serialId, rejectReason.trim(), txHash);
+      } else {
+        result = await rejectTransfer(transfer.serialId, rejectReason.trim());
+      }
       setActionSuccess(`Đã từ chối on-chain. TX: ${result.txHash}`);
       setShowRejectForm(false);
       setRejectReason("");
