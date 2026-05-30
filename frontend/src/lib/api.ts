@@ -117,6 +117,8 @@ export const api = axios.create({
   },
 });
 
+export const apiBaseUrl = api.defaults.baseURL || "backend";
+
 // Attach JWT token to every request if present
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
@@ -174,6 +176,12 @@ export const endpoints = {
 
 export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
   const error = err as ApiErrorLike;
+  if (error?.code === "ECONNABORTED") {
+    return `Yeu cau den backend qua thoi gian. Hay kiem tra backend va RPC: ${apiBaseUrl}.`;
+  }
+  if (!error?.response) {
+    return `Khong ket noi duoc backend. Hay kiem tra cau hinh NEXT_PUBLIC_API_URL: ${apiBaseUrl}.`;
+  }
   if (error?.code === "ECONNABORTED") return "Yêu cầu đến backend quá thời gian. Hãy kiểm tra backend và RPC.";
   if (!error?.response) return "Không kết nối được backend. Hãy kiểm tra http://localhost:5000.";
 
