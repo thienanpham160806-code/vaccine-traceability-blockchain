@@ -112,13 +112,19 @@ router.get('/consumer/:serialId', async (req: Request, res: Response) => {
     const batchSnapshot = await batchRef.once('value');
     const batch = batchSnapshot.val();
 
-    // Limited data for public
-    const publicData = {
-      serialId: product.serialId,
-      productName: batch?.productName,
-      status: product.status,
-      isRecalled: batch?.recalledAt ? true : false,
-      expiryDate: batch?.expiryDate,
+    const transfersRef = db.ref('transfers');
+    const transfersSnapshot = await transfersRef.once('value');
+    const allTransfers = transfersSnapshot.val() || {};
+    const timeline = Object.values(allTransfers).filter(
+      (transfer: any) => transfer.serialId === serialId || transfer.serialId === serialHash
+    ) as TransferRecord[];
+
+    const publicData: VerifyResult = {
+      product,
+      batch,
+      timeline,
+      recallStatus: batch?.recalledAt ? true : false,
+      zkProofVerified: product?.zkpVerified || false,
     };
 
     res.json({

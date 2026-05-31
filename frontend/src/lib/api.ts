@@ -176,7 +176,7 @@ export const endpoints = {
   syncWalletTransferReject: "/transfers/sync-wallet-reject",
 
   verify: (serialId: string) => `/verify/${serialId}`,
-  consumerVerify: (serialId: string) => `/consumer/verify/${serialId}`,
+  consumerVerify: (serialId: string) => `/verify/${serialId}`,
 
   riskFlags: "/risk-flags",
   getRiskFlag: (id: string) => `/risk-flags/${id}`,
