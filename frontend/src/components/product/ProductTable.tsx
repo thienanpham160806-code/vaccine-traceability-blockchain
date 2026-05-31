@@ -8,6 +8,8 @@ import type { Product } from "@/lib/types";
 import { ProductStatusBadge } from "./ProductStatusBadge";
 import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { getProductStatusLabel } from "@/lib/status";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const statusOptions = [
   "ALL",
@@ -27,6 +29,8 @@ const sortOptions = [
 ];
 
 export function ProductTable() {
+  const t = useTranslation();
+  const { language } = useLanguage();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [sort, setSort] = useState("createdAt:desc");
@@ -55,7 +59,7 @@ export function ProductTable() {
           setTotal(data.total);
         })
         .catch((err) => {
-          const message = err?.response?.data?.error?.message || "Không tải được danh sách sản phẩm.";
+          const message = err?.response?.data?.error?.message || t("Không tải được danh sách sản phẩm.");
           setError(message);
           toast.error(message);
           setProducts([]);
@@ -65,7 +69,7 @@ export function ProductTable() {
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [page, pageSize, reloadKey, search, sort, statusFilter]);
+  }, [page, pageSize, reloadKey, search, sort, statusFilter, t]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -91,7 +95,7 @@ export function ProductTable() {
           className="rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           value={search}
           onChange={(event) => updateSearch(event.target.value)}
-          placeholder="Tìm serial, lô hàng, sản phẩm, nhà sản xuất"
+          placeholder={t("Tìm serial, lô hàng, sản phẩm, nhà sản xuất")}
         />
 
         <select
@@ -101,7 +105,7 @@ export function ProductTable() {
         >
           {statusOptions.map((status) => (
             <option key={status} value={status}>
-              {status === "ALL" ? "Tất cả trạng thái" : status}
+              {status === "ALL" ? t("Tất cả trạng thái") : getProductStatusLabel(status, language)}
             </option>
           ))}
         </select>
@@ -113,7 +117,7 @@ export function ProductTable() {
         >
           {sortOptions.map((option) => (
             <option key={option.value} value={option.value}>
-              {option.label}
+              {t(option.label)}
             </option>
           ))}
         </select>
@@ -127,53 +131,55 @@ export function ProductTable() {
           </div>
         ) : null}
 
-        {!isLoading && !error ? <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] text-left text-sm">
-          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-bold uppercase tracking-wide text-zinc-500">
-            <tr>
-              <th className="px-5 py-4">Serial ID</th>
-              <th className="px-5 py-4">Mã lô</th>
-              <th className="px-5 py-4">Sản phẩm</th>
-              <th className="px-5 py-4">Nhà sản xuất</th>
-              <th className="px-5 py-4">Trạng thái</th>
-              <th className="px-5 py-4">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-100">
-            {products.map((product) => (
-              <tr key={product.serialId} className="transition hover:bg-zinc-50">
-                <td className="px-5 py-4 font-mono text-xs font-bold text-zinc-900">{product.serialId}</td>
-                <td className="px-5 py-4 text-zinc-500">{product.batchId}</td>
-                <td className="px-5 py-4 font-medium text-zinc-900">{product.productName}</td>
-                <td className="px-5 py-4 text-zinc-500">{product.manufacturerName}</td>
-                <td className="px-5 py-4">
-                  <ProductStatusBadge status={product.status} />
-                </td>
-                <td className="flex flex-wrap gap-3 px-5 py-4">
-                  <Link href={`/dashboard/products/${encodeURIComponent(product.serialId)}`} className="font-medium text-blue-600 hover:underline">
-                    Chi tiết
-                  </Link>
-                  <Link href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(product.serialId)}`} className="font-medium text-emerald-600 hover:underline">
-                    Chuyển giao
-                  </Link>
-                  <Link href={`/consumer/verify/${product.serialId}`} className="font-medium text-zinc-600 hover:underline">
-                    Công khai
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          </table>
-        </div> : null}
+        {!isLoading && !error ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] text-left text-sm">
+              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-bold uppercase tracking-wide text-zinc-500">
+                <tr>
+                  <th className="px-5 py-4">Serial ID</th>
+                  <th className="px-5 py-4">{t("Mã lô")}</th>
+                  <th className="px-5 py-4">{t("Sản phẩm")}</th>
+                  <th className="px-5 py-4">{t("Nhà sản xuất")}</th>
+                  <th className="px-5 py-4">{t("Trạng thái")}</th>
+                  <th className="px-5 py-4">{t("Thao tác")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {products.map((product) => (
+                  <tr key={product.serialId} className="transition hover:bg-zinc-50">
+                    <td className="px-5 py-4 font-mono text-xs font-bold text-zinc-900">{product.serialId}</td>
+                    <td className="px-5 py-4 text-zinc-500">{product.batchId}</td>
+                    <td className="px-5 py-4 font-medium text-zinc-900">{product.productName}</td>
+                    <td className="px-5 py-4 text-zinc-500">{product.manufacturerName}</td>
+                    <td className="px-5 py-4">
+                      <ProductStatusBadge status={product.status} />
+                    </td>
+                    <td className="flex flex-wrap gap-3 px-5 py-4">
+                      <Link href={`/dashboard/products/${encodeURIComponent(product.serialId)}`} className="font-medium text-blue-600 hover:underline">
+                        {t("Chi tiết")}
+                      </Link>
+                      <Link href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(product.serialId)}`} className="font-medium text-emerald-600 hover:underline">
+                        {t("Chuyển giao")}
+                      </Link>
+                      <Link href={`/consumer/verify/${product.serialId}`} className="font-medium text-zinc-600 hover:underline">
+                        {t("Công khai")}
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
 
         {!isLoading && !error && products.length === 0 ? (
-          <p className="p-4 text-sm text-gray-500">Không tìm thấy sản phẩm.</p>
+          <p className="p-4 text-sm text-gray-500">{t("Không tìm thấy sản phẩm.")}</p>
         ) : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
         <p className="text-gray-500">
-          Đang hiển thị {products.length} / {total} sản phẩm
+          {t("Đang hiển thị")} {products.length} / {total} {t("Sản phẩm").toLowerCase()}
         </p>
 
         <div className="flex items-center gap-2">
@@ -182,17 +188,17 @@ export function ProductTable() {
             disabled={page <= 1 || isLoading}
             onClick={() => setPage((current) => Math.max(1, current - 1))}
           >
-            Trước
+            {t("Trước")}
           </button>
           <span className="min-w-24 text-center text-gray-600">
-            Trang {page} / {totalPages}
+            {t("Trang")} {page} / {totalPages}
           </span>
           <button
             className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={page >= totalPages || isLoading}
             onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
           >
-            Sau
+            {t("Sau")}
           </button>
         </div>
       </div>

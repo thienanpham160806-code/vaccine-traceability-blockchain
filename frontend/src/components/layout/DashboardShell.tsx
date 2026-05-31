@@ -78,7 +78,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <button
-            aria-label="Close menu"
+            aria-label={t("Đóng menu")}
             className="absolute inset-0 bg-zinc-950/60"
             onClick={() => setMobileMenuOpen(false)}
           />

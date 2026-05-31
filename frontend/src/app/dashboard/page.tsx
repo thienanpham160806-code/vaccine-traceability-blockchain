@@ -17,9 +17,10 @@ import {
 } from "lucide-react";
 import { getDashboardOverview, getDashboardRecentActivity, getHealth } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
+import { translateRole } from "@/lib/i18n";
 import { getProductStatusLabel, getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { DashboardActivity } from "@/lib/types";
-import { useTranslation } from "@/providers/LanguageProvider";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const activityIcon = {
   PRODUCT: CheckCircle2,
@@ -28,9 +29,9 @@ const activityIcon = {
   RECALL: RotateCcw,
 };
 
-function formatTime(timestamp: number) {
-  if (!timestamp) return "Unknown time";
-  return new Date(timestamp).toLocaleString("vi-VN");
+function formatTime(timestamp: number, language: "en" | "vi") {
+  if (!timestamp) return language === "en" ? "Unknown time" : "Không rõ";
+  return new Date(timestamp).toLocaleString(language === "en" ? "en-US" : "vi-VN");
 }
 
 function roleActions(role?: string) {
@@ -100,9 +101,9 @@ function StatCard({
   );
 }
 
-function ActivityRow({ item }: { item: DashboardActivity }) {
+function ActivityRow({ item, language }: { item: DashboardActivity; language: "en" | "vi" }) {
   const Icon = activityIcon[item.type] ?? Activity;
-  const statusText = item.type === "TRANSFER" ? getTransferStatusLabel(item.status) : getProductStatusLabel(item.status);
+  const statusText = item.type === "TRANSFER" ? getTransferStatusLabel(item.status, language) : getProductStatusLabel(item.status, language);
 
   return (
     <Link
@@ -114,7 +115,7 @@ function ActivityRow({ item }: { item: DashboardActivity }) {
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100 group-hover:dark:text-black">{item.title || item.type}</p>
-        <p className="truncate font-mono text-[11px] text-zinc-400 dark:text-zinc-400 group-hover:dark:text-black">{item.subtitle || "No details"}</p>
+        <p className="truncate font-mono text-[11px] text-zinc-400 dark:text-zinc-400 group-hover:dark:text-black">{item.subtitle || (language === "en" ? "No details" : "Không có chi tiết")}</p>
       </div>
       <div className="hidden text-right sm:block">
         {item.status ? (
@@ -122,7 +123,7 @@ function ActivityRow({ item }: { item: DashboardActivity }) {
             {statusText}
           </span>
         ) : null}
-        <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-400 group-hover:dark:text-black">{formatTime(item.timestamp)}</p>
+        <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-400 group-hover:dark:text-black">{formatTime(item.timestamp, language)}</p>
       </div>
       <ArrowRight className="h-4 w-4 shrink-0 text-zinc-300 dark:text-zinc-400" />
     </Link>
@@ -132,6 +133,7 @@ function ActivityRow({ item }: { item: DashboardActivity }) {
 export default function DashboardPage() {
   const [user, setUser] = useState<DemoUser | null>(null);
   const t = useTranslation();
+  const { language } = useLanguage();
 
   useEffect(() => {
     setUser(getStoredUser());
@@ -166,7 +168,7 @@ export default function DashboardPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-            {user ? `${t("Xin chào")}, ${user.role}` : t("Tổng quan")}
+            {user ? `${t("Xin chào")}, ${translateRole(user.role, language)}` : t("Tổng quan")}
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">{t("Theo dõi lô vaccine, chuyển giao, thu hồi và cảnh báo vận hành.")}</p>
         </div>
@@ -174,7 +176,7 @@ export default function DashboardPage() {
         <div className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
           <span className={`h-2 w-2 rounded-full ${health?.status === "ok" ? "bg-emerald-500" : "bg-red-400"}`} />
           <span className="font-mono text-xs text-zinc-600 dark:text-zinc-300">
-            {health?.status === "ok" ? t("BACKEND ĐANG HOẠT ĐỘNG") : t("BACKEND MẤT KẾT NỐI")}
+            {health?.status === "ok" ? t("Backend đang hoạt động") : t("Backend mất kết nối")}
           </span>
         </div>
       </div>
@@ -224,7 +226,7 @@ export default function DashboardPage() {
             {activity.length === 0 ? (
               <p className="px-6 py-10 text-center text-sm text-zinc-400 dark:text-zinc-400">{t("Chưa có hoạt động gần đây.")}</p>
             ) : (
-              activity.map((item) => <ActivityRow key={item.id} item={item} />)
+              activity.map((item) => <ActivityRow key={item.id} item={item} language={language} />)
             )}
           </div>
         </section>

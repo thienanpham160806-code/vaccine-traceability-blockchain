@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { useTranslation } from "@/providers/LanguageProvider";
 
 export default function DashboardError({
   error,
@@ -10,6 +11,8 @@ export default function DashboardError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useTranslation();
+
   useEffect(() => {
     console.error("Dashboard error", error);
   }, [error]);
@@ -17,10 +20,10 @@ export default function DashboardError({
   return (
     <div className="mx-auto max-w-2xl">
       <ErrorState
-        actionLabel="Retry"
-        message="This dashboard view failed to load. Retry the view or return to the dashboard."
+        actionLabel={t("Thử lại")}
+        message={t("Không tải được màn hình dashboard. Hãy thử lại hoặc quay về tổng quan.")}
         onAction={reset}
-        title="Dashboard error"
+        title={t("Lỗi dashboard")}
       />
     </div>
   );

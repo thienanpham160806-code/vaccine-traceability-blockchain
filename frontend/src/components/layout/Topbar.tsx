@@ -8,6 +8,7 @@ import { Bell, ChevronRight, LogOut, Menu, Wallet } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
 import { getDashboardRecentActivity } from "@/lib/api";
 import { translateRole } from "@/lib/i18n";
+import { getTransferStatusLabel } from "@/lib/status";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import type { DashboardActivity } from "@/lib/types";
 
@@ -58,9 +59,9 @@ function loadReadNotificationIds(storageKey: string | null) {
   }
 }
 
-function formatNotificationTime(timestamp: number) {
+function formatNotificationTime(timestamp: number, language: "en" | "vi") {
   if (!timestamp) return "";
-  return new Date(timestamp).toLocaleString("vi-VN", {
+  return new Date(timestamp).toLocaleString(language === "en" ? "en-US" : "vi-VN", {
     hour: "2-digit",
     minute: "2-digit",
     day: "2-digit",
@@ -68,11 +69,11 @@ function formatNotificationTime(timestamp: number) {
   });
 }
 
-function getNotificationTitle(activity: DashboardActivity) {
-  if (activity.type === "TRANSFER") return `Lệnh chuyển ${activity.status || ""}`.trim();
-  if (activity.type === "RISK") return "Cảnh báo rủi ro";
-  if (activity.type === "RECALL") return "Thông báo thu hồi";
-  return "Cập nhật sản phẩm";
+function getNotificationTitle(activity: DashboardActivity, language: "en" | "vi", t: (key: string) => string) {
+  if (activity.type === "TRANSFER") return `${t("Lệnh chuyển")} ${getTransferStatusLabel(activity.status, language)}`.trim();
+  if (activity.type === "RISK") return t("Cảnh báo rủi ro");
+  if (activity.type === "RECALL") return t("Thông báo thu hồi");
+  return t("Cập nhật sản phẩm");
 }
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -210,7 +211,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">
                             <p className={`truncate text-sm ${unread ? "font-bold text-zinc-950" : "font-medium text-zinc-700"}`}>
-                              {getNotificationTitle(activity)}
+                              {getNotificationTitle(activity, language, t)}
                             </p>
                             <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-red-500" : "bg-blue-500"}`} />
                           </div>
@@ -219,7 +220,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                           </p>
                           <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-zinc-400">
                             <span className="truncate">{activity.subtitle}</span>
-                            <span className="shrink-0">{formatNotificationTime(activity.timestamp)}</span>
+                            <span className="shrink-0">{formatNotificationTime(activity.timestamp, language)}</span>
                           </div>
                         </div>
                       </Link>

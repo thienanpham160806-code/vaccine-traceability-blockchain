@@ -3,31 +3,36 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, CheckCircle2, Clock, ExternalLink, Plus, Search, Truck, XCircle } from "lucide-react";
+import { ArrowRight, Clock, ExternalLink, Plus, Search, Truck, XCircle } from "lucide-react";
 import { getTransfers } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
+import { translateRole } from "@/lib/i18n";
 import { getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { TransferRecord, TransferStatus } from "@/lib/types";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const statusOptions: Array<TransferStatus | "ALL"> = ["ALL", "PENDING", "CONFIRMED", "REJECTED", "RETURNED"];
-const statusOptionLabel: Record<string, string> = {
-  ALL: "Tất cả",
-  PENDING: "Chờ xác nhận",
-  CONFIRMED: "Đã xác nhận",
-  REJECTED: "Đã từ chối",
-  RETURNED: "Đã hoàn trả",
-};
 
-function formatTime(timestamp?: number) {
-  return timestamp ? new Date(timestamp).toLocaleString("vi-VN") : "Không rõ";
+function formatTime(timestamp: number | undefined, language: "en" | "vi") {
+  return timestamp ? new Date(timestamp).toLocaleString(language === "en" ? "en-US" : "vi-VN") : language === "en" ? "Unknown" : "Không rõ";
 }
 
-function shortAddress(address?: string) {
-  if (!address) return "Không rõ";
+function shortAddress(address: string | undefined, language: "en" | "vi") {
+  if (!address) return language === "en" ? "Unknown" : "Không rõ";
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function TransferCard({ transfer, user }: { transfer: TransferRecord; user: DemoUser | null }) {
+function TransferCard({
+  transfer,
+  user,
+  language,
+  t,
+}: {
+  transfer: TransferRecord;
+  user: DemoUser | null;
+  language: "en" | "vi";
+  t: (key: string) => string;
+}) {
   const canAct = transfer.status === "PENDING" && (user?.role === transfer.toRole || user?.role === "ADMIN");
 
   return (
@@ -37,28 +42,28 @@ function TransferCard({ transfer, user }: { transfer: TransferRecord; user: Demo
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-mono text-sm font-semibold text-zinc-800">{transfer.serialId || "Chưa có serial"}</p>
+          <p className="truncate font-mono text-sm font-semibold text-zinc-800">{transfer.serialId || t("Chưa có serial")}</p>
           <p className="mt-1 text-xs text-zinc-500">
-            {transfer.fromRole || "UNKNOWN"} <ArrowRight className="inline h-3 w-3" /> {transfer.toRole || "UNKNOWN"}
+            {translateRole(transfer.fromRole || "", language) || t("Không rõ")} <ArrowRight className="inline h-3 w-3" /> {translateRole(transfer.toRole || "", language) || t("Không rõ")}
           </p>
         </div>
         <span className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${getStatusChipClass(transfer.status)}`}>
-          {getTransferStatusLabel(transfer.status)}
+          {getTransferStatusLabel(transfer.status, language)}
         </span>
       </div>
 
       <div className="mt-4 grid gap-3 text-xs text-zinc-500 sm:grid-cols-3">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">Từ</p>
-          <p className="mt-1 font-semibold text-zinc-700">{shortAddress(transfer.fromAddress)}</p>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">{t("Từ")}</p>
+          <p className="mt-1 font-semibold text-zinc-700">{shortAddress(transfer.fromAddress, language)}</p>
         </div>
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">Đến</p>
-          <p className="mt-1 font-semibold text-zinc-700">{shortAddress(transfer.toAddress)}</p>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">{t("Đến")}</p>
+          <p className="mt-1 font-semibold text-zinc-700">{shortAddress(transfer.toAddress, language)}</p>
         </div>
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">Cập nhật</p>
-          <p className="mt-1 font-semibold text-zinc-700">{formatTime(transfer.updatedAt || transfer.createdAt)}</p>
+          <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">{t("Cập nhật")}</p>
+          <p className="mt-1 font-semibold text-zinc-700">{formatTime(transfer.updatedAt || transfer.createdAt, language)}</p>
         </div>
       </div>
 
@@ -67,7 +72,7 @@ function TransferCard({ transfer, user }: { transfer: TransferRecord; user: Demo
           canAct ? "bg-amber-50 text-amber-700" : "bg-zinc-50 text-zinc-500"
         }`}>
           {canAct ? <Clock className="h-3.5 w-3.5" /> : <Truck className="h-3.5 w-3.5" />}
-          {canAct ? "Cần bạn xử lý" : "Xem chi tiết"}
+          {canAct ? t("Cần bạn xử lý") : t("Xem chi tiết")}
         </span>
         <ExternalLink className="h-4 w-4 text-zinc-300" />
       </div>
@@ -76,6 +81,8 @@ function TransferCard({ transfer, user }: { transfer: TransferRecord; user: Demo
 }
 
 export default function TransfersPage() {
+  const t = useTranslation();
+  const { language } = useLanguage();
   const [user, setUser] = useState<DemoUser | null>(null);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<TransferStatus | "ALL">("ALL");
@@ -115,32 +122,32 @@ export default function TransfersPage() {
     <div className="space-y-5 pb-20 lg:pb-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-zinc-900">Lệnh chuyển giao</h1>
-          <p className="text-sm text-zinc-500">Theo dõi yêu cầu chuyển giao, xác nhận và từ chối bàn giao.</p>
+          <h1 className="text-xl font-bold text-zinc-900">{t("Lệnh chuyển")}</h1>
+          <p className="text-sm text-zinc-500">{t("Theo dõi yêu cầu chuyển giao, xác nhận và từ chối bàn giao.")}</p>
         </div>
         <Link
           href="/dashboard/scan-transfer"
           className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700"
         >
           <Plus className="h-4 w-4" />
-          Tạo lệnh chuyển
+          {t("Tạo lệnh chuyển")}
         </Link>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-2xl font-bold text-zinc-900">{transfers.length}</p>
-          <p className="text-xs text-zinc-500">Tổng lệnh chuyển</p>
+          <p className="text-xs text-zinc-500">{t("Tổng lệnh chuyển")}</p>
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
           <p className="text-2xl font-bold text-amber-800">{pendingCount}</p>
-          <p className="text-xs text-amber-700">Chờ xác nhận</p>
+          <p className="text-xs text-amber-700">{t("Chờ xác nhận")}</p>
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="text-2xl font-bold text-zinc-900">
             {transfers.filter((transfer) => user?.role && transfer.toRole === user.role && transfer.status === "PENDING").length}
           </p>
-          <p className="text-xs text-zinc-500">Cần vai trò của bạn</p>
+          <p className="text-xs text-zinc-500">{t("Cần vai trò của bạn")}</p>
         </div>
       </div>
 
@@ -152,7 +159,7 @@ export default function TransfersPage() {
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               className="min-w-0 flex-1 bg-transparent text-sm text-zinc-800 outline-none"
-              placeholder="Tìm theo serial, mã lô hoặc vai trò"
+              placeholder={t("Tìm theo serial, mã lô hoặc vai trò")}
             />
           </label>
           <div className="flex gap-2 overflow-x-auto">
@@ -166,7 +173,7 @@ export default function TransfersPage() {
                     : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"
                 }`}
               >
-                {statusOptionLabel[option] || option}
+                {option === "ALL" ? t("Tất cả") : getTransferStatusLabel(option, language)}
               </button>
             ))}
           </div>
@@ -182,13 +189,13 @@ export default function TransfersPage() {
       ) : filtered.length === 0 ? (
         <div className="rounded-lg border border-dashed border-zinc-300 bg-white py-14 text-center">
           <XCircle className="mx-auto mb-2 h-8 w-8 text-zinc-300" />
-          <p className="text-sm font-semibold text-zinc-600">Không tìm thấy lệnh chuyển</p>
-          <p className="mt-1 text-xs text-zinc-400">Hãy thử trạng thái hoặc serial khác.</p>
+          <p className="text-sm font-semibold text-zinc-600">{t("Không tìm thấy lệnh chuyển")}</p>
+          <p className="mt-1 text-xs text-zinc-400">{t("Hãy thử trạng thái hoặc serial khác.")}</p>
         </div>
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {filtered.map((transfer) => (
-            <TransferCard key={transfer.id} transfer={transfer} user={user} />
+            <TransferCard key={transfer.id} transfer={transfer} user={user} language={language} t={t} />
           ))}
         </div>
       )}

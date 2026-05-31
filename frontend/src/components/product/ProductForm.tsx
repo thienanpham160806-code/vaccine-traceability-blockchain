@@ -11,6 +11,7 @@ import { getApiErrorMessage, registerProduct, syncWalletProductRegistration } fr
 import { getStoredUser } from "@/lib/auth";
 import { getZodFieldErrors, productRegistrationSchema } from "@/lib/validation";
 import { emptyBytes32, getProductRegistryAddress, productRegistryAbi, toBytes32 } from "@/lib/wallet-contracts";
+import { useTranslation } from "@/providers/LanguageProvider";
 
 type RegisterProductResult = {
   txHash?: string;
@@ -49,6 +50,7 @@ function Field({ label, error, children }: { label: string; error?: string; chil
 }
 
 export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, serialId: string) => void }) {
+  const t = useTranslation();
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
@@ -90,7 +92,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
     const parsed = productRegistrationSchema.safeParse(form);
     if (!parsed.success) {
       const errors = getZodFieldErrors(parsed.error);
-      const message = errors.form || Object.values(errors)[0] || "Please fix the highlighted fields.";
+      const message = errors.form || Object.values(errors)[0] || t("Vui lòng kiểm tra các trường đang báo lỗi.");
       setFieldErrors(errors);
       setError(message);
       toast.error(message);
@@ -99,7 +101,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
 
     const values = parsed.data;
     if (values.productType === "IMPORT") {
-      const message = "Sản phẩm IMPORT cần ZK proof. Với luồng demo hiện tại, hãy chọn LOCAL.";
+      const message = t("Sản phẩm nhập khẩu cần ZK proof. Với luồng demo hiện tại, hãy chọn sản xuất trong nước.");
       setFieldErrors({ productType: message });
       setError(message);
       toast.error(message);
@@ -108,13 +110,13 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
 
     setIsSubmitting(true);
     setError(null);
-    setStatusMsg("Đang đăng ký on-chain và lưu metadata...");
+    setStatusMsg(t("Đang đăng ký on-chain và lưu metadata..."));
 
     try {
       const user = getStoredUser();
       if (user?.authMode === "wallet") {
-        if (!address) throw new Error("Chua ket noi MetaMask.");
-        if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
+        if (!address) throw new Error(t("Chưa kết nối MetaMask."));
+        if (!publicClient) throw new Error(t("Chưa sẵn sàng kết nối Sepolia."));
 
         const serialHash = toBytes32(values.serialId);
         const batchHash = toBytes32(values.batchId);
@@ -139,7 +141,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
           args: [serialHash, batchHash, metadataHash, emptyBytes32(), "0x"],
         });
 
-        setStatusMsg("Da gui giao dich. Dang cho Sepolia xac nhan...");
+        setStatusMsg(t("Đã gửi giao dịch. Đang chờ Sepolia xác nhận..."));
         await publicClient.waitForTransactionReceipt({ hash: txHash });
         const data = await syncWalletProductRegistration({
           serialId: values.serialId,
@@ -155,8 +157,8 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
         setGeneratedSerial(values.serialId);
         setGeneratedBatch(values.batchId);
         setResult(data);
-        setStatusMsg("Dang ky thanh cong.");
-        toast.success("Da dang ky san pham.");
+        setStatusMsg(t("Đăng ký thành công."));
+        toast.success(t("Đã đăng ký sản phẩm."));
         onSuccess?.(values.batchId, values.serialId);
         return;
       }
@@ -173,11 +175,11 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
       setGeneratedSerial(values.serialId);
       setGeneratedBatch(values.batchId);
       setResult(data);
-      setStatusMsg("Đăng ký thành công.");
-      toast.success("Đã đăng ký sản phẩm.");
+      setStatusMsg(t("Đăng ký thành công."));
+      toast.success(t("Đã đăng ký sản phẩm."));
       onSuccess?.(values.batchId, values.serialId);
     } catch (err: unknown) {
-      const message = getApiErrorMessage(err, "Đăng ký sản phẩm thất bại.");
+      const message = getApiErrorMessage(err, t("Đăng ký sản phẩm thất bại."));
       setError(message);
       toast.error(message);
       setStatusMsg(null);
@@ -191,8 +193,8 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
         {/* Header */}
         <div className="mb-5 flex items-center justify-between border-b border-zinc-100 pb-4">
           <div>
-            <h2 className="font-bold text-zinc-900">Đăng ký lô vaccine mới</h2>
-            <p className="text-xs text-zinc-500">Tạo sản phẩm on-chain và sinh mã QR.</p>
+            <h2 className="font-bold text-zinc-900">{t("Đăng ký lô vaccine mới")}</h2>
+            <p className="text-xs text-zinc-500">{t("Tạo sản phẩm on-chain và sinh mã QR.")}</p>
           </div>
           <button
             type="button"
@@ -200,7 +202,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
             className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
           >
             <RefreshCw className="h-3 w-3" />
-            IDs mới
+            {t("Tạo ID mới")}
           </button>
         </div>
 
@@ -214,7 +216,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
 
         {/* Fields */}
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Tên sản phẩm">
+          <Field label={t("Tên sản phẩm")}>
             <input
               className={inputCls}
               value={form.productName}
@@ -222,17 +224,17 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
               placeholder="Hexaxim Vaccine"
             />
           </Field>
-          <Field label="Loại sản phẩm">
+          <Field label={t("Loại sản phẩm")}>
             <select
               className={inputCls}
               value={form.productType}
               onChange={(e) => setForm({ ...form, productType: e.target.value })}
             >
-              <option value="LOCAL">Sản xuất trong nước</option>
-              <option value="IMPORT">Nhập khẩu - yêu cầu ZK proof</option>
+              <option value="LOCAL">{t("Sản xuất trong nước")}</option>
+              <option value="IMPORT">{t("Nhập khẩu - yêu cầu ZK proof")}</option>
             </select>
           </Field>
-          <Field label="Mã lô (Batch ID)">
+          <Field label={t("Mã lô")}>
             <input
               className={monoInputCls}
               value={form.batchId}
@@ -246,7 +248,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
               onChange={(e) => setForm({ ...form, serialId: e.target.value })}
             />
           </Field>
-          <Field label="Ngày hết hạn">
+          <Field label={t("Ngày hết hạn")}>
             <input
               type="date"
               className={inputCls}
@@ -254,7 +256,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
               onChange={(e) => setForm({ ...form, expiryDate: e.target.value })}
             />
           </Field>
-          <Field label="Số lượng serial">
+          <Field label={t("Số lượng serial")}>
             <input
               type="number"
               min="1"
@@ -264,7 +266,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
             />
           </Field>
           <div className="md:col-span-2">
-            <Field label="Nhà sản xuất">
+            <Field label={t("Nhà sản xuất")}>
               <input
                 className={inputCls}
                 value={form.manufacturerName}
@@ -276,7 +278,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
 
         {Object.keys(fieldErrors).length > 0 ? (
           <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-            <p>Vui lòng kiểm tra các trường sau:</p>
+            <p>{t("Vui lòng kiểm tra các trường sau:")}</p>
             <ul className="mt-1 list-disc pl-4">
               {Object.entries(fieldErrors).map(([field, message]) => (
                 <li key={field}>
@@ -300,20 +302,20 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
             disabled={isSubmitting}
             className="btn-brand rounded-lg px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
           >
-            {isSubmitting ? "Đang đăng ký…" : "ĐĂNG KÝ LÔ HÀNG"}
+            {isSubmitting ? t("Đang đăng ký...") : t("Đăng ký lô hàng")}
           </button>
           <Link
             href="/dashboard/products"
             className="rounded-lg border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
           >
-            Danh sách sản phẩm
+            {t("Danh sách sản phẩm")}
           </Link>
           {generatedSerial && (
             <Link
               href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(generatedSerial)}`}
               className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
             >
-              Chuyển serial này
+              {t("Chuyển serial này")}
             </Link>
           )}
           {generatedBatch && (
@@ -321,7 +323,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
               href={`/dashboard/batches/${encodeURIComponent(generatedBatch)}`}
               className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
             >
-              Xem chi tiết lô
+              {t("Xem chi tiết lô")}
             </Link>
           )}
         </div>
@@ -340,8 +342,8 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100">
             <span className="text-2xl">📦</span>
           </div>
-          <p className="text-sm font-semibold text-zinc-600">Sau khi đăng ký</p>
-          <p className="text-xs text-zinc-400">mã QR và link lô hàng sẽ xuất hiện tại đây.</p>
+          <p className="text-sm font-semibold text-zinc-600">{t("Sau khi đăng ký")}</p>
+          <p className="text-xs text-zinc-400">{t("Mã QR và link lô hàng sẽ xuất hiện tại đây.")}</p>
         </div>
       )}
     </div>

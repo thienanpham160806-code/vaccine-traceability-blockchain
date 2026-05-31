@@ -1,3 +1,6 @@
+import type { AppLanguage } from "@/lib/i18n";
+import { translate } from "@/lib/i18n";
+
 export const productStatusLabel: Record<string, string> = {
   REGISTERED: "Đã đăng ký",
   VERIFIED: "Đã xác thực",
@@ -33,12 +36,14 @@ export const statusChipClass: Record<string, string> = {
   RETURNED: "bg-zinc-100 text-zinc-700 border-zinc-200",
 };
 
-export function getProductStatusLabel(status?: string) {
-  return productStatusLabel[status || "UNKNOWN"] || status || productStatusLabel.UNKNOWN;
+export function getProductStatusLabel(status?: string, language: AppLanguage = "vi") {
+  const label = productStatusLabel[status || "UNKNOWN"] || status || productStatusLabel.UNKNOWN;
+  return translate(label, language);
 }
 
-export function getTransferStatusLabel(status?: string) {
-  return transferStatusLabel[status || "UNKNOWN"] || status || transferStatusLabel.UNKNOWN;
+export function getTransferStatusLabel(status?: string, language: AppLanguage = "vi") {
+  const label = transferStatusLabel[status || "UNKNOWN"] || status || transferStatusLabel.UNKNOWN;
+  return translate(label, language);
 }
 
 export function getStatusChipClass(status?: string) {

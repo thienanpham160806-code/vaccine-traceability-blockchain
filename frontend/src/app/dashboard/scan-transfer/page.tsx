@@ -7,6 +7,8 @@ import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
 import { confirmTransfer, getApiErrorMessage, getDemoActors, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferCreate } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
+import { translateRole } from "@/lib/i18n";
+import { getTransferStatusLabel } from "@/lib/status";
 import type { TransferRecord } from "@/lib/types";
 import {
   allowedTransferRoutes,
@@ -18,7 +20,7 @@ import {
   transferScanFormSchema,
 } from "@/lib/validation";
 import { getTransferLedgerAddress, toBytes32, transferLedgerAbi } from "@/lib/wallet-contracts";
-import { useTranslation } from "@/providers/LanguageProvider";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const statusChip: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-700 border-amber-200",
@@ -51,6 +53,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function TransferList() {
+  const tLabel = useTranslation();
+  const { language } = useLanguage();
   const qc = useQueryClient();
   const { data: transfers = [], isLoading } = useQuery<TransferRecord[]>({
     queryKey: ["transfers"],
@@ -91,7 +95,7 @@ function TransferList() {
       const parsed = transferRejectFormSchema.safeParse({ serialId, rejectionReason: rejectReason });
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
-        setError(Object.values(errors)[0] || "Please enter a valid rejection reason.");
+        setError(Object.values(errors)[0] || tLabel("Vui lòng nhập lý do từ chối hợp lệ."));
         return;
       }
 
@@ -120,7 +124,7 @@ function TransferList() {
     return (
       <div className="rounded-2xl border border-dashed border-zinc-300 py-12 text-center">
         <Truck className="mx-auto mb-2 h-8 w-8 text-zinc-300" />
-        <p className="text-sm text-zinc-400">Chưa có lệnh chuyển nào.</p>
+        <p className="text-sm text-zinc-400">{tLabel("Chưa có lệnh chuyển nào.")}</p>
       </div>
     );
   }
@@ -142,7 +146,7 @@ function TransferList() {
             <div className="min-w-0">
               <p className="font-mono text-xs font-semibold text-zinc-700 truncate">{t.serialId}</p>
               <p className="mt-0.5 text-xs text-zinc-400">
-                {t.fromRole} <ArrowRight className="inline h-3 w-3" /> {t.toRole}
+                {translateRole(t.fromRole || "", language) || tLabel("Không rõ")} <ArrowRight className="inline h-3 w-3" /> {translateRole(t.toRole || "", language) || tLabel("Không rõ")}
               </p>
             </div>
             <span
@@ -150,7 +154,7 @@ function TransferList() {
                 statusChip[t.status] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
               }`}
             >
-              {statusLabel[t.status] || t.status}
+              {getTransferStatusLabel(t.status, language)}
             </span>
           </div>
 
@@ -163,7 +167,7 @@ function TransferList() {
               <div className="flex gap-2 flex-wrap">
                 <input
                   className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-xs outline-none focus:border-red-300 focus:ring-1 focus:ring-red-100"
-                  placeholder="Lý do từ chối…"
+                  placeholder={tLabel("Lý do từ chối...")}
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
                   disabled={busy}
@@ -173,13 +177,13 @@ function TransferList() {
                   onClick={() => handleReject(t.serialId)}
                   className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
                 >
-                  Xác nhận từ chối
+                  {tLabel("Xác nhận từ chối")}
                 </button>
                 <button
                   onClick={() => { setRejectingId(null); setRejectReason(""); }}
                   className="rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
                 >
-                  Huỷ
+                  {tLabel("Hủy")}
                 </button>
               </div>
             ) : (
@@ -189,20 +193,20 @@ function TransferList() {
                   onClick={() => handleConfirm(t.serialId)}
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Xác nhận
+                  <CheckCircle2 className="h-3.5 w-3.5" /> {tLabel("Xác nhận")}
                 </button>
                 <button
                   disabled={busy || !transferRejectFormSchema.safeParse({ serialId: t.serialId, rejectionReason: "valid reason" }).success}
                   onClick={() => setRejectingId(t.id)}
                   className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
                 >
-                  <XCircle className="h-3.5 w-3.5" /> Từ chối
+                  <XCircle className="h-3.5 w-3.5" /> {tLabel("Từ chối")}
                 </button>
                 <Link
                   href={`/dashboard/transfers/${encodeURIComponent(t.id)}`}
                   className="flex items-center gap-1 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
                 >
-                  <ExternalLink className="h-3 w-3" /> Chi tiết
+                  <ExternalLink className="h-3 w-3" /> {tLabel("Chi tiết")}
                 </Link>
               </div>
             )
@@ -211,7 +215,7 @@ function TransferList() {
               href={`/dashboard/transfers/${encodeURIComponent(t.id)}`}
               className="flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
             >
-              Xem chi tiết <ArrowRight className="h-3 w-3" />
+              {tLabel("Xem chi tiết")} <ArrowRight className="h-3 w-3" />
             </Link>
           )}
         </div>
@@ -446,7 +450,7 @@ export default function ScanTransferPage() {
                 href={`/dashboard/transfers/${encodeURIComponent(transferId)}`}
                 className="mt-1 flex items-center gap-1 font-semibold text-emerald-700 hover:underline"
               >
-                Xem chi tiết lệnh <ArrowRight className="h-3 w-3" />
+                {t("Xem chi tiết lệnh")} <ArrowRight className="h-3 w-3" />
               </Link>
             )}
           </div>
@@ -459,7 +463,7 @@ export default function ScanTransferPage() {
             onClick={create}
             className="btn-brand rounded-lg px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
           >
-            {isBusy ? "Đang xử lý…" : "TẠO LỆNH"}
+            {isBusy ? t("Đang xử lý...") : t("Tạo lệnh")}
           </button>
           <button
             disabled={isBusy || !serialId.trim()}
@@ -467,7 +471,7 @@ export default function ScanTransferPage() {
             className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
           >
             <CheckCircle2 className="h-4 w-4" />
-            Xác nhận giao
+            {t("Xác nhận giao")}
           </button>
           <Link
             href={serialId ? `/dashboard/verify/${encodeURIComponent(serialId)}` : "/dashboard/products"}
@@ -483,13 +487,13 @@ export default function ScanTransferPage() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Truck className="h-4 w-4 text-blue-500" />
-            <h2 className="font-semibold text-zinc-800">Lệnh gần đây</h2>
+            <h2 className="font-semibold text-zinc-800">{t("Lệnh gần đây")}</h2>
           </div>
           <Link
             href="/dashboard/transfers"
             className="flex min-h-9 items-center gap-1 rounded-lg border border-zinc-200 px-2.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
           >
-            View all <ArrowRight className="h-3 w-3" />
+            {t("Xem tất cả")} <ArrowRight className="h-3 w-3" />
           </Link>
           <button
             onClick={() => qc.invalidateQueries({ queryKey: ["transfers"] })}
