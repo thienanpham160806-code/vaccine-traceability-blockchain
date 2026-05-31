@@ -180,7 +180,7 @@ export default function ProductDetailPage({ params }: PageProps) {
   }
 
   const { product, batch, blockchain, timeline, riskFlags, recall } = detail;
-  const publicUrl = `${process.env.NEXT_PUBLIC_CONSUMER_VERIFY_BASE_URL || "http://localhost:3000/consumer/verify"}/${product.serialId}`;
+  const publicUrl = `${process.env.NEXT_PUBLIC_CONSUMER_VERIFY_BASE_URL || "http://localhost:3000/consumer/verify"}/${encodeURIComponent(product.serialId)}`;
   const txHash = blockchain.txHash || product.blockchainTx;
   const txUrl = getTransactionUrl(txHash);
   const ipfsCid = batch?.ipfsCid || product.ipfsCid;
@@ -382,11 +382,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           <h2 className="text-xl font-bold">QR cho người dùng</h2>
           <p className="mt-1 text-sm text-muted-foreground">Link xác minh công khai cho serial này.</p>
           <div className="mt-5 flex justify-center rounded-xl border border-zinc-200 bg-white p-5">
-            {product.qrImage ? (
-              <img src={product.qrImage} alt={`QR for ${product.serialId}`} className="h-[180px] w-[180px]" />
-            ) : (
-              <QRCodeSVG value={publicUrl} size={180} />
-            )}
+            <QRCodeSVG value={publicUrl} size={180} />
           </div>
           <p className="mt-4 break-all font-mono text-xs text-muted-foreground">{publicUrl}</p>
           <Link

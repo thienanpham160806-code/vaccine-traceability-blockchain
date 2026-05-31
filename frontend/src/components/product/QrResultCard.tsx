@@ -16,7 +16,7 @@ export function QrResultCard({
 }) {
   const t = useTranslation();
   const baseUrl = process.env.NEXT_PUBLIC_CONSUMER_VERIFY_BASE_URL || "http://localhost:3000/consumer/verify";
-  const qrValue = `${baseUrl}/${serialId}`;
+  const qrValue = `${baseUrl}/${encodeURIComponent(serialId)}`;
 
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
@@ -28,7 +28,7 @@ export function QrResultCard({
           {t("Mã QR này trỏ tới trang xác minh công khai cho người dùng.")}
         </p>
         <div className="flex justify-center rounded-2xl border border-zinc-200 bg-white p-6">
-          {qrImage ? <img src={qrImage} alt={`QR for ${serialId}`} className="h-[180px] w-[180px]" /> : <QRCodeSVG value={qrValue} size={180} />}
+          <QRCodeSVG value={qrValue} size={180} />
         </div>
         <div>
           <p className="text-sm font-semibold text-zinc-700">Serial ID</p>
