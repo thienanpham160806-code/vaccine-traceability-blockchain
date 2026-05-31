@@ -40,6 +40,11 @@ const themeOptions = [
   { value: "system", label: "Hệ thống", icon: Monitor },
 ] as const;
 
+const languageOptions = [
+  { value: "en", label: "EN", flag: "🇬🇧" },
+  { value: "vi", label: "VI", flag: "🇻🇳" },
+] as const;
+
 const roleLabel: Record<string, string> = {
   MANUFACTURER: "Manufacturer",
   IMPORTER: "Importer",
@@ -67,12 +72,29 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
   const router = useRouter();
   const { theme, setTheme } = useTheme();
   const [serialId, setSerialId] = useState("");
-  const [user, setUser] = useState<DemoUser | null>(null);
+  const [user] = useState<DemoUser | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getStoredUser();
+  });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [language, setLanguage] = useState<"en" | "vi">(() => {
+    if (typeof window === "undefined") return "vi";
+    const storedLanguage = window.localStorage.getItem("vaxitrust-language");
+    return storedLanguage === "en" || storedLanguage === "vi" ? storedLanguage : "vi";
+  });
+  const [showLanguageFlag, setShowLanguageFlag] = useState<"en" | "vi" | null>(null);
 
   useEffect(() => {
-    setUser(getStoredUser());
-  }, []);
+    if (!showLanguageFlag) return;
+    const timer = window.setTimeout(() => setShowLanguageFlag(null), 1000);
+    return () => window.clearTimeout(timer);
+  }, [showLanguageFlag]);
+
+  const handleLanguageChange = (value: "en" | "vi") => {
+    setLanguage(value);
+    setShowLanguageFlag(value);
+    window.localStorage.setItem("vaxitrust-language", value);
+  };
 
   const isActive = (href: string) =>
     href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
@@ -205,25 +227,54 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
 
           {settingsOpen ? (
             <div className="absolute bottom-0 left-full z-50 ml-2 w-44 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">
-              <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Giao diện</p>
-              {themeOptions.map((option) => {
-                const Icon = option.icon;
-                const selected = (theme || "system") === option.value;
-                return (
-                  <button
-                    className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-sm transition ${
-                      selected ? "bg-blue-600/15 text-blue-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-                    }`}
-                    key={option.value}
-                    onClick={() => setTheme(option.value)}
-                    type="button"
-                  >
-                    <Icon className="h-4 w-4" />
-                    <span>{option.label}</span>
-                    {selected ? <Check className="ml-auto h-3.5 w-3.5" /> : null}
-                  </button>
-                );
-              })}
+              <div className="space-y-2">
+                <div>
+                  <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Giao diện</p>
+                  {themeOptions.map((option) => {
+                    const Icon = option.icon;
+                    const selected = (theme || "system") === option.value;
+                    return (
+                      <button
+                        className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-sm transition ${
+                          selected ? "bg-blue-600/15 text-blue-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                        }`}
+                        key={option.value}
+                        onClick={() => setTheme(option.value)}
+                        type="button"
+                      >
+                        <Icon className="h-4 w-4" />
+                        <span>{option.label}</span>
+                        {selected ? <Check className="ml-auto h-3.5 w-3.5" /> : null}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div>
+                  <p className="px-2 pb-2 pt-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Ngôn ngữ</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {languageOptions.map((option) => {
+                      const selected = language === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => handleLanguageChange(option.value)}
+                          className={`flex h-11 items-center justify-center rounded-lg border px-2 text-sm font-semibold transition ${
+                            selected
+                              ? "border-blue-500 bg-blue-600/15 text-blue-100"
+                              : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-100"
+                          }`}
+                        >
+                          <span className="flex items-center justify-center text-sm">
+                            {showLanguageFlag === option.value ? option.flag : option.label}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             </div>
           ) : null}
         </div>

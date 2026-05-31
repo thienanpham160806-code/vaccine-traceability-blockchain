@@ -202,9 +202,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[radial-gradient(circle_at_20%_20%,#dbeafe_0,#f8fafc_32%,#f8fafc_100%)] text-zinc-950 dark:bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.1)_0,rgba(15,23,42,0.88)_32%,#09090b_100%)] dark:text-zinc-100">
+    <div className="relative flex min-h-screen flex-col overflow-x-hidden bg-[radial-gradient(circle_at_20%_20%,#dbeafe_0,#f8fafc_32%,#f8fafc_100%)] text-zinc-950 dark:bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.1)_0,rgba(15,23,42,0.88)_32%,#09090b_100%)] dark:text-zinc-100">
       <MedicalBackdrop />
-      <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
+      <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-4 lg:px-8">
         <div className="flex items-center gap-3">
           <VaxiTrustLogo
             className="h-12 w-12"
@@ -220,7 +220,7 @@ export default function LoginPage() {
         ) : null}
       </header>
 
-      <main className="relative z-10 mx-auto grid w-full max-w-7xl flex-1 gap-8 px-5 pb-6 pt-2 lg:grid-cols-[minmax(0,1fr)_520px] lg:items-center lg:px-8">
+      <main className="relative z-10 mx-auto grid w-full max-w-7xl flex-1 gap-6 px-5 pb-5 pt-2 lg:grid-cols-[minmax(0,1fr)_520px] lg:items-center lg:px-8">
         <section className="space-y-7 py-6">
           <div className="space-y-4">
             <h1 className="max-w-2xl text-4xl font-extrabold leading-tight text-zinc-950 dark:text-zinc-100 sm:text-5xl">
