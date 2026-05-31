@@ -32,10 +32,10 @@ function shortAddress(address: string) {
 function InfoRow({ icon: Icon, text }: { icon: React.ElementType; text: string }) {
   return (
     <div className="flex items-center gap-4">
-      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
         <Icon className="h-5 w-5 text-blue-600" />
       </div>
-      <span className="text-sm font-semibold text-zinc-800">{text}</span>
+      <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">{text}</span>
     </div>
   );
 }
@@ -172,11 +172,11 @@ export default function LoginPage() {
       const { token, user } = await loginWithSignature({ address: walletAddress, signature });
       setSession(token, user, "wallet");
       router.push("/dashboard");
-    } catch (err: any) {
-      if (err?.message?.includes("User rejected")) {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes("User rejected")) {
         setError("Bạn đã hủy thao tác trên MetaMask.");
       } else {
-        setError(getApiErrorMessage(err, err?.message || "Đăng nhập MetaMask thất bại."));
+        setError(getApiErrorMessage(err, err instanceof Error ? err.message : "Đăng nhập MetaMask thất bại."));
       }
     } finally {
       setIsLoading(false);
@@ -194,7 +194,7 @@ export default function LoginPage() {
     try {
       await loginDemo(selectedActor);
       router.push("/dashboard");
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(getApiErrorMessage(err, "Đăng nhập demo thất bại."));
     } finally {
       setIsLoading(false);
@@ -202,7 +202,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[radial-gradient(circle_at_20%_20%,#dbeafe_0,#f8fafc_32%,#f8fafc_100%)]">
+    <div className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[radial-gradient(circle_at_20%_20%,#dbeafe_0,#f8fafc_32%,#f8fafc_100%)] text-zinc-950 dark:bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.1)_0,rgba(15,23,42,0.88)_32%,#09090b_100%)] dark:text-zinc-100">
       <MedicalBackdrop />
       <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
         <div className="flex items-center gap-3">
@@ -214,7 +214,7 @@ export default function LoginPage() {
           />
         </div>
         {address ? (
-          <div className="hidden rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-600 shadow-sm sm:block">
+          <div className="hidden rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-600 shadow-sm sm:block dark:border-zinc-700 dark:bg-zinc-950/80 dark:text-zinc-200">
             {shortAddress(address)}
           </div>
         ) : null}
@@ -223,10 +223,10 @@ export default function LoginPage() {
       <main className="relative z-10 mx-auto grid w-full max-w-7xl flex-1 gap-8 px-5 pb-6 pt-2 lg:grid-cols-[minmax(0,1fr)_520px] lg:items-center lg:px-8">
         <section className="space-y-7 py-6">
           <div className="space-y-4">
-            <h1 className="max-w-2xl text-4xl font-extrabold leading-tight text-zinc-950 sm:text-5xl">
+            <h1 className="max-w-2xl text-4xl font-extrabold leading-tight text-zinc-950 dark:text-zinc-100 sm:text-5xl">
               Xác thực chuỗi cung ứng vaccine
             </h1>
-            <p className="max-w-xl text-base leading-7 text-zinc-600">
+            <p className="max-w-xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
               Nền tảng quản lý logistics y tế ứng dụng Blockchain để theo dõi lô vaccine, chuyển giao và xác minh công khai.
             </p>
           </div>
@@ -238,10 +238,10 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-lg border border-zinc-200 bg-white/92 p-6 shadow-xl shadow-blue-950/5 backdrop-blur">
+        <section className="max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-lg border border-zinc-200 bg-white/92 p-6 shadow-xl shadow-blue-950/5 backdrop-blur dark:border-zinc-700 dark:bg-zinc-950/95 dark:shadow-black/20">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-zinc-950">Đăng nhập hệ thống</h2>
-            <p className="mt-1 text-sm text-zinc-500">Chọn ví demo hoặc đăng nhập trực tiếp bằng MetaMask.</p>
+            <h2 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50">Đăng nhập hệ thống</h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Chọn ví demo hoặc đăng nhập trực tiếp bằng MetaMask.</p>
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
@@ -254,8 +254,8 @@ export default function LoginPage() {
                   onClick={() => setSelectedRole(actor.role)}
                   className={`min-h-28 rounded-lg border p-4 text-center transition ${
                     selectedRole === actor.role
-                      ? "border-blue-600 bg-blue-50 text-blue-700"
-                      : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
+                      ? "border-blue-600 bg-blue-50 text-blue-700 dark:bg-blue-950/90 dark:text-blue-200"
+                      : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-800"
                   }`}
                 >
                   <Icon className="mx-auto h-6 w-6" />
@@ -267,13 +267,13 @@ export default function LoginPage() {
 
           <div className="mt-5 space-y-2">
             <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">Ví demo</p>
-            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs text-zinc-600">
+            <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950/80 dark:text-zinc-300">
               {selectedActor?.address || "Chưa có ví demo"}
             </div>
           </div>
 
           {error ? (
-            <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">
+            <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-400/40 dark:bg-red-500/10 dark:text-red-200">
               {error}
             </p>
           ) : null}
@@ -288,9 +288,9 @@ export default function LoginPage() {
           </button>
 
           <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-zinc-200" />
-            <span className="text-xs font-bold text-zinc-400">HOẶC</span>
-            <div className="h-px flex-1 bg-zinc-200" />
+            <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
+            <span className="text-xs font-bold text-zinc-400 dark:text-zinc-500">HOẶC</span>
+            <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -298,14 +298,14 @@ export default function LoginPage() {
               type="button"
               onClick={handleMetaMask}
               disabled={isLoading}
-              className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white text-sm font-bold text-zinc-800 hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50"
+              className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white text-sm font-bold text-zinc-800 hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-blue-400 dark:hover:bg-blue-950"
             >
               MetaMask
             </button>
             <button
               type="button"
               disabled
-              className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white text-sm font-bold text-zinc-400 opacity-60"
+              className="flex min-h-12 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white text-sm font-bold text-zinc-400 opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-500"
             >
               <Link2 className="h-4 w-4" />
               WalletConnect
@@ -313,12 +313,12 @@ export default function LoginPage() {
           </div>
 
           {isConnected && address ? (
-            <div className="mt-5 flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3">
+            <div className="mt-5 flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-950/80">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Ví đang kết nối</p>
-                <p className="mt-1 font-mono text-xs text-blue-700">{shortAddress(address)}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Ví đang kết nối</p>
+                <p className="mt-1 font-mono text-xs text-blue-700 dark:text-blue-300">{shortAddress(address)}</p>
               </div>
-              <button onClick={() => disconnect()} className="text-xs font-bold text-zinc-500 hover:text-zinc-900">
+              <button onClick={() => disconnect()} className="text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
                 Ngắt kết nối
               </button>
             </div>
