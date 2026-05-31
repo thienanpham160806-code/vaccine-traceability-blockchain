@@ -8,7 +8,15 @@ import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, X
 import { confirmTransfer, getApiErrorMessage, getDemoActors, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferCreate } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import type { TransferRecord } from "@/lib/types";
-import { getZodFieldErrors, transferConfirmFormSchema, transferRejectFormSchema, transferScanFormSchema } from "@/lib/validation";
+import {
+  allowedTransferRoutes,
+  getZodFieldErrors,
+  transferConfirmFormSchema,
+  transferInitiatorRoles,
+  transferReceiverRoles,
+  transferRejectFormSchema,
+  transferScanFormSchema,
+} from "@/lib/validation";
 import { getTransferLedgerAddress, toBytes32, transferLedgerAbi } from "@/lib/wallet-contracts";
 
 const statusChip: Record<string, string> = {
@@ -25,7 +33,7 @@ const statusLabel: Record<string, string> = {
   RETURNED: "Đã hoàn",
 };
 
-const roleOptions = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY"];
+const fromRoleOptions = [...transferInitiatorRoles];
 
 const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
@@ -232,6 +240,14 @@ export default function ScanTransferPage() {
     if (s) setSerialId(s);
   }, []);
 
+  const toRoleOptions = allowedTransferRoutes[fromRole as keyof typeof allowedTransferRoutes] || [...transferReceiverRoles];
+
+  useEffect(() => {
+    if (!toRoleOptions.includes(toRole as any)) {
+      setToRole(toRoleOptions[0] || "DISTRIBUTOR");
+    }
+  }, [fromRole, toRole, toRoleOptions]);
+
   const create = async () => {
     if (!serialId.trim() || isBusy) return;
     if (!safeIdPattern.test(serialId.trim())) {
@@ -375,7 +391,7 @@ export default function ScanTransferPage() {
                   setFromRole(e.target.value);
                 }}
               >
-                {roleOptions.map((r) => (
+                {fromRoleOptions.map((r) => (
                   <option key={r} value={r}>{r}</option>
                 ))}
               </select>
@@ -389,7 +405,7 @@ export default function ScanTransferPage() {
                   setToRole(e.target.value);
                 }}
               >
-                {roleOptions.map((r) => (
+                {toRoleOptions.map((r) => (
                   <option key={r} value={r}>{r}</option>
                 ))}
               </select>

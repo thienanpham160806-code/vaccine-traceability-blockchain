@@ -40,15 +40,24 @@ export const bulkProductCsvSchema = z.object({
   zkpProof: z.string().trim().regex(hexPattern, "zkpProof phải là chuỗi hex.").optional(),
 });
 
-const roleSchema = z.enum(["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY"]);
+export const transferInitiatorRoles = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR"] as const;
+export const transferReceiverRoles = ["IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY"] as const;
+export const allowedTransferRoutes: Record<(typeof transferInitiatorRoles)[number], Array<(typeof transferReceiverRoles)[number]>> = {
+  MANUFACTURER: ["IMPORTER", "DISTRIBUTOR"],
+  IMPORTER: ["DISTRIBUTOR"],
+  DISTRIBUTOR: ["DISTRIBUTOR", "CLINIC", "PHARMACY"],
+};
+
+const initiatorRoleSchema = z.enum(transferInitiatorRoles);
+const receiverRoleSchema = z.enum(transferReceiverRoles);
 
 export const transferScanFormSchema = z
   .object({
     serialId: z.string().trim().min(3, "Serial ID phải có ít nhất 3 ký tự.").max(128).regex(idPattern, idMessage),
-    fromRole: roleSchema,
-    toRole: roleSchema,
+    fromRole: initiatorRoleSchema,
+    toRole: receiverRoleSchema,
   })
-  .refine((value) => value.fromRole !== value.toRole, {
+  .refine((value) => allowedTransferRoutes[value.fromRole].includes(value.toRole), {
     path: ["toRole"],
     message: "Vai trò nhận phải khác vai trò gửi.",
   });

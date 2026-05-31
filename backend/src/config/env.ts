@@ -18,6 +18,7 @@ export const config = {
     distributor: process.env.DISTRIBUTOR_PRIVATE_KEY || '',
     clinic: process.env.CLINIC_PRIVATE_KEY || '',
     pharmacy: process.env.PHARMACY_PRIVATE_KEY || '',
+    recall_authority: process.env.RECALL_AUTHORITY_PRIVATE_KEY || process.env.BACKEND_PRIVATE_KEY || '',
   },
   productRegistryAddress: process.env.PRODUCT_REGISTRY_ADDRESS || '',
   transferLedgerAddress: process.env.TRANSFER_LEDGER_ADDRESS || '',
@@ -44,6 +45,7 @@ export const config = {
     distributor: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
     clinic: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
     pharmacy: '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65',
+    recallAuthority: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
   },
 };
 

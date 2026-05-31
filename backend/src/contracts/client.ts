@@ -176,6 +176,10 @@ export class ContractClient {
       case 'pharmacy':
       case 'pharmacy_role':
         return 'pharmacy';
+      case 'recall_authority':
+      case 'recallauthority':
+      case 'recall_authority_role':
+        return 'recall_authority';
       default:
         throw new Error(`Unsupported local signer role: ${role}`);
     }
@@ -477,7 +481,7 @@ export class ContractClient {
   async recallBatch(
     batchHash: string,
     reasonHash: string,
-    serials: string[]
+    signerRole: string = 'RECALL_AUTHORITY'
   ): Promise<string> {
     if (!this.productRegistry) {
       throw new Error('ProductRegistry contract not initialized');
@@ -486,7 +490,8 @@ export class ContractClient {
     try {
       Logger.info(`📝 Recalling batch: ${batchHash}`);
 
-      const tx = await this.productRegistry.recallBatch(batchHash, reasonHash, serials);
+      const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const tx = await registry.recallBatch(batchHash, reasonHash);
 
       const receipt = await tx.wait();
       Logger.success(`✅ Batch recalled. TX: ${receipt?.hash}`);

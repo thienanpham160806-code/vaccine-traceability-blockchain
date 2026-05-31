@@ -27,8 +27,9 @@ const defaultDemoActors: Record<string, string> = {
   DISTRIBUTOR: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
   CLINIC: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
   PHARMACY: '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65',
+  RECALL_AUTHORITY: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
 };
-const demoRoleOrder = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY'];
+const demoRoleOrder = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'RECALL_AUTHORITY'];
 
 function normalizeAddress(address: string): string {
   return ethers.getAddress(address);

@@ -11,7 +11,13 @@ const serialId = z
   .max(128, 'serialId is too long')
   .regex(idPattern, 'serialId can only contain letters, numbers, dot, underscore, colon, or dash');
 
-const role = z.enum(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY']);
+const initiatorRole = z.enum(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR']);
+const receiverRole = z.enum(['IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY']);
+const allowedTransferRoutes: Record<z.infer<typeof initiatorRole>, Array<z.infer<typeof receiverRole>>> = {
+  MANUFACTURER: ['IMPORTER', 'DISTRIBUTOR'],
+  IMPORTER: ['DISTRIBUTOR'],
+  DISTRIBUTOR: ['DISTRIBUTOR', 'CLINIC', 'PHARMACY'],
+};
 
 const optionalLocationHash = z
   .string()
@@ -23,15 +29,20 @@ export const transferIdParamsSchema = z.object({
   transferId: z.string().trim().min(1, 'transferId is required').max(240, 'transferId is too long'),
 });
 
-export const transferScanSchema = z.object({
-  serialId,
-  receiverAddress: z.string().trim().regex(ethAddressPattern, 'receiverAddress must be an Ethereum address').optional(),
-  fromRole: role,
-  toRole: role,
-  batchId: z.string().trim().max(128, 'batchId is too long').optional(),
-  fromLocationHash: optionalLocationHash,
-  toLocationHash: optionalLocationHash,
-});
+export const transferScanSchema = z
+  .object({
+    serialId,
+    receiverAddress: z.string().trim().regex(ethAddressPattern, 'receiverAddress must be an Ethereum address').optional(),
+    fromRole: initiatorRole,
+    toRole: receiverRole,
+    batchId: z.string().trim().max(128, 'batchId is too long').optional(),
+    fromLocationHash: optionalLocationHash,
+    toLocationHash: optionalLocationHash,
+  })
+  .refine((value) => allowedTransferRoutes[value.fromRole].includes(value.toRole), {
+    path: ['toRole'],
+    message: 'Transfer route is not allowed by the route matrix',
+  });
 
 export const transferConfirmSchema = z.object({
   serialId,

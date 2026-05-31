@@ -3,6 +3,7 @@ import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { CryptoUtils } from '../utils/crypto';
 import { Logger } from '../utils/logger';
+import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -79,7 +80,7 @@ router.get('/recalls', async (_req: Request, res: Response) => {
   }
 });
 
-router.post('/recalls', async (req: Request, res: Response) => {
+router.post('/recalls', verifyToken, requireRole(['RECALL_AUTHORITY', 'ADMIN']), async (req: AuthRequest, res: Response) => {
   try {
     const { batchHash, reason, serials = [] } = req.body;
 
@@ -96,14 +97,14 @@ router.post('/recalls', async (req: Request, res: Response) => {
     const normalizedBatchHash = toBytes32(batchHash);
     const reasonHash = toBytes32(reason);
     const serialHashes = serials.map((serial: string) => toBytes32(serial));
-    const txHash = await contractClient.recallBatch(normalizedBatchHash, reasonHash, serialHashes);
+    const txHash = await contractClient.recallBatch(normalizedBatchHash, reasonHash, 'RECALL_AUTHORITY');
     const now = Date.now();
     const recall = {
       id: normalizedBatchHash,
       batchHash: normalizedBatchHash,
       reason,
       reasonHash,
-      authorityAddress: contractClient.getRoleAddress('MANUFACTURER'),
+      authorityAddress: req.user?.address || contractClient.getRoleAddress('RECALL_AUTHORITY'),
       serialsAffected: serialHashes.length,
       txHash,
       createdAt: now,

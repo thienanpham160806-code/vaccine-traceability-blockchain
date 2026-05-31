@@ -19,6 +19,11 @@ const router = Router();
 const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
 const SAFE_ID_PATTERN = /^[A-Za-z0-9._:-]{3,128}$/;
 const txHashSchema = z.string().trim().regex(/^0x[a-fA-F0-9]{64}$/, 'txHash must be a transaction hash');
+const allowedTransferRoutes: Record<string, string[]> = {
+  MANUFACTURER: ['IMPORTER', 'DISTRIBUTOR'],
+  IMPORTER: ['DISTRIBUTOR'],
+  DISTRIBUTOR: ['DISTRIBUTOR', 'CLINIC', 'PHARMACY'],
+};
 
 function toBytes32(value?: string): string {
   if (!value) return ZERO_BYTES32;
@@ -27,6 +32,10 @@ function toBytes32(value?: string): string {
 
 function getErrorMessage(error: any, fallback: string): string {
   return error?.shortMessage || error?.reason || error?.message || fallback;
+}
+
+function isAllowedTransferRoute(fromRole: string, toRole: string): boolean {
+  return allowedTransferRoutes[fromRole]?.includes(toRole) || false;
 }
 
 async function requireSuccessfulTx(txHash: string, expectedTo?: string) {
@@ -110,7 +119,7 @@ router.get('/:transferId', validateRequest({ params: transferIdParamsSchema }), 
 router.post(
   '/scan',
   verifyToken,
-  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'ADMIN']),
   validateRequest({ body: transferScanSchema }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -149,6 +158,16 @@ router.post(
         error: {
           code: 'ROLE_MISMATCH',
           message: `Only ${fromRole} can create this transfer`,
+        },
+      });
+    }
+
+    if (!isAllowedTransferRoute(fromRole, toRole)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_TRANSFER_ROUTE',
+          message: `Route ${fromRole} -> ${toRole} is not allowed by the supply-chain route matrix`,
         },
       });
     }
@@ -270,6 +289,7 @@ router.post(
 router.post(
   '/sync-wallet-create',
   verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'ADMIN']),
   validateRequest({ body: transferScanSchema.extend({ txHash: txHashSchema }) }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -279,6 +299,23 @@ router.post(
       return res.status(400).json({
         success: false,
         error: { code: 'MISSING_FIELDS', message: 'Missing txHash, serialId, fromRole, toRole, or receiverAddress' },
+      });
+    }
+
+    if (req.user?.role !== 'ADMIN' && req.user?.role !== fromRole) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'ROLE_MISMATCH', message: `Only ${fromRole} can create this transfer` },
+      });
+    }
+
+    if (!isAllowedTransferRoute(fromRole, toRole)) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'INVALID_TRANSFER_ROUTE',
+          message: `Route ${fromRole} -> ${toRole} is not allowed by the supply-chain route matrix`,
+        },
       });
     }
 

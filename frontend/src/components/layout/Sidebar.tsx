@@ -75,6 +75,17 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
     router.push("/login");
   };
 
+  const visibleMenuItems = menuItems.filter((item) => {
+    const role = user?.role;
+    if (item.href === "/dashboard/scan-transfer") {
+      return role === "MANUFACTURER" || role === "IMPORTER" || role === "DISTRIBUTOR" || role === "ADMIN";
+    }
+    if (item.href === "/dashboard/recall") {
+      return role === "RECALL_AUTHORITY" || role === "ADMIN";
+    }
+    return true;
+  });
+
   return (
     <aside className={`${mobile ? "flex h-full w-72" : "hidden min-h-screen w-64 lg:flex"} flex-col border-r border-zinc-800 bg-zinc-950`}>
       <Link href="/dashboard" onClick={onNavigate} className="flex min-h-16 items-center gap-3 border-b border-zinc-800 px-5 py-5">
@@ -104,7 +115,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
       )}
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pt-4">
-        {menuItems.map((item) => {
+        {visibleMenuItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);
           return (
