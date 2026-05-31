@@ -65,14 +65,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   if (!isReady) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-50 text-sm font-semibold text-zinc-500">
+      <div className="flex min-h-screen items-center justify-center bg-white text-sm font-semibold text-zinc-500 dark:bg-zinc-950 dark:text-zinc-200">
         {t("Đang kiểm tra phiên đăng nhập...")}
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-zinc-50 dark:bg-zinc-950">
+    <div className="flex min-h-screen bg-white dark:bg-zinc-950">
       <Sidebar />
 
       {mobileMenuOpen && (

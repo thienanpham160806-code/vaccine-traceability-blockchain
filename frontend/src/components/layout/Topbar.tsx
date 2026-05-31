@@ -35,7 +35,7 @@ const roleColor: Record<string, string> = {
   DISTRIBUTOR: "bg-emerald-50 text-emerald-700 border-emerald-200",
   CLINIC: "bg-amber-50 text-amber-700 border-amber-200",
   PHARMACY: "bg-cyan-50 text-cyan-700 border-cyan-200",
-  PUBLIC: "bg-zinc-50 text-zinc-700 border-zinc-200",
+  PUBLIC: "bg-white text-zinc-700 border-zinc-200",
   ADMIN: "bg-red-50 text-red-700 border-red-200",
   RECALL_AUTHORITY: "bg-orange-50 text-orange-700 border-orange-200",
 };
@@ -236,8 +236,8 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         {user ? (
           <div
             className={`hidden items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold sm:flex ${
-              roleColor[user.role] ?? "bg-zinc-50 text-zinc-700 border-zinc-200"
-            }`}
+                roleColor[user.role] ?? "bg-white text-zinc-700 border-zinc-200"
+              }`}
           >
             <Wallet className="h-3.5 w-3.5" />
             <span>{translateRole(user.role, language)}</span>

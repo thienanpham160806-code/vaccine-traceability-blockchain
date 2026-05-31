@@ -160,7 +160,7 @@ export default function DashboardPage() {
   const actions = roleActions(user?.role);
 
   return (
-    <div className="space-y-5 pb-20 lg:pb-0 bg-zinc-50 dark:bg-zinc-950">
+    <div className="space-y-5 pb-20 lg:pb-0 bg-white dark:bg-zinc-950">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
@@ -238,7 +238,7 @@ export default function DashboardPage() {
               const height = Math.max(8, Math.round((day.count / max) * 100));
               return (
                 <div key={day.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                  <div className="flex h-28 w-full items-end rounded bg-zinc-50 px-1 dark:bg-zinc-800">
+                  <div className="flex h-28 w-full items-end rounded bg-white px-1 dark:bg-zinc-800">
                     <div className="w-full rounded bg-blue-500" style={{ height: `${height}%` }} />
                   </div>
                   <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{day.date.slice(5)}</span>
