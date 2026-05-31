@@ -160,7 +160,7 @@ export default function DashboardPage() {
   const actions = roleActions(user?.role);
 
   return (
-    <div className="space-y-5 pb-20 lg:pb-0">
+    <div className="space-y-5 pb-20 lg:pb-0 bg-zinc-50 dark:bg-zinc-950">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
