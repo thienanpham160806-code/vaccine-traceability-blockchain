@@ -221,21 +221,21 @@ export default function BulkRegisterProductsPage() {
 
         <div className="flex flex-wrap gap-2">
           <button
-            className="rounded-md border px-4 py-2 text-sm font-semibold"
+            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
             onClick={resetSample}
             type="button"
           >
             Tạo mẫu mới
           </button>
-          <Link href="/dashboard/products" className="rounded-md border px-4 py-2 text-sm font-semibold">
+          <Link href="/dashboard/products" className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50">
             Danh sách sản phẩm
           </Link>
         </div>
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-        <section className="rounded-xl border bg-white p-6 shadow-sm">
-          <div className="mb-4 border-b pb-4">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 border-b border-zinc-200 pb-4">
             <h2 className="text-xl font-bold">Dữ liệu CSV</h2>
             <p className="text-sm text-muted-foreground">
               Cột bắt buộc: serialId, productName, expiryDate. Cột tùy chọn: batchId, manufacturerName, origin, quantity, importDocHash, zkpProof.
@@ -249,7 +249,7 @@ export default function BulkRegisterProductsPage() {
             >
               Chọn file
             </label>
-            <div className="flex min-h-10 items-center rounded-md border bg-zinc-50 px-3 text-sm text-zinc-600">
+            <div className="flex min-h-10 items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-600">
               {fileName || "Chưa chọn file"}
             </div>
             <input
@@ -288,13 +288,13 @@ export default function BulkRegisterProductsPage() {
           </button>
         </section>
 
-        <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-bold">Xem trước</h2>
 
           {parsedProducts.length === 0 ? (
             <p className="mt-4 text-sm text-muted-foreground">Chưa có dòng hợp lệ để xem trước.</p>
           ) : (
-            <div className="mt-4 max-h-[360px] overflow-auto rounded-lg border">
+            <div className="mt-4 max-h-[360px] overflow-auto rounded-lg border border-zinc-200">
               <table className="w-full text-left text-xs">
                 <thead className="bg-zinc-50">
                   <tr>
@@ -306,7 +306,7 @@ export default function BulkRegisterProductsPage() {
                 </thead>
                 <tbody>
                   {parsedProducts.map((product) => (
-                    <tr className="border-t" key={product.serialId}>
+                    <tr className="border-t border-zinc-100" key={product.serialId}>
                       <td className="p-3 font-mono">{product.serialId}</td>
                       <td className="p-3">{product.batchId || "Tự tạo"}</td>
                       <td className="p-3">{product.productName}</td>
@@ -326,15 +326,15 @@ export default function BulkRegisterProductsPage() {
           ) : (
             <div className="mt-4 space-y-4">
               <div className="grid grid-cols-3 gap-3 text-center text-sm">
-                <div className="rounded-lg border bg-zinc-50 p-3">
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
                   <p className="text-2xl font-bold">{result.total}</p>
                   <p className="text-muted-foreground">Tổng</p>
                 </div>
-                <div className="rounded-lg border bg-green-50 p-3">
-                  <p className="text-2xl font-bold text-green-700">{result.successful}</p>
-                  <p className="text-green-700">Thành công</p>
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+                  <p className="text-2xl font-bold text-emerald-700">{result.successful}</p>
+                  <p className="text-emerald-700">Thành công</p>
                 </div>
-                <div className="rounded-lg border bg-red-50 p-3">
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3">
                   <p className="text-2xl font-bold text-red-700">{result.failed}</p>
                   <p className="text-red-700">Lỗi</p>
                 </div>

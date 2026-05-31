@@ -2,6 +2,16 @@
 
 @source "../**/*.{js,ts,jsx,tsx,mdx}";
 
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-zinc-200, currentColor);
+  }
+}
+
 @layer utilities {
   /* Glassmorphism card — matches Figma login card */
   .glass-card {

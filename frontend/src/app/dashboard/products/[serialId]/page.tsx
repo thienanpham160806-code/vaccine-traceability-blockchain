@@ -203,12 +203,12 @@ export default function ProductDetailPage({ params }: PageProps) {
           </Link>
           <Link
             href={`/dashboard/verify/${encodeURIComponent(product.serialId)}`}
-            className="rounded-md border px-4 py-2 text-sm font-semibold"
+            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
           >
             Xác minh
           </Link>
           <button
-            className="rounded-md border px-4 py-2 text-sm font-semibold"
+            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
             onClick={startEditing}
             type="button"
           >
@@ -216,7 +216,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           </button>
           <Link
             href="/dashboard/products"
-            className="rounded-md border px-4 py-2 text-sm font-semibold"
+            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
           >
             Quay lại
           </Link>
@@ -224,8 +224,8 @@ export default function ProductDetailPage({ params }: PageProps) {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-        <section className="rounded-xl border bg-white p-6 shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-4">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-4">
             <div>
               <h2 className="text-xl font-bold">{product.productName}</h2>
               <p className="text-sm text-muted-foreground">{product.manufacturerName}</p>
@@ -283,14 +283,14 @@ export default function ProductDetailPage({ params }: PageProps) {
           </div>
 
           {product.notes ? (
-            <div className="mt-5 rounded-md border bg-gray-50 p-4 text-sm">
+            <div className="mt-5 rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm">
               <p className="font-semibold text-gray-700">Ghi chú</p>
               <p className="mt-1 text-muted-foreground">{product.notes}</p>
             </div>
           ) : null}
 
           {isEditing ? (
-            <div className="mt-5 space-y-4 rounded-md border bg-gray-50 p-4">
+            <div className="mt-5 space-y-4 rounded-md border border-zinc-200 bg-zinc-50 p-4">
               {Object.keys(fieldErrors).length > 0 ? (
                 <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
                   <p>Vui lòng kiểm tra các trường sau:</p>
@@ -308,7 +308,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                 <div className="space-y-1">
                   <label className="text-sm font-semibold text-gray-700">Tên sản phẩm</label>
                   <input
-                    className="w-full rounded-md border bg-white p-2 text-sm"
+                    className="w-full rounded-md border border-zinc-200 bg-white p-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     value={editForm.productName}
                     onChange={(event) => {
                       setFieldErrors({});
@@ -319,7 +319,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                 <div className="space-y-1">
                   <label className="text-sm font-semibold text-gray-700">Nhà sản xuất</label>
                   <input
-                    className="w-full rounded-md border bg-white p-2 text-sm"
+                    className="w-full rounded-md border border-zinc-200 bg-white p-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     value={editForm.manufacturerName}
                     onChange={(event) => {
                       setFieldErrors({});
@@ -330,7 +330,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                 <div className="space-y-1">
                   <label className="text-sm font-semibold text-gray-700">Ngày hết hạn</label>
                   <input
-                    className="w-full rounded-md border bg-white p-2 text-sm"
+                    className="w-full rounded-md border border-zinc-200 bg-white p-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     type="date"
                     value={editForm.expiryDate}
                     onChange={(event) => {
@@ -342,7 +342,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                 <div className="space-y-1 md:col-span-2">
                   <label className="text-sm font-semibold text-gray-700">Ghi chú</label>
                   <textarea
-                    className="min-h-24 w-full rounded-md border bg-white p-2 text-sm"
+                    className="min-h-24 w-full rounded-md border border-zinc-200 bg-white p-2 text-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
                     value={editForm.notes}
                     onChange={(event) => {
                       setFieldErrors({});
@@ -362,7 +362,7 @@ export default function ProductDetailPage({ params }: PageProps) {
                   {isSaving ? "Đang lưu..." : "Lưu metadata"}
                 </button>
                 <button
-                  className="rounded-md border px-4 py-2 text-sm font-semibold"
+                  className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
                   disabled={isSaving}
                   onClick={cancelEditing}
                   type="button"
@@ -378,10 +378,10 @@ export default function ProductDetailPage({ params }: PageProps) {
           ) : null}
         </section>
 
-        <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-bold">QR cho người dùng</h2>
           <p className="mt-1 text-sm text-muted-foreground">Link xác minh công khai cho serial này.</p>
-          <div className="mt-5 flex justify-center rounded-xl border bg-white p-5">
+          <div className="mt-5 flex justify-center rounded-xl border border-zinc-200 bg-white p-5">
             {product.qrImage ? (
               <img src={product.qrImage} alt={`QR for ${product.serialId}`} className="h-[180px] w-[180px]" />
             ) : (
@@ -399,7 +399,7 @@ export default function ProductDetailPage({ params }: PageProps) {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-bold">Blockchain</h2>
           <div className="mt-4 space-y-3 text-sm">
             <div>
@@ -438,7 +438,7 @@ export default function ProductDetailPage({ params }: PageProps) {
           </div>
         </section>
 
-        <section className="rounded-xl border bg-white p-6 shadow-sm">
+        <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-bold">Lô hàng & thu hồi</h2>
           <div className="mt-4 space-y-3 text-sm">
             <p>
@@ -474,11 +474,11 @@ export default function ProductDetailPage({ params }: PageProps) {
         </section>
       </div>
 
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
+      <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold">Lịch sử chuyển giao</h2>
         <div className="mt-4 space-y-3">
           {timeline.map((item: any, index) => (
-            <div key={item.id || item.blockchainTx || index} className="rounded-lg border p-4 text-sm">
+            <div key={item.id || item.blockchainTx || index} className="rounded-lg border border-zinc-200 p-4 text-sm">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="font-semibold">{item.status || "CHUYỂN GIAO"}</p>
                 <p className="text-xs text-muted-foreground">{formatDate(item.confirmedAt || item.createdAt)}</p>
@@ -495,11 +495,11 @@ export default function ProductDetailPage({ params }: PageProps) {
         </div>
       </section>
 
-      <section className="rounded-xl border bg-white p-6 shadow-sm">
+      <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold">Lịch sử rủi ro</h2>
         <div className="mt-4 space-y-3">
           {riskFlags.map((flag: any, index) => (
-            <div key={flag.id || flag.serialId || index} className="rounded-lg border p-4 text-sm">
+            <div key={flag.id || flag.serialId || index} className="rounded-lg border border-zinc-200 p-4 text-sm">
               <p className="font-semibold">{flag.reason || flag.flagReason || "Cảnh báo rủi ro"}</p>
               <p className="text-muted-foreground">Mức {String(flag.level || flag.riskLevel || "N/A")}</p>
             </div>

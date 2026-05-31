@@ -86,16 +86,16 @@ export function ProductTable() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 rounded-xl border bg-white p-4 shadow-sm md:grid-cols-[1fr_180px_180px]">
+      <div className="grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm md:grid-cols-[1fr_180px_180px]">
         <input
-          className="rounded-md border px-3 py-2 text-sm"
+          className="rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           value={search}
           onChange={(event) => updateSearch(event.target.value)}
           placeholder="Tìm serial, lô hàng, sản phẩm, nhà sản xuất"
         />
 
         <select
-          className="rounded-md border bg-white px-3 py-2 text-sm"
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           value={statusFilter}
           onChange={(event) => updateStatus(event.target.value)}
         >
@@ -107,7 +107,7 @@ export function ProductTable() {
         </select>
 
         <select
-          className="rounded-md border bg-white px-3 py-2 text-sm"
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
           value={sort}
           onChange={(event) => updateSort(event.target.value)}
         >
@@ -119,7 +119,7 @@ export function ProductTable() {
         </select>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         {isLoading ? <TableSkeleton columns={6} rows={pageSize} /> : null}
         {!isLoading && error ? (
           <div className="p-4">
@@ -127,28 +127,29 @@ export function ProductTable() {
           </div>
         ) : null}
 
-        {!isLoading && !error ? <table className="w-full text-left text-sm">
-          <thead className="border-b bg-gray-50 font-bold">
+        {!isLoading && !error ? <div className="overflow-x-auto">
+          <table className="w-full min-w-[920px] text-left text-sm">
+          <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-bold uppercase tracking-wide text-zinc-500">
             <tr>
-              <th className="p-4">Serial ID</th>
-              <th className="p-4">Mã lô</th>
-              <th className="p-4">Sản phẩm</th>
-              <th className="p-4">Nhà sản xuất</th>
-              <th className="p-4">Trạng thái</th>
-              <th className="p-4">Thao tác</th>
+              <th className="px-5 py-4">Serial ID</th>
+              <th className="px-5 py-4">Mã lô</th>
+              <th className="px-5 py-4">Sản phẩm</th>
+              <th className="px-5 py-4">Nhà sản xuất</th>
+              <th className="px-5 py-4">Trạng thái</th>
+              <th className="px-5 py-4">Thao tác</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-zinc-100">
             {products.map((product) => (
-              <tr key={product.serialId} className="border-b transition hover:bg-gray-50">
-                <td className="p-4 font-mono font-bold text-gray-900">{product.serialId}</td>
-                <td className="p-4 text-gray-500">{product.batchId}</td>
-                <td className="p-4">{product.productName}</td>
-                <td className="p-4 text-gray-500">{product.manufacturerName}</td>
-                <td className="p-4">
+              <tr key={product.serialId} className="transition hover:bg-zinc-50">
+                <td className="px-5 py-4 font-mono text-xs font-bold text-zinc-900">{product.serialId}</td>
+                <td className="px-5 py-4 text-zinc-500">{product.batchId}</td>
+                <td className="px-5 py-4 font-medium text-zinc-900">{product.productName}</td>
+                <td className="px-5 py-4 text-zinc-500">{product.manufacturerName}</td>
+                <td className="px-5 py-4">
                   <ProductStatusBadge status={product.status} />
                 </td>
-                <td className="flex flex-wrap gap-3 p-4">
+                <td className="flex flex-wrap gap-3 px-5 py-4">
                   <Link href={`/dashboard/products/${encodeURIComponent(product.serialId)}`} className="font-medium text-blue-600 hover:underline">
                     Chi tiết
                   </Link>
@@ -162,7 +163,8 @@ export function ProductTable() {
               </tr>
             ))}
           </tbody>
-        </table> : null}
+          </table>
+        </div> : null}
 
         {!isLoading && !error && products.length === 0 ? (
           <p className="p-4 text-sm text-gray-500">Không tìm thấy sản phẩm.</p>
@@ -176,7 +178,7 @@ export function ProductTable() {
 
         <div className="flex items-center gap-2">
           <button
-            className="rounded-md border px-3 py-2 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={page <= 1 || isLoading}
             onClick={() => setPage((current) => Math.max(1, current - 1))}
           >
@@ -186,7 +188,7 @@ export function ProductTable() {
             Trang {page} / {totalPages}
           </span>
           <button
-            className="rounded-md border px-3 py-2 font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
             disabled={page >= totalPages || isLoading}
             onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
           >

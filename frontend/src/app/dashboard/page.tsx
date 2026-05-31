@@ -56,15 +56,15 @@ function roleActions(role?: string) {
 
   if (role === "CLINIC" || role === "PHARMACY") {
     return [
-      { label: "Lá»‡nh chá» xÃ¡c nháº­n", href: "/dashboard/transfers?status=PENDING", icon: Clock, tone: "primary" },
+      { label: "Lệnh chờ xác nhận", href: "/dashboard/transfers?status=PENDING", icon: Clock, tone: "primary" },
       ...base.slice(0, 1),
     ];
   }
 
   if (role === "RECALL_AUTHORITY") {
     return [
-      { label: "Thu há»“i", href: "/dashboard/recall", icon: RotateCcw, tone: "primary" },
-      { label: "Rá»§i ro", href: "/dashboard/risk-dispute", icon: ShieldAlert, tone: "white" },
+      { label: "Thu hồi", href: "/dashboard/recall", icon: RotateCcw, tone: "primary" },
+      { label: "Rủi ro", href: "/dashboard/risk-dispute", icon: ShieldAlert, tone: "white" },
       ...base.slice(0, 1),
     ];
   }

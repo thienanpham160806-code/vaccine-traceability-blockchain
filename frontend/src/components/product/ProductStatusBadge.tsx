@@ -2,13 +2,14 @@ import type { ProductStatus, RiskLevel } from "@/lib/types";
 
 export function ProductStatusBadge({ status }: { status: ProductStatus }) {
   const colors: Record<string, string> = {
-    VERIFIED: "bg-green-100 text-green-800",
-    DELIVERED: "bg-green-100 text-green-800",
-    PENDING_DELIVERY: "bg-yellow-100 text-yellow-800",
-    FLAGGED: "bg-red-100 text-red-800",
-    RECALLED: "bg-gray-100 text-gray-800",
+    VERIFIED: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    DELIVERED: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    PENDING_DELIVERY: "border-blue-200 bg-blue-50 text-blue-700",
+    IN_TRANSIT: "border-blue-200 bg-blue-50 text-blue-700",
+    FLAGGED: "border-red-200 bg-red-50 text-red-700",
+    RECALLED: "border-zinc-200 bg-zinc-100 text-zinc-700",
   };
-  const colorClass = colors[status] || "bg-blue-100 text-blue-800";
+  const colorClass = colors[status] || "border-blue-200 bg-blue-50 text-blue-700";
   const labels: Record<ProductStatus, string> = {
     VERIFIED: "Đã xác minh",
     IN_TRANSIT: "Đang vận chuyển",
@@ -20,7 +21,7 @@ export function ProductStatusBadge({ status }: { status: ProductStatus }) {
   };
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
       {labels[status] || status}
     </span>
   );
@@ -28,12 +29,12 @@ export function ProductStatusBadge({ status }: { status: ProductStatus }) {
 
 export function RiskLevelBadge({ riskLevel }: { riskLevel: RiskLevel }) {
   const colors: Record<string, string> = {
-    SAFE: "bg-green-100 text-green-800",
-    ALERT: "bg-orange-100 text-orange-800",
-    HIGH: "bg-red-100 text-red-800",
-    CRITICAL: "bg-red-100 text-red-900",
+    SAFE: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    ALERT: "border-amber-200 bg-amber-50 text-amber-700",
+    HIGH: "border-red-200 bg-red-50 text-red-700",
+    CRITICAL: "border-red-200 bg-red-50 text-red-800",
   };
-  const colorClass = colors[riskLevel] || "bg-gray-100 text-gray-800";
+  const colorClass = colors[riskLevel] || "border-zinc-200 bg-zinc-100 text-zinc-700";
   const labels: Record<RiskLevel, string> = {
     SAFE: "An toàn",
     ALERT: "Cảnh báo",
@@ -42,7 +43,7 @@ export function RiskLevelBadge({ riskLevel }: { riskLevel: RiskLevel }) {
   };
 
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
       {labels[riskLevel] || riskLevel}
     </span>
   );

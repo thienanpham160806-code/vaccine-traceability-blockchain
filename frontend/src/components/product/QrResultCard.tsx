@@ -17,43 +17,43 @@ export function QrResultCard({
   const qrValue = `${baseUrl}/${serialId}`;
 
   return (
-    <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
-      <div className="p-6 border-b bg-gray-50">
-        <h3 className="font-bold text-lg text-gray-900">QR Code Generated</h3>
+    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+      <div className="border-b border-zinc-200 bg-zinc-50 p-6">
+        <h3 className="text-lg font-bold text-zinc-900">Đã tạo mã QR</h3>
       </div>
-      <div className="p-6 space-y-4">
+      <div className="space-y-4 p-6">
         <p className="text-sm text-muted-foreground">
-          This QR links to the public consumer verification page.
+          Mã QR này trỏ tới trang xác minh công khai cho người dùng.
         </p>
-        <div className="flex justify-center rounded-2xl bg-white border p-6">
+        <div className="flex justify-center rounded-2xl border border-zinc-200 bg-white p-6">
           {qrImage ? <img src={qrImage} alt={`QR for ${serialId}`} className="h-[180px] w-[180px]" /> : <QRCodeSVG value={qrValue} size={180} />}
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-700">Serial ID</p>
-          <p className="text-sm text-muted-foreground font-mono">{serialId}</p>
+          <p className="text-sm font-semibold text-zinc-700">Serial ID</p>
+          <p className="font-mono text-sm text-muted-foreground">{serialId}</p>
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-700">QR URL</p>
-          <p className="break-all text-xs text-muted-foreground font-mono">{qrValue}</p>
+          <p className="text-sm font-semibold text-zinc-700">QR URL</p>
+          <p className="break-all font-mono text-xs text-muted-foreground">{qrValue}</p>
         </div>
         {txHash ? (
           <div>
-            <p className="text-sm font-semibold text-gray-700">Transaction</p>
-            <p className="break-all text-xs text-muted-foreground font-mono">{txHash}</p>
+            <p className="text-sm font-semibold text-zinc-700">Giao dịch</p>
+            <p className="break-all font-mono text-xs text-muted-foreground">{txHash}</p>
           </div>
         ) : null}
         {ipfsCid ? (
           <div>
-            <p className="text-sm font-semibold text-gray-700">IPFS CID</p>
-            <p className="break-all text-xs text-muted-foreground font-mono">{ipfsCid}</p>
+            <p className="text-sm font-semibold text-zinc-700">IPFS CID</p>
+            <p className="break-all font-mono text-xs text-muted-foreground">{ipfsCid}</p>
           </div>
         ) : null}
         <div className="flex gap-2">
           <Link className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white" href={`/dashboard/verify/${serialId}`}>
-            Verify
+            Xác minh
           </Link>
           <Link className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white" href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(serialId)}`}>
-            Transfer
+            Chuyển giao
           </Link>
         </div>
       </div>
