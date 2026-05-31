@@ -39,6 +39,58 @@ function InfoRow({ icon: Icon, text }: { icon: React.ElementType; text: string }
   );
 }
 
+function MedicalBackdrop() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      <style jsx>{`
+        @keyframes floatSlow {
+          0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--rotate)); }
+          50% { transform: translate3d(var(--move-x), var(--move-y), 0) rotate(calc(var(--rotate) + 7deg)); }
+        }
+        @keyframes pulseCross {
+          0%, 100% { opacity: 0.1; transform: scale(0.94); }
+          50% { opacity: 0.26; transform: scale(1.08); }
+        }
+        .float-med { animation: floatSlow 8s ease-in-out infinite; }
+        .float-med-delay { animation: floatSlow 10s ease-in-out 1.2s infinite; }
+        .pulse-cross { animation: pulseCross 4.5s ease-in-out infinite; }
+      `}</style>
+
+      <div className="pulse-cross absolute -left-12 bottom-8 h-40 w-40 text-emerald-300/35">
+        <div className="absolute left-1/2 top-0 h-full w-10 -translate-x-1/2 rounded-full bg-current" />
+        <div className="absolute left-0 top-1/2 h-10 w-full -translate-y-1/2 rounded-full bg-current" />
+      </div>
+      <div className="pulse-cross absolute right-[28%] top-20 h-24 w-24 text-cyan-300/30 [animation-delay:1.4s]">
+        <div className="absolute left-1/2 top-0 h-full w-6 -translate-x-1/2 rounded-full bg-current" />
+        <div className="absolute left-0 top-1/2 h-6 w-full -translate-y-1/2 rounded-full bg-current" />
+      </div>
+      <div className="pulse-cross absolute bottom-16 right-8 h-32 w-32 text-emerald-400/25 [animation-delay:2.1s]">
+        <div className="absolute left-1/2 top-0 h-full w-8 -translate-x-1/2 rounded-full bg-current" />
+        <div className="absolute left-0 top-1/2 h-8 w-full -translate-y-1/2 rounded-full bg-current" />
+      </div>
+
+      <div
+        className="float-med absolute left-[5%] top-[18%] hidden h-44 w-16 rounded-full border border-blue-200/70 bg-white/80 shadow-lg shadow-blue-100/70 md:block"
+        style={{ "--rotate": "-18deg", "--move-x": "18px", "--move-y": "-16px" } as React.CSSProperties}
+      >
+        <div className="absolute left-1/2 top-4 h-24 w-9 -translate-x-1/2 rounded-full border border-blue-200 bg-gradient-to-b from-sky-100 to-blue-200" />
+        <div className="absolute left-1/2 bottom-8 h-10 w-10 -translate-x-1/2 rounded-full border border-blue-200 bg-white" />
+        <div className="absolute left-1/2 -bottom-8 h-12 w-2 -translate-x-1/2 rounded-full bg-zinc-300" />
+        <div className="absolute left-1/2 -bottom-12 h-8 w-px -translate-x-1/2 bg-zinc-400" />
+      </div>
+
+      <div
+        className="float-med-delay absolute bottom-[14%] left-[42%] hidden h-3 w-56 rounded-full bg-gradient-to-r from-zinc-300 via-white to-blue-100 shadow-lg shadow-blue-100/60 lg:block"
+        style={{ "--rotate": "22deg", "--move-x": "-18px", "--move-y": "12px" } as React.CSSProperties}
+      >
+        <div className="absolute -left-9 top-1/2 h-9 w-12 -translate-y-1/2 rounded-md border border-zinc-200 bg-white" />
+        <div className="absolute -right-20 top-1/2 h-px w-20 -translate-y-1/2 bg-zinc-400" />
+        <div className="absolute -right-24 top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-r border-t border-zinc-400" />
+      </div>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
@@ -126,8 +178,9 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50">
-      <header className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-6">
+    <div className="relative flex min-h-[100dvh] flex-col overflow-hidden bg-[radial-gradient(circle_at_20%_20%,#dbeafe_0,#f8fafc_32%,#f8fafc_100%)]">
+      <MedicalBackdrop />
+      <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600/10">
             <Activity className="h-5 w-5 text-blue-600" />
@@ -141,8 +194,8 @@ export default function LoginPage() {
         ) : null}
       </header>
 
-      <main className="mx-auto grid w-full max-w-6xl flex-1 gap-8 px-5 py-6 lg:grid-cols-[1fr_480px] lg:items-center">
-        <section className="space-y-8">
+      <main className="relative z-10 mx-auto grid w-full max-w-7xl flex-1 gap-8 px-5 pb-6 pt-2 lg:grid-cols-[minmax(0,1fr)_520px] lg:items-center lg:px-8">
+        <section className="space-y-7 py-6">
           <div className="space-y-4">
             <h1 className="max-w-2xl text-4xl font-extrabold leading-tight text-zinc-950 sm:text-5xl">
               Xác thực chuỗi cung ứng vaccine
@@ -159,7 +212,7 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-zinc-200 bg-white p-6 shadow-sm">
+        <section className="max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-lg border border-zinc-200 bg-white/92 p-6 shadow-xl shadow-blue-950/5 backdrop-blur">
           <div className="text-center">
             <h2 className="text-2xl font-bold text-zinc-950">Đăng nhập hệ thống</h2>
             <p className="mt-1 text-sm text-zinc-500">Chọn ví demo hoặc đăng nhập trực tiếp bằng MetaMask.</p>
