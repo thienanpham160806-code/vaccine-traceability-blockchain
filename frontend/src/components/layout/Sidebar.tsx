@@ -173,9 +173,9 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
         </div>
       </div>
 
-      <div className="space-y-1 border-t border-zinc-800 p-3">
+      <div className="space-y-1 border-t border-zinc-200 p-3 dark:border-zinc-800">
         <a
-          className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-800 hover:text-blue-400"
+          className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-blue-400"
           href="mailto:support@vaxitrust.local"
         >
           <HelpCircle className="h-4 w-4" />
@@ -184,7 +184,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
 
         <button
           onClick={logout}
-          className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-800 hover:text-red-400"
+          className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-red-400"
         >
           <LogOut className="h-4 w-4" />
           {t("Đăng xuất")}
@@ -196,7 +196,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           onMouseLeave={() => setSettingsOpen(false)}
         >
           <button
-            className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-800 hover:text-blue-400"
+            className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-blue-400"
             onClick={() => setSettingsOpen((current) => !current)}
             type="button"
           >
@@ -205,7 +205,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           </button>
 
           {settingsOpen ? (
-            <div className="absolute bottom-0 left-full z-50 ml-2 w-44 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">
+            <div className="absolute bottom-0 left-full z-50 ml-2 w-44 rounded-xl border border-zinc-200 bg-white p-2 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
               <div className="space-y-2">
                 <div>
                   <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
@@ -217,7 +217,9 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
                     return (
                       <button
                         className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-sm transition ${
-                          selected ? "bg-blue-600/15 text-blue-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                          selected
+                            ? "bg-blue-600/15 text-blue-400"
+                            : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                         }`}
                         key={option.value}
                         onClick={() => setTheme(option.value)}
@@ -245,8 +247,8 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
                           onClick={() => handleLanguageChange(option.value)}
                           className={`flex h-11 items-center justify-center rounded-lg border px-2 text-sm font-semibold transition ${
                             selected
-                              ? "border-blue-500 bg-blue-600/15 text-blue-100"
-                              : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-100"
+                              ? "border-blue-500 bg-blue-600/15 text-blue-700 dark:text-blue-100"
+                              : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-100"
                           }`}
                         >
                           <span className="flex items-center justify-center text-lg">
