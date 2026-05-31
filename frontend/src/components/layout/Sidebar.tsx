@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import {
   Boxes,
@@ -70,6 +70,20 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
     return getStoredUser();
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!settingsOpen) return;
+
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (settingsRef.current && !settingsRef.current.contains(event.target as Node)) {
+        setSettingsOpen(false);
+      }
+    };
+
+    window.addEventListener("mousedown", handleOutsideClick);
+    return () => window.removeEventListener("mousedown", handleOutsideClick);
+  }, [settingsOpen]);
 
   const handleLanguageChange = (value: "en" | "vi") => {
     setLanguage(value);
@@ -153,7 +167,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
 
       <div className="mx-3 mb-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
         <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-          Tra cứu serial
+          {t("Tra cứu serial")}
         </p>
         <div className="flex gap-1.5">
           <input
@@ -166,7 +180,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           <button
             onClick={goVerify}
             className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700"
-            aria-label="Xác minh serial"
+            aria-label={t("Xác minh serial")}
           >
             <Search className="h-3.5 w-3.5" />
           </button>
@@ -190,18 +204,16 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           {t("Đăng xuất")}
         </button>
 
-        <div
-          className="relative"
-          onMouseEnter={() => setSettingsOpen(true)}
-          onMouseLeave={() => setSettingsOpen(false)}
-        >
+        <div ref={settingsRef} className="relative">
           <button
             className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-blue-400"
             onClick={() => setSettingsOpen((current) => !current)}
             type="button"
+            aria-expanded={settingsOpen}
+            aria-haspopup="true"
           >
             <Settings className="h-4 w-4" />
-            Cài đặt
+            {t("Cài đặt")}
           </button>
 
           {settingsOpen ? (

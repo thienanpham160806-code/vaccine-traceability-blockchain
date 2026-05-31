@@ -43,6 +43,8 @@ const englishTranslations: Record<string, string> = {
   "Chi tiết lệnh chuyển": "Transfer details",
   "Bản ghi chuyển giao trên Blockchain": "Blockchain transfer record",
   "Xác minh": "Verification",
+  "Xác minh serial": "Verify serial",
+  "Tra cứu serial": "Search serial",
   "Tính xác thực và lịch sử sản phẩm": "Product authenticity and history",
   "Dashboard": "Dashboard",
   "VaxiTrust": "VaxiTrust",
