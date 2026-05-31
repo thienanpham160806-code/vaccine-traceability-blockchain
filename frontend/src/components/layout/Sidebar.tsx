@@ -117,8 +117,12 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
   });
 
   return (
-    <aside className={`${mobile ? "flex h-full w-72" : "hidden min-h-screen w-64 lg:flex"} flex-col border-r border-zinc-800 bg-zinc-950`}>
-      <Link href="/dashboard" onClick={onNavigate} className="flex min-h-16 items-center border-b border-zinc-800 px-5 py-5">
+    <aside className={`${mobile ? "flex h-full w-72" : "hidden min-h-screen w-64 lg:flex"} flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950`}>
+      <Link
+        href="/dashboard"
+        onClick={onNavigate}
+        className="flex min-h-16 items-center border-b border-zinc-200 bg-white px-5 py-5 dark:border-zinc-800 dark:bg-zinc-950"
+      >
         <VaxiTrustLogo
           className="h-12 w-12"
           iconClassName="h-7 w-7"
@@ -155,7 +159,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
               className={`group flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
                 active
                   ? "bg-blue-600/15 text-blue-400 shadow-[inset_2px_0_0_#3b82f6]"
-                  : "text-zinc-400 hover:bg-zinc-800/60 hover:text-zinc-100"
+                  : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
               }`}
             >
               <Icon className={`h-4 w-4 transition-colors ${active ? "text-blue-400" : "text-zinc-500 group-hover:text-zinc-300"}`} />
@@ -165,8 +169,8 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
         })}
       </nav>
 
-      <div className="mx-3 mb-3 rounded-xl border border-zinc-800 bg-zinc-900/50 p-3">
-        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500">
+      <div className="mx-3 mb-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-950/80">
+        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">
           {t("Tra cứu serial")}
         </p>
         <div className="flex gap-1.5">
