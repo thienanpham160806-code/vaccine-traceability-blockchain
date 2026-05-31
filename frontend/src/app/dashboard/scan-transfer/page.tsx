@@ -18,6 +18,7 @@ import {
   transferScanFormSchema,
 } from "@/lib/validation";
 import { getTransferLedgerAddress, toBytes32, transferLedgerAbi } from "@/lib/wallet-contracts";
+import { useTranslation } from "@/providers/LanguageProvider";
 
 const statusChip: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-700 border-amber-200",
@@ -149,7 +150,7 @@ function TransferList() {
                 statusChip[t.status] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
               }`}
             >
-              {statusLabel[t.status] ?? t.status}
+              {statusLabel[t.status] || t.status}
             </span>
           </div>
 
@@ -220,6 +221,7 @@ function TransferList() {
 }
 
 export default function ScanTransferPage() {
+  const t = useTranslation();
   const qc = useQueryClient();
   const { address } = useAccount();
   const publicClient = usePublicClient();
@@ -263,7 +265,7 @@ export default function ScanTransferPage() {
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
         setFieldErrors(errors);
-        setError(Object.values(errors)[0] || "Please fix the highlighted fields.");
+        setError(Object.values(errors)[0] || "Vui lòng kiểm tra các trường đang báo lỗi.");
         setStatusMsg(null);
         return;
       }
@@ -326,7 +328,7 @@ export default function ScanTransferPage() {
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
         setFieldErrors(errors);
-        setError(Object.values(errors)[0] || "Please fix the highlighted fields.");
+        setError(Object.values(errors)[0] || "Vui lòng kiểm tra các trường đang báo lỗi.");
         setStatusMsg(null);
         return;
       }
@@ -348,24 +350,24 @@ export default function ScanTransferPage() {
     <div className="space-y-5 pb-20 lg:pb-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-zinc-900">Create transfer</h1>
-          <p className="text-sm text-zinc-500">Create a blockchain-backed delivery request.</p>
+          <h1 className="text-xl font-bold text-zinc-900">{t("Tạo lệnh")}</h1>
+          <p className="text-sm text-zinc-500">{t("Ghi nhận chuyển giao vaccine lên blockchain.")}</p>
         </div>
         <Link
           href="/dashboard/transfers"
           className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-bold text-zinc-700 hover:bg-zinc-50"
         >
           <ListChecks className="h-4 w-4" />
-          All transfers
+          {t("Lệnh")}
         </Link>
       </div>
 
     <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-      {/* Left: Create transfer form */}
+      {/* Form tạo lệnh chuyển giao */}
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
         <div className="mb-5 border-b border-zinc-100 pb-4">
-          <h2 className="font-bold text-zinc-900">Tạo lệnh chuyển giao</h2>
-          <p className="text-xs text-zinc-500">Ghi nhận chuyển giao vaccine lên blockchain.</p>
+            <h2 className="font-bold text-zinc-900">{t("Tạo lệnh chuyển giao")}</h2>
+            <p className="text-xs text-zinc-500">{t("Ghi nhận chuyển giao vaccine lên blockchain.")}</p>
         </div>
 
         <div className="space-y-4">
@@ -382,7 +384,7 @@ export default function ScanTransferPage() {
           </Field>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Từ (From)">
+            <Field label="Từ">
               <select
                 className={inputCls}
                 value={fromRole}
@@ -396,7 +398,7 @@ export default function ScanTransferPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Đến (To)">
+            <Field label="Đến">
               <select
                 className={inputCls}
                 value={toRole}
@@ -476,7 +478,7 @@ export default function ScanTransferPage() {
         </div>
       </div>
 
-      {/* Right: Transfers list */}
+      {/* Danh sách lệnh chuyển giao */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
