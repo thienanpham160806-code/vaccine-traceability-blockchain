@@ -6,31 +6,22 @@ import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { ArrowLeft, Download, ExternalLink, QrCode, X } from "lucide-react";
 import { getBatch, getBatchSerials } from "@/lib/api";
+import { getProductStatusLabel, getStatusChipClass } from "@/lib/status";
 import type { Batch, Product } from "@/lib/types";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 interface PageProps {
   params: Promise<{ batchId: string }>;
 }
 
-const statusChip: Record<string, string> = {
-  VERIFIED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  PENDING_DELIVERY: "bg-amber-50 text-amber-700 border-amber-200",
-  DELIVERED: "bg-blue-50 text-blue-700 border-blue-200",
-  FLAGGED: "bg-orange-50 text-orange-700 border-orange-200",
-  RECALLED: "bg-red-50 text-red-700 border-red-200",
-  REGISTERED: "bg-zinc-100 text-zinc-600 border-zinc-200",
-};
-
-const statusLabel: Record<string, string> = {
-  VERIFIED: "Đã xác thực",
-  PENDING_DELIVERY: "Chờ giao",
-  DELIVERED: "Đã giao",
-  FLAGGED: "Bị gắn cờ",
-  RECALLED: "Thu hồi",
-  REGISTERED: "Đã đăng ký",
-};
+function getOriginLabel(origin: string | undefined, isRecalled: boolean, t: (key: string) => string) {
+  if (isRecalled) return t("Đã thu hồi");
+  if (origin === "IMPORTED") return t("Nhập khẩu");
+  return t("Sản xuất");
+}
 
 function QRModal({ serialId, onClose }: { serialId: string; onClose: () => void }) {
+  const t = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
 
   const downloadSVG = () => {
@@ -52,12 +43,13 @@ function QRModal({ serialId, onClose }: { serialId: string; onClose: () => void 
       onClick={onClose}
     >
       <div
-        className="relative w-72 rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl text-center"
+        className="relative w-72 rounded-2xl border border-zinc-200 bg-white p-6 text-center shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           onClick={onClose}
           className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100"
+          aria-label={t("Đóng")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -73,7 +65,7 @@ function QRModal({ serialId, onClose }: { serialId: string; onClose: () => void 
           className="btn-brand mt-4 flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-bold text-white"
         >
           <Download className="h-4 w-4" />
-          Tải SVG
+          {t("Tải SVG")}
         </button>
       </div>
     </div>
@@ -93,6 +85,8 @@ export default function BatchDetailPage({ params }: PageProps) {
   const { batchId } = use(params);
   const decoded = decodeURIComponent(batchId);
   const [qrSerial, setQrSerial] = useState<string | null>(null);
+  const t = useTranslation();
+  const { language } = useLanguage();
 
   const { data: batch, isLoading: batchLoading } = useQuery<Batch | undefined>({
     queryKey: ["batch", decoded],
@@ -118,68 +112,65 @@ export default function BatchDetailPage({ params }: PageProps) {
     return (
       <div className="flex flex-col items-center py-24 text-center">
         <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 text-2xl">
-          📦
+          <span aria-hidden="true">□</span>
         </div>
-        <p className="font-bold text-zinc-800">Không tìm thấy lô hàng</p>
+        <p className="font-bold text-zinc-800">{t("Không tìm thấy lô hàng")}</p>
         <p className="mt-1 font-mono text-xs text-zinc-400">{decoded}</p>
         <Link
           href="/dashboard/batches"
           className="mt-4 flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Quay lại
+          <ArrowLeft className="h-3.5 w-3.5" /> {t("Quay lại")}
         </Link>
       </div>
     );
   }
 
-  const statusCounts = serials.reduce<Record<string, number>>((acc, s) => {
-    acc[s.status] = (acc[s.status] || 0) + 1;
+  const statusCounts = serials.reduce<Record<string, number>>((acc, serial) => {
+    acc[serial.status] = (acc[serial.status] || 0) + 1;
     return acc;
   }, {});
+  const isRecalled = !!batch.recalledAt;
 
   return (
     <>
       {qrSerial && <QRModal serialId={qrSerial} onClose={() => setQrSerial(null)} />}
 
       <div className="space-y-5">
-        {/* Back */}
         <Link
           href="/dashboard/batches"
           className="flex items-center gap-1 text-xs font-semibold text-zinc-500 hover:text-zinc-800"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Quản lý lô hàng
+          <ArrowLeft className="h-3.5 w-3.5" /> {t("Quản lý lô hàng")}
         </Link>
 
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold text-zinc-900">{batch.productName}</h1>
             <p className="mt-0.5 font-mono text-xs text-zinc-400">{batch.batchQR || batch.batchHash}</p>
           </div>
-          {batch.recalledAt ? (
-            <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-xs font-bold text-red-700">
-              THU HỒI
-            </span>
-          ) : (
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
-              {batch.origin}
-            </span>
-          )}
+          <span
+            className={`rounded-full border px-3 py-1 text-xs font-bold ${
+              isRecalled
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {getOriginLabel(batch.origin, isRecalled, t)}
+          </span>
         </div>
 
-        {/* Stats */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Tổng serial" value={batch.quantity} />
-          <StatCard label="Đã đăng ký" value={serials.length} />
-          <StatCard label="Đã giao" value={statusCounts["DELIVERED"] ?? 0} />
-          <StatCard label="Chờ giao" value={statusCounts["PENDING_DELIVERY"] ?? 0} />
+          <StatCard label={t("Tổng serial")} value={batch.quantity} />
+          <StatCard label={t("Đã đăng ký")} value={serials.length} />
+          <StatCard label={t("Đã giao")} value={statusCounts.DELIVERED ?? 0} />
+          <StatCard label={t("Chờ giao")} value={statusCounts.PENDING_DELIVERY ?? 0} />
         </div>
 
-        {/* Metadata */}
         <div className="grid gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:grid-cols-2">
           {[
-            { label: "Nhà sản xuất", value: batch.manufacturerName },
-            { label: "Ngày hết hạn", value: batch.expiryDate },
+            { label: t("Nhà sản xuất"), value: batch.manufacturerName },
+            { label: t("Ngày hết hạn"), value: batch.expiryDate },
           ].map(({ label, value }) => (
             <div key={label}>
               <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">{label}</p>
@@ -188,7 +179,7 @@ export default function BatchDetailPage({ params }: PageProps) {
           ))}
           <div>
             <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-              Địa chỉ nhà SX
+              {t("Địa chỉ nhà sản xuất")}
             </p>
             <p className="mt-1 break-all font-mono text-xs text-zinc-500">{batch.manufacturerAddress}</p>
           </div>
@@ -200,11 +191,10 @@ export default function BatchDetailPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* Serials table */}
         <div>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-semibold text-zinc-800">
-              Danh sách Serial
+              {t("Danh sách serial")}
               {serials.length > 0 && (
                 <span className="ml-2 font-normal text-zinc-400">({serials.length})</span>
               )}
@@ -219,12 +209,12 @@ export default function BatchDetailPage({ params }: PageProps) {
             </div>
           ) : serials.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-zinc-300 py-12 text-center">
-              <p className="text-sm text-zinc-500">Chưa có serial nào cho lô này.</p>
+              <p className="text-sm text-zinc-500">{t("Chưa có serial nào cho lô này.")}</p>
               <Link
                 href="/dashboard/batches"
                 className="mt-2 inline-block text-xs font-semibold text-blue-600 hover:underline"
               >
-                Đăng ký sản phẩm
+                {t("Đăng ký sản phẩm")}
               </Link>
             </div>
           ) : (
@@ -232,9 +222,9 @@ export default function BatchDetailPage({ params }: PageProps) {
               <table className="w-full text-sm">
                 <thead className="border-b border-zinc-100 bg-zinc-50">
                   <tr>
-                    {["Serial ID", "Trạng thái", "Rủi ro", "Chủ hiện tại", "Thao tác"].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">
-                        {h}
+                    {["Serial ID", t("Trạng thái"), t("Rủi ro"), t("Chủ hiện tại"), t("Thao tác")].map((heading) => (
+                      <th key={heading} className="px-4 py-3 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                        {heading}
                       </th>
                     ))}
                   </tr>
@@ -245,18 +235,16 @@ export default function BatchDetailPage({ params }: PageProps) {
                       <td className="px-4 py-3 font-mono text-xs text-zinc-700">{serial.serialId}</td>
                       <td className="px-4 py-3">
                         <span
-                          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
-                            statusChip[serial.status] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
-                          }`}
+                          className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${getStatusChipClass(serial.status)}`}
                         >
-                          {statusLabel[serial.status] ?? serial.status}
+                          {getProductStatusLabel(serial.status, language)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-zinc-500">{serial.riskLevel ?? "—"}</td>
+                      <td className="px-4 py-3 text-xs text-zinc-500">{serial.riskLevel ? t(serial.riskLevel) : "-"}</td>
                       <td className="px-4 py-3 font-mono text-xs text-zinc-400">
                         {serial.currentOwner
-                          ? `${serial.currentOwner.slice(0, 6)}…${serial.currentOwner.slice(-4)}`
-                          : "—"}
+                          ? `${serial.currentOwner.slice(0, 6)}...${serial.currentOwner.slice(-4)}`
+                          : "-"}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex gap-1.5">
@@ -270,13 +258,13 @@ export default function BatchDetailPage({ params }: PageProps) {
                             href={`/dashboard/verify/${encodeURIComponent(serial.serialId)}`}
                             className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2 py-1 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50"
                           >
-                            <ExternalLink className="h-3 w-3" /> Verify
+                            <ExternalLink className="h-3 w-3" /> {t("Xác minh")}
                           </Link>
                           <Link
                             href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(serial.serialId)}`}
                             className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
                           >
-                            Chuyển
+                            {t("Chuyển")}
                           </Link>
                         </div>
                       </td>

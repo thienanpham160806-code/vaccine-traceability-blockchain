@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, RefreshCw, RotateCcw } from "lucide-react";
 import { createRecall, getApiErrorMessage, getRecalls } from "@/lib/api";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-red-300 focus:bg-white focus:ring-2 focus:ring-red-100";
@@ -18,25 +19,28 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function RecallCard({ recall }: { recall: any }) {
+  const t = useTranslation();
+  const { language } = useLanguage();
+
   return (
-    <div className="rounded-xl border-l-4 border-l-red-500 border border-zinc-200 bg-white p-4 shadow-sm space-y-3">
+    <div className="space-y-3 rounded-xl border border-l-4 border-zinc-200 border-l-red-500 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">Batch Hash</p>
           <p className="mt-0.5 break-all font-mono text-xs text-zinc-700">{recall.batchHash}</p>
         </div>
         <span className="shrink-0 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-bold text-red-700">
-          THU HỒI
+          {t("Thu hồi")}
         </span>
       </div>
       <div className="grid grid-cols-2 gap-3 border-t border-zinc-100 pt-3 text-sm">
         <div>
-          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">Lý do</p>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">{t("Lý do")}</p>
           <p className="mt-0.5 font-semibold text-zinc-800">{recall.reason || recall.reasonHash}</p>
         </div>
         <div>
-          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">Serial ảnh hưởng</p>
-          <p className="mt-0.5 font-semibold text-zinc-800">{recall.serialsAffected ?? "—"}</p>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">{t("Serial ảnh hưởng")}</p>
+          <p className="mt-0.5 font-semibold text-zinc-800">{recall.serialsAffected ?? "-"}</p>
         </div>
       </div>
       {(recall.txHash || recall.blockchainTx) && (
@@ -45,7 +49,7 @@ function RecallCard({ recall }: { recall: any }) {
         </p>
       )}
       {recall.createdAt && (
-        <p className="text-xs text-zinc-400">{new Date(recall.createdAt).toLocaleString("vi-VN")}</p>
+        <p className="text-xs text-zinc-400">{new Date(recall.createdAt).toLocaleString(language === "en" ? "en-US" : "vi-VN")}</p>
       )}
     </div>
   );
@@ -53,6 +57,7 @@ function RecallCard({ recall }: { recall: any }) {
 
 export default function RecallPage() {
   const qc = useQueryClient();
+  const t = useTranslation();
   const { data: recalls = [], isLoading } = useQuery<any[]>({
     queryKey: ["recalls"],
     queryFn: getRecalls,
@@ -76,13 +81,13 @@ export default function RecallPage() {
         reason: reason.trim(),
         serials: serials.split(",").map((s) => s.trim()).filter(Boolean),
       });
-      setSuccess(`Lệnh thu hồi đã được tạo on-chain. TX: ${data.txHash}`);
+      setSuccess(`${t("Lệnh thu hồi đã được tạo on-chain.")} TX: ${data.txHash}`);
       setBatchHash("");
       setReason("");
       setSerials("");
       qc.invalidateQueries({ queryKey: ["recalls"] });
     } catch (err: any) {
-      setError(getApiErrorMessage(err, "Tạo lệnh thu hồi thất bại."));
+      setError(getApiErrorMessage(err, t("Tạo lệnh thu hồi thất bại.")));
     } finally {
       setIsBusy(false);
     }
@@ -90,36 +95,35 @@ export default function RecallPage() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_1fr]">
-      {/* Form */}
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
         <div className="mb-5 border-b border-zinc-100 pb-4">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-red-500" />
-            <h2 className="font-bold text-zinc-900">Phát lệnh thu hồi</h2>
+            <h2 className="font-bold text-zinc-900">{t("Phát lệnh thu hồi")}</h2>
           </div>
           <p className="mt-1 text-xs text-zinc-500">
-            Chỉ cơ quan có thẩm quyền mới có thể thực hiện. Smart contract sẽ được gọi.
+            {t("Chỉ cơ quan có thẩm quyền mới có thể thực hiện. Smart contract sẽ được gọi.")}
           </p>
         </div>
 
         <div className="space-y-4">
-          <Field label="Batch Hash hoặc Batch ID">
+          <Field label={t("Batch Hash hoặc Batch ID")}>
             <input
               className={`${inputCls} font-mono`}
               value={batchHash}
               onChange={(e) => setBatchHash(e.target.value)}
-              placeholder="0x… hoặc BATCH-VCN-…"
+              placeholder="0x... hoặc BATCH-VCN-..."
             />
           </Field>
-          <Field label="Lý do thu hồi">
+          <Field label={t("Lý do thu hồi")}>
             <input
               className={inputCls}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Vd: Lỗi chuỗi lạnh"
+              placeholder={t("Ví dụ: Lỗi chuỗi lạnh")}
             />
           </Field>
-          <Field label="Serial IDs (phân cách bằng dấu phẩy)">
+          <Field label={t("Serial IDs phân cách bằng dấu phẩy")}>
             <textarea
               className={`${inputCls} min-h-[80px]`}
               value={serials}
@@ -135,7 +139,7 @@ export default function RecallPage() {
           </div>
         )}
         {success && (
-          <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 break-all">
+          <div className="mt-4 break-all rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">
             {success}
           </div>
         )}
@@ -146,17 +150,16 @@ export default function RecallPage() {
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
         >
           <AlertTriangle className="h-4 w-4" />
-          {isBusy ? "Đang xử lý…" : "THU HỒI LÔ HÀNG"}
+          {isBusy ? t("Đang xử lý...") : t("Thu hồi lô hàng")}
         </button>
       </div>
 
-      {/* History */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <RotateCcw className="h-4 w-4 text-red-500" />
             <h2 className="font-semibold text-zinc-800">
-              Lịch sử thu hồi
+              {t("Lịch sử thu hồi")}
               {recalls.length > 0 && (
                 <span className="ml-2 font-normal text-zinc-400">({recalls.length})</span>
               )}
@@ -165,6 +168,7 @@ export default function RecallPage() {
           <button
             onClick={() => qc.invalidateQueries({ queryKey: ["recalls"] })}
             className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
+            aria-label={t("Làm mới")}
           >
             <RefreshCw className="h-3 w-3" />
           </button>
@@ -177,7 +181,7 @@ export default function RecallPage() {
         ) : recalls.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-zinc-300 py-12 text-center">
             <RotateCcw className="mx-auto mb-2 h-8 w-8 text-zinc-300" />
-            <p className="text-sm text-zinc-400">Chưa có lệnh thu hồi nào.</p>
+            <p className="text-sm text-zinc-400">{t("Chưa có lệnh thu hồi nào.")}</p>
           </div>
         ) : (
           <div className="space-y-3">

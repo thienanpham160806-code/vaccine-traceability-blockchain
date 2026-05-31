@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, RefreshCw, ShieldAlert } from "lucide-react";
 import { createDispute, getApiErrorMessage, getDisputes, getRiskFlags } from "@/lib/api";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const riskChip: Record<string, string> = {
   SAFE: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -25,6 +26,12 @@ const disputeChip: Record<string, string> = {
   REJECTED: "bg-zinc-100 text-zinc-600 border-zinc-200",
 };
 
+const disputeStatusLabel: Record<string, string> = {
+  OPEN: "Đang mở",
+  RESOLVED: "Đã xử lý",
+  REJECTED: "Đã từ chối",
+};
+
 const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
 
@@ -39,6 +46,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export default function RiskDisputePage() {
   const qc = useQueryClient();
+  const t = useTranslation();
+  const { language } = useLanguage();
 
   const { data: riskFlags = [], isLoading: flagsLoading } = useQuery<any[]>({
     queryKey: ["risk-flags"],
@@ -57,6 +66,9 @@ export default function RiskDisputePage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
+  const formatTime = (timestamp: number) =>
+    new Date(timestamp).toLocaleString(language === "en" ? "en-US" : "vi-VN");
+
   const submitDispute = async () => {
     if (!serialId.trim() || !reason.trim()) return;
     setIsBusy(true);
@@ -68,12 +80,12 @@ export default function RiskDisputePage() {
         reason: reason.trim(),
         reportedBy: "dashboard-user",
       });
-      setSuccess(`Khiếu nại đã tạo: ${data.id}`);
+      setSuccess(`${t("Khiếu nại đã tạo")}: ${data.id}`);
       setSerialId("");
       setReason("");
       qc.invalidateQueries({ queryKey: ["disputes"] });
     } catch (err: any) {
-      setError(getApiErrorMessage(err, "Tạo khiếu nại thất bại."));
+      setError(getApiErrorMessage(err, t("Tạo khiếu nại thất bại.")));
     } finally {
       setIsBusy(false);
     }
@@ -81,14 +93,12 @@ export default function RiskDisputePage() {
 
   return (
     <div className="space-y-6">
-      {/* Top row: risk flags + dispute form */}
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Risk flags */}
         <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
             <div className="flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-red-500" />
-              <h2 className="font-bold text-zinc-900">Cảnh báo rủi ro</h2>
+              <h2 className="font-bold text-zinc-900">{t("Cảnh báo rủi ro")}</h2>
             </div>
             <div className="flex items-center gap-2">
               {riskFlags.length > 0 && (
@@ -99,13 +109,14 @@ export default function RiskDisputePage() {
               <button
                 onClick={() => qc.invalidateQueries({ queryKey: ["risk-flags"] })}
                 className="flex h-7 w-7 items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:bg-zinc-50"
+                aria-label={t("Làm mới")}
               >
                 <RefreshCw className="h-3 w-3" />
               </button>
             </div>
           </div>
 
-          <div className="p-3 space-y-2">
+          <div className="space-y-2 p-3">
             {flagsLoading ? (
               <div className="space-y-2 p-2">
                 {[1, 2].map((i) => <div key={i} className="h-16 animate-pulse rounded-lg bg-zinc-100" />)}
@@ -113,13 +124,13 @@ export default function RiskDisputePage() {
             ) : riskFlags.length === 0 ? (
               <div className="py-10 text-center">
                 <ShieldAlert className="mx-auto mb-2 h-8 w-8 text-zinc-200" />
-                <p className="text-sm text-zinc-400">Không có cảnh báo. Hệ thống bình thường.</p>
+                <p className="text-sm text-zinc-400">{t("Không có cảnh báo. Hệ thống bình thường.")}</p>
               </div>
             ) : (
               riskFlags.map((flag) => (
                 <div
                   key={flag.id || flag.serialId}
-                  className={`rounded-lg border-l-4 border border-zinc-200 p-3 ${
+                  className={`rounded-lg border border-l-4 border-zinc-200 p-3 ${
                     riskBorder[flag.riskLevel ?? "ALERT"] ?? "border-l-zinc-400"
                   }`}
                 >
@@ -130,14 +141,12 @@ export default function RiskDisputePage() {
                         riskChip[flag.riskLevel ?? "ALERT"] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
                       }`}
                     >
-                      {flag.riskLevel ?? `Level ${flag.level}`}
+                      {flag.riskLevel ? t(flag.riskLevel) : `${t("Mức")} ${flag.level}`}
                     </span>
                   </div>
                   {flag.reason && <p className="mt-1 text-xs text-zinc-500">{flag.reason}</p>}
                   {flag.createdAt && (
-                    <p className="mt-0.5 text-[10px] text-zinc-400">
-                      {new Date(flag.createdAt).toLocaleString("vi-VN")}
-                    </p>
+                    <p className="mt-0.5 text-[10px] text-zinc-400">{formatTime(flag.createdAt)}</p>
                   )}
                 </div>
               ))
@@ -145,15 +154,14 @@ export default function RiskDisputePage() {
           </div>
         </div>
 
-        {/* Dispute form */}
         <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
           <div className="mb-5 border-b border-zinc-100 pb-4">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-4 w-4 text-amber-500" />
-              <h2 className="font-bold text-zinc-900">Gửi khiếu nại</h2>
+              <h2 className="font-bold text-zinc-900">{t("Gửi khiếu nại")}</h2>
             </div>
             <p className="mt-1 text-xs text-zinc-500">
-              Báo cáo sự cố với một sản phẩm cụ thể bằng serial ID.
+              {t("Báo cáo sự cố với một sản phẩm cụ thể bằng serial ID.")}
             </p>
           </div>
 
@@ -163,15 +171,15 @@ export default function RiskDisputePage() {
                 className={`${inputCls} font-mono`}
                 value={serialId}
                 onChange={(e) => setSerialId(e.target.value)}
-                placeholder="VCN-…"
+                placeholder="VCN-..."
               />
             </Field>
-            <Field label="Lý do / Bằng chứng">
+            <Field label={t("Lý do / Bằng chứng")}>
               <textarea
                 className={`${inputCls} min-h-[100px]`}
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Mô tả vấn đề chi tiết…"
+                placeholder={t("Mô tả vấn đề chi tiết...")}
               />
             </Field>
           </div>
@@ -192,16 +200,15 @@ export default function RiskDisputePage() {
             disabled={isBusy || !serialId.trim() || !reason.trim()}
             className="btn-brand mt-5 w-full rounded-xl py-2.5 text-sm font-bold text-white disabled:opacity-50"
           >
-            {isBusy ? "Đang gửi…" : "GỬI KHIẾU NẠI"}
+            {isBusy ? t("Đang gửi...") : t("Gửi khiếu nại")}
           </button>
         </div>
       </div>
 
-      {/* Disputes list */}
       <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-zinc-100 px-5 py-4">
           <h2 className="font-bold text-zinc-900">
-            Danh sách khiếu nại
+            {t("Danh sách khiếu nại")}
             {disputes.length > 0 && (
               <span className="ml-2 font-normal text-zinc-400">({disputes.length})</span>
             )}
@@ -209,6 +216,7 @@ export default function RiskDisputePage() {
           <button
             onClick={() => qc.invalidateQueries({ queryKey: ["disputes"] })}
             className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2.5 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
+            aria-label={t("Làm mới")}
           >
             <RefreshCw className="h-3 w-3" />
           </button>
@@ -221,31 +229,29 @@ export default function RiskDisputePage() {
             </div>
           ) : disputes.length === 0 ? (
             <div className="py-10 text-center">
-              <p className="text-sm text-zinc-400">Chưa có khiếu nại nào.</p>
+              <p className="text-sm text-zinc-400">{t("Chưa có khiếu nại nào.")}</p>
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
               {disputes.map((dispute) => (
                 <div
                   key={dispute.id}
-                  className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 space-y-2"
+                  className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-xs font-semibold text-zinc-700 truncate">{dispute.id}</p>
+                    <p className="truncate text-xs font-semibold text-zinc-700">{dispute.id}</p>
                     <span
                       className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
                         disputeChip[dispute.status] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
                       }`}
                     >
-                      {dispute.status}
+                      {t(disputeStatusLabel[dispute.status] || dispute.status || "Đang mở")}
                     </span>
                   </div>
                   <p className="break-all font-mono text-xs text-zinc-500">{dispute.relatedSerialId}</p>
                   <p className="text-xs text-zinc-600">{dispute.reason}</p>
                   {dispute.createdAt && (
-                    <p className="text-[10px] text-zinc-400">
-                      {new Date(dispute.createdAt).toLocaleString("vi-VN")}
-                    </p>
+                    <p className="text-[10px] text-zinc-400">{formatTime(dispute.createdAt)}</p>
                   )}
                 </div>
               ))}

@@ -8,8 +8,9 @@ import { getBatches } from "@/lib/api";
 import type { Batch } from "@/lib/types";
 import { useTranslation } from "@/providers/LanguageProvider";
 
-function BatchRow({ batch, t }: { batch: Batch; t: (k: string) => string }) {
+function BatchRow({ batch, t }: { batch: Batch; t: (key: string) => string }) {
   const isRecalled = !!batch.recalledAt;
+  const originLabel = batch.origin === "IMPORTED" ? t("Nhập khẩu") : t("Sản xuất");
 
   return (
     <Link
@@ -19,20 +20,20 @@ function BatchRow({ batch, t }: { batch: Batch; t: (k: string) => string }) {
       <div className="min-w-0 flex-1">
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <p className="truncate font-semibold text-zinc-800">{batch.productName}</p>
-          {isRecalled ? (
-            <span className="rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-bold text-red-700">
-              {t("ĐÃ THU HỒI")}
-            </span>
-          ) : (
-            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700">
-              {batch.origin === "IMPORTED" ? t("NHẬP KHẨU") : t("SẢN XUẤT")}
-            </span>
-          )}
+          <span
+            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+              isRecalled
+                ? "border-red-200 bg-red-50 text-red-700"
+                : "border-emerald-200 bg-emerald-50 text-emerald-700"
+            }`}
+          >
+            {isRecalled ? t("Đã thu hồi") : originLabel}
+          </span>
         </div>
         <p className="truncate font-mono text-xs text-zinc-400">{batch.batchQR || batch.id}</p>
         <div className="mt-1.5 flex flex-wrap gap-4 text-xs text-zinc-400">
-          <span>{t("SL")}: {batch.quantity}</span>
-          <span>{t("HSD")}: {batch.expiryDate}</span>
+          <span>{t("Số lượng")}: {batch.quantity}</span>
+          <span>{t("Hạn dùng")}: {batch.expiryDate}</span>
           <span>{batch.manufacturerName}</span>
         </div>
       </div>

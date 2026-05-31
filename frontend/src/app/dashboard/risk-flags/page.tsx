@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, RefreshCw, ShieldAlert } from "lucide-react";
 import { getApiErrorMessage, getRiskFlags, resolveRiskFlag } from "@/lib/api";
 import type { RiskFlag } from "@/lib/types";
+import { useTranslation } from "@/providers/LanguageProvider";
 
 const riskChip: Record<string, string> = {
   SAFE: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -21,19 +22,13 @@ const riskBorder: Record<string, string> = {
   CRITICAL: "border-l-red-500",
 };
 
-const riskLabel: Record<string, string> = {
-  SAFE: "An toàn",
-  ALERT: "Cảnh báo",
-  HIGH: "Rủi ro cao",
-  CRITICAL: "Nghiêm trọng",
-};
-
 function getFlagId(flag: RiskFlag, index: number) {
   return flag.id || flag.serialId || `risk-${index}`;
 }
 
 export default function RiskFlagsPage() {
   const qc = useQueryClient();
+  const t = useTranslation();
   const [busyId, setBusyId] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -54,13 +49,13 @@ export default function RiskFlagsPage() {
 
     try {
       await resolveRiskFlag(id, {
-        note: notes[id] || "Đã kiểm tra trên dashboard.",
+        note: notes[id] || t("Đã kiểm tra trên dashboard."),
         resolvedBy: "dashboard-user",
       });
       setNotes((current) => ({ ...current, [id]: "" }));
       qc.invalidateQueries({ queryKey: ["risk-flags"] });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Không thể đánh dấu đã xử lý cảnh báo."));
+      setError(getApiErrorMessage(err, t("Không thể đánh dấu đã xử lý cảnh báo.")));
     } finally {
       setBusyId(null);
     }
@@ -70,8 +65,8 @@ export default function RiskFlagsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">Quản lý rủi ro</p>
-          <h1 className="text-3xl font-bold">Cảnh báo rủi ro</h1>
+          <p className="text-sm text-muted-foreground">{t("Quản lý rủi ro")}</p>
+          <h1 className="text-3xl font-bold">{t("Cảnh báo rủi ro")}</h1>
         </div>
         <button
           className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold"
@@ -79,21 +74,21 @@ export default function RiskFlagsPage() {
           type="button"
         >
           <RefreshCw className="h-4 w-4" />
-          Làm mới
+          {t("Làm mới")}
         </button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <p className="text-sm text-muted-foreground">Đang mở</p>
+          <p className="text-sm text-muted-foreground">{t("Đang mở")}</p>
           <p className="mt-1 text-3xl font-bold text-red-700">{openFlags.length}</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <p className="text-sm text-muted-foreground">Đã xử lý</p>
+          <p className="text-sm text-muted-foreground">{t("Đã xử lý")}</p>
           <p className="mt-1 text-3xl font-bold text-emerald-700">{resolvedFlags.length}</p>
         </div>
         <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <p className="text-sm text-muted-foreground">Nghiêm trọng</p>
+          <p className="text-sm text-muted-foreground">{t("Nghiêm trọng")}</p>
           <p className="mt-1 text-3xl font-bold text-red-700">
             {riskFlags.filter((flag) => flag.riskLevel === "CRITICAL").length}
           </p>
@@ -109,7 +104,7 @@ export default function RiskFlagsPage() {
       <section className="rounded-xl border bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b p-4">
           <ShieldAlert className="h-4 w-4 text-red-500" />
-          <h2 className="font-bold">Cảnh báo đang mở</h2>
+          <h2 className="font-bold">{t("Cảnh báo đang mở")}</h2>
         </div>
 
         <div className="space-y-3 p-4">
@@ -118,7 +113,7 @@ export default function RiskFlagsPage() {
           ) : openFlags.length === 0 ? (
             <div className="py-10 text-center text-sm text-muted-foreground">
               <CheckCircle2 className="mx-auto mb-2 h-8 w-8 text-emerald-400" />
-              Không có cảnh báo rủi ro đang mở.
+              {t("Không có cảnh báo rủi ro đang mở.")}
             </div>
           ) : (
             openFlags.map((flag, index) => {
@@ -126,17 +121,17 @@ export default function RiskFlagsPage() {
               const level = flag.riskLevel || "ALERT";
 
               return (
-                <article className={`rounded-lg border border-zinc-200 border-l-4 p-4 ${riskBorder[level]}`} key={id}>
+                <article className={`rounded-lg border border-l-4 border-zinc-200 p-4 ${riskBorder[level]}`} key={id}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <p className="break-all font-mono text-sm font-semibold">{flag.serialId || id}</p>
-                      <p className="mt-1 text-sm text-muted-foreground">{flag.reason || flag.flagReason || "Cảnh báo rủi ro"}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{flag.reason || flag.flagReason || t("Cảnh báo rủi ro")}</p>
                       {flag.createdAt ? (
                         <p className="mt-1 text-xs text-muted-foreground">{new Date(flag.createdAt).toLocaleString()}</p>
                       ) : null}
                     </div>
                     <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${riskChip[level]}`}>
-                      {riskLabel[level] || level}
+                      {t(level)}
                     </span>
                   </div>
 
@@ -144,7 +139,7 @@ export default function RiskFlagsPage() {
                     <input
                       className="rounded-md border bg-zinc-50 px-3 py-2 text-sm"
                       onChange={(event) => setNotes((current) => ({ ...current, [id]: event.target.value }))}
-                      placeholder="Ghi chú xử lý"
+                      placeholder={t("Ghi chú xử lý")}
                       value={notes[id] || ""}
                     />
                     {flag.serialId ? (
@@ -152,7 +147,7 @@ export default function RiskFlagsPage() {
                         className="rounded-md border px-3 py-2 text-center text-sm font-semibold"
                         href={`/dashboard/products/${encodeURIComponent(flag.serialId)}`}
                       >
-                        Sản phẩm
+                        {t("Sản phẩm")}
                       </Link>
                     ) : null}
                     <button
@@ -161,7 +156,7 @@ export default function RiskFlagsPage() {
                       onClick={() => handleResolve(flag, index)}
                       type="button"
                     >
-                      {busyId === id ? "Đang xử lý..." : "Đánh dấu đã xử lý"}
+                      {busyId === id ? t("Đang xử lý...") : t("Đánh dấu đã xử lý")}
                     </button>
                   </div>
                 </article>
@@ -174,18 +169,18 @@ export default function RiskFlagsPage() {
       <section className="rounded-xl border bg-white shadow-sm">
         <div className="flex items-center gap-2 border-b p-4">
           <AlertTriangle className="h-4 w-4 text-emerald-500" />
-          <h2 className="font-bold">Lịch sử đã xử lý</h2>
+          <h2 className="font-bold">{t("Lịch sử đã xử lý")}</h2>
         </div>
         <div className="divide-y">
           {resolvedFlags.length === 0 ? (
-            <p className="p-4 text-sm text-muted-foreground">Chưa có cảnh báo nào được xử lý.</p>
+            <p className="p-4 text-sm text-muted-foreground">{t("Chưa có cảnh báo nào được xử lý.")}</p>
           ) : (
             resolvedFlags.map((flag, index) => {
               const id = getFlagId(flag, index);
               return (
                 <div className="p-4 text-sm" key={id}>
                   <p className="break-all font-mono font-semibold">{flag.serialId || id}</p>
-                  <p className="text-muted-foreground">{flag.resolutionNote || "Đã xử lý"}</p>
+                  <p className="text-muted-foreground">{flag.resolutionNote || t("Đã xử lý")}</p>
                 </div>
               );
             })

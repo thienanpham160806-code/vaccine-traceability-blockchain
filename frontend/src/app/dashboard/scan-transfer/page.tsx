@@ -29,13 +29,6 @@ const statusChip: Record<string, string> = {
   RETURNED: "bg-zinc-100 text-zinc-600 border-zinc-200",
 };
 
-const statusLabel: Record<string, string> = {
-  PENDING: "Chờ xác nhận",
-  CONFIRMED: "Đã xác nhận",
-  REJECTED: "Đã từ chối",
-  RETURNED: "Đã hoàn",
-};
-
 const fromRoleOptions = [...transferInitiatorRoles];
 
 const inputCls =
@@ -74,14 +67,14 @@ function TransferList() {
       const parsed = transferConfirmFormSchema.safeParse({ serialId });
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
-        setError(Object.values(errors)[0] || "Serial của lệnh chuyển không hợp lệ.");
+        setError(Object.values(errors)[0] || tLabel("Serial của lệnh chuyển không hợp lệ."));
         return;
       }
 
       await confirmTransfer(parsed.data.serialId);
       qc.invalidateQueries({ queryKey: ["transfers"] });
     } catch (err: any) {
-      setError(getApiErrorMessage(err, "Xác nhận thất bại."));
+      setError(getApiErrorMessage(err, tLabel("Xác nhận thất bại.")));
     } finally {
       setBusy(false);
     }
@@ -104,7 +97,7 @@ function TransferList() {
       setRejectReason("");
       qc.invalidateQueries({ queryKey: ["transfers"] });
     } catch (err: any) {
-      setError(getApiErrorMessage(err, "Từ chối thất bại."));
+      setError(getApiErrorMessage(err, tLabel("Từ chối thất bại.")));
     } finally {
       setBusy(false);
     }
@@ -257,19 +250,19 @@ export default function ScanTransferPage() {
   const create = async () => {
     if (!serialId.trim() || isBusy) return;
     if (!safeIdPattern.test(serialId.trim())) {
-      setError(safeIdMessage);
+      setError(t(safeIdMessage));
       return;
     }
     setIsBusy(true);
     setError(null);
-    setStatusMsg(`Đang tạo lệnh ${fromRole} → ${toRole} on-chain…`);
+    setStatusMsg(`${t("Đang tạo lệnh")} ${fromRole} -> ${toRole} on-chain...`);
     setTxHash(null);
     try {
       const parsed = transferScanFormSchema.safeParse({ serialId, fromRole, toRole });
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
         setFieldErrors(errors);
-        setError(Object.values(errors)[0] || "Vui lòng kiểm tra các trường đang báo lỗi.");
+        setError(Object.values(errors)[0] || t("Vui lòng kiểm tra các trường đang báo lỗi."));
         setStatusMsg(null);
         return;
       }
@@ -277,11 +270,11 @@ export default function ScanTransferPage() {
       let data;
       const user = getStoredUser();
       if (user?.authMode === "wallet") {
-        if (!address) throw new Error("Chua ket noi MetaMask.");
-        if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
+        if (!address) throw new Error(t("Chưa kết nối MetaMask."));
+        if (!publicClient) throw new Error(t("Chưa sẵn sàng kết nối Sepolia."));
         const actors = await getDemoActors();
         const receiverAddress = actors.find((actor) => actor.role === parsed.data.toRole)?.address;
-        if (!receiverAddress) throw new Error(`Chua co dia chi nhan cho role ${parsed.data.toRole}.`);
+        if (!receiverAddress) throw new Error(`${t("Chưa có địa chỉ nhận cho vai trò")} ${parsed.data.toRole}.`);
         const txHash = await writeContractAsync({
           address: getTransferLedgerAddress(),
           abi: transferLedgerAbi,
@@ -293,7 +286,7 @@ export default function ScanTransferPage() {
             toBytes32(`to:${receiverAddress}`),
           ],
         });
-        setStatusMsg("Da gui giao dich. Dang cho Sepolia xac nhan...");
+        setStatusMsg(t("Đã gửi giao dịch. Đang chờ Sepolia xác nhận..."));
         await publicClient.waitForTransactionReceipt({ hash: txHash });
         data = await syncWalletTransferCreate({
           ...parsed.data,
@@ -307,10 +300,10 @@ export default function ScanTransferPage() {
       }
       setTxHash(data.txHash ?? null);
       setTransferId(data.transfer?.id ?? null);
-      setStatusMsg("Đã tạo lệnh. Xác nhận giao hàng ở danh sách bên phải.");
+      setStatusMsg(t("Đã tạo lệnh. Xác nhận giao hàng ở danh sách bên phải."));
       qc.invalidateQueries({ queryKey: ["transfers"] });
     } catch (err: any) {
-      setError(getApiErrorMessage(err, "Tạo lệnh thất bại."));
+      setError(getApiErrorMessage(err, t("Tạo lệnh thất bại.")));
       setStatusMsg(null);
     } finally {
       setIsBusy(false);
@@ -320,19 +313,19 @@ export default function ScanTransferPage() {
   const confirm = async () => {
     if (!serialId.trim() || isBusy) return;
     if (!safeIdPattern.test(serialId.trim())) {
-      setError(safeIdMessage);
+      setError(t(safeIdMessage));
       return;
     }
     setIsBusy(true);
     setError(null);
-    setStatusMsg(`Đang xác nhận giao hàng cho ${toRole}…`);
+    setStatusMsg(`${t("Đang xác nhận giao hàng cho")} ${toRole}...`);
     setTxHash(null);
     try {
       const parsed = transferConfirmFormSchema.safeParse({ serialId });
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
         setFieldErrors(errors);
-        setError(Object.values(errors)[0] || "Vui lòng kiểm tra các trường đang báo lỗi.");
+        setError(Object.values(errors)[0] || t("Vui lòng kiểm tra các trường đang báo lỗi."));
         setStatusMsg(null);
         return;
       }
@@ -340,10 +333,10 @@ export default function ScanTransferPage() {
       const data = await confirmTransfer(parsed.data.serialId);
       setTxHash(data.txHash ?? null);
       setTransferId(data.transferId ?? transferId);
-      setStatusMsg("Xác nhận thành công.");
+      setStatusMsg(t("Xác nhận thành công."));
       qc.invalidateQueries({ queryKey: ["transfers"] });
     } catch (err: any) {
-      setError(getApiErrorMessage(err, "Xác nhận thất bại."));
+      setError(getApiErrorMessage(err, t("Xác nhận thất bại.")));
       setStatusMsg(null);
     } finally {
       setIsBusy(false);
@@ -443,7 +436,7 @@ export default function ScanTransferPage() {
 
         {txHash && (
           <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs">
-            <p className="font-semibold text-emerald-800">Transaction Hash</p>
+            <p className="font-semibold text-emerald-800">{t("Mã giao dịch")}</p>
             <p className="mt-0.5 break-all font-mono text-emerald-700">{txHash}</p>
             {transferId && (
               <Link
@@ -477,7 +470,7 @@ export default function ScanTransferPage() {
             href={serialId ? `/dashboard/verify/${encodeURIComponent(serialId)}` : "/dashboard/products"}
             className="rounded-lg border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
           >
-            Verify
+            {t("Xác minh")}
           </Link>
         </div>
       </div>

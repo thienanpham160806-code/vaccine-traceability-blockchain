@@ -12,6 +12,7 @@ import {
   updateDisputeStatus,
   type DisputeRecord,
 } from "@/lib/api";
+import { useTranslation } from "@/providers/LanguageProvider";
 
 const statusChip: Record<string, string> = {
   OPEN: "bg-blue-50 text-blue-700 border-blue-200",
@@ -31,6 +32,7 @@ const inputCls = "w-full rounded-md border bg-zinc-50 px-3 py-2 text-sm outline-
 
 export default function DisputesPage() {
   const qc = useQueryClient();
+  const t = useTranslation();
   const [serialId, setSerialId] = useState("");
   const [reason, setReason] = useState("");
   const [statusNotes, setStatusNotes] = useState<Record<string, string>>({});
@@ -57,12 +59,12 @@ export default function DisputesPage() {
         reason: reason.trim(),
         reportedBy: "dashboard-user",
       });
-      setSuccess(`Đã tạo khiếu nại: ${dispute.id}`);
+      setSuccess(`${t("Đã tạo khiếu nại")}: ${dispute.id}`);
       setSerialId("");
       setReason("");
       qc.invalidateQueries({ queryKey: ["disputes"] });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Không thể tạo khiếu nại."));
+      setError(getApiErrorMessage(err, t("Không thể tạo khiếu nại.")));
     } finally {
       setIsCreating(false);
     }
@@ -82,7 +84,7 @@ export default function DisputesPage() {
       setStatusNotes((current) => ({ ...current, [dispute.id || ""]: "" }));
       qc.invalidateQueries({ queryKey: ["disputes"] });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Không thể cập nhật trạng thái khiếu nại."));
+      setError(getApiErrorMessage(err, t("Không thể cập nhật trạng thái khiếu nại.")));
     } finally {
       setBusyId(null);
     }
@@ -96,14 +98,14 @@ export default function DisputesPage() {
     try {
       await addDisputeEvidence(dispute.id, {
         type: "NOTE",
-        title: "Ghi chú từ dashboard",
+        title: t("Ghi chú từ dashboard"),
         value: evidenceValues[dispute.id].trim(),
         addedBy: "dashboard-user",
       });
       setEvidenceValues((current) => ({ ...current, [dispute.id || ""]: "" }));
       qc.invalidateQueries({ queryKey: ["disputes"] });
     } catch (err: unknown) {
-      setError(getApiErrorMessage(err, "Không thể thêm bằng chứng."));
+      setError(getApiErrorMessage(err, t("Không thể thêm bằng chứng.")));
     } finally {
       setBusyId(null);
     }
@@ -113,8 +115,8 @@ export default function DisputesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <p className="text-sm text-muted-foreground">Quản lý tranh chấp</p>
-          <h1 className="text-3xl font-bold">Khiếu nại</h1>
+          <p className="text-sm text-muted-foreground">{t("Quản lý tranh chấp")}</p>
+          <h1 className="text-3xl font-bold">{t("Khiếu nại")}</h1>
         </div>
         <button
           className="flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-semibold"
@@ -122,14 +124,14 @@ export default function DisputesPage() {
           type="button"
         >
           <RefreshCw className="h-4 w-4" />
-          Làm mới
+          {t("Làm mới")}
         </button>
       </div>
 
       <section className="rounded-xl border bg-white p-5 shadow-sm">
         <div className="mb-4 flex items-center gap-2 border-b pb-4">
           <Scale className="h-4 w-4 text-blue-500" />
-          <h2 className="font-bold">Tạo khiếu nại</h2>
+          <h2 className="font-bold">{t("Tạo khiếu nại")}</h2>
         </div>
         <div className="grid gap-3 md:grid-cols-[220px_1fr_auto]">
           <input
@@ -141,7 +143,7 @@ export default function DisputesPage() {
           <input
             className={inputCls}
             onChange={(event) => setReason(event.target.value)}
-            placeholder="Lý do hoặc bằng chứng ban đầu"
+            placeholder={t("Lý do hoặc bằng chứng ban đầu")}
             value={reason}
           />
           <button
@@ -151,7 +153,7 @@ export default function DisputesPage() {
             type="button"
           >
             <Send className="h-4 w-4" />
-            Gửi
+            {t("Gửi")}
           </button>
         </div>
         {error ? <p className="mt-3 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p> : null}
@@ -160,20 +162,20 @@ export default function DisputesPage() {
 
       <section className="rounded-xl border bg-white shadow-sm">
         <div className="border-b p-4">
-          <h2 className="font-bold">Danh sách khiếu nại</h2>
+          <h2 className="font-bold">{t("Danh sách khiếu nại")}</h2>
         </div>
 
         <div className="space-y-3 p-4">
           {isLoading ? (
             [1, 2, 3].map((item) => <div className="h-28 animate-pulse rounded-lg bg-zinc-100" key={item} />)
           ) : disputes.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">Chưa có khiếu nại nào.</p>
+            <p className="py-10 text-center text-sm text-muted-foreground">{t("Chưa có khiếu nại nào.")}</p>
           ) : (
             disputes.map((dispute) => (
               <article className="rounded-lg border bg-zinc-50 p-4" key={dispute.id || dispute.relatedSerialId}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-bold">{dispute.id || "Khiếu nại"}</p>
+                    <p className="text-sm font-bold">{dispute.id || t("Khiếu nại")}</p>
                     <Link
                       className="break-all font-mono text-xs text-blue-600 hover:underline"
                       href={`/dashboard/products/${encodeURIComponent(dispute.relatedSerialId)}`}
@@ -183,7 +185,7 @@ export default function DisputesPage() {
                     <p className="mt-2 text-sm text-zinc-700">{dispute.reason}</p>
                   </div>
                   <span className={`rounded-full border px-2.5 py-1 text-xs font-bold ${statusChip[dispute.status || "OPEN"]}`}>
-                    {statusLabel[dispute.status || "OPEN"] || dispute.status || "Đang mở"}
+                    {t(statusLabel[dispute.status || "OPEN"] || dispute.status || "Đang mở")}
                   </span>
                 </div>
 
@@ -193,7 +195,7 @@ export default function DisputesPage() {
                     onChange={(event) =>
                       setStatusNotes((current) => ({ ...current, [dispute.id || ""]: event.target.value }))
                     }
-                    placeholder="Ghi chú trạng thái"
+                    placeholder={t("Ghi chú trạng thái")}
                     value={statusNotes[dispute.id || ""] || ""}
                   />
                   <button
@@ -202,7 +204,7 @@ export default function DisputesPage() {
                     onClick={() => updateStatus(dispute, "INVESTIGATING")}
                     type="button"
                   >
-                    Điều tra
+                    {t("Điều tra")}
                   </button>
                   <button
                     className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:bg-gray-400"
@@ -210,7 +212,7 @@ export default function DisputesPage() {
                     onClick={() => updateStatus(dispute, "RESOLVED")}
                     type="button"
                   >
-                    Xử lý xong
+                    {t("Xử lý xong")}
                   </button>
                   <button
                     className="rounded-md bg-zinc-700 px-3 py-2 text-sm font-semibold text-white disabled:bg-gray-400"
@@ -218,7 +220,7 @@ export default function DisputesPage() {
                     onClick={() => updateStatus(dispute, "REJECTED")}
                     type="button"
                   >
-                    Từ chối
+                    {t("Từ chối")}
                   </button>
                 </div>
 
@@ -228,7 +230,7 @@ export default function DisputesPage() {
                     onChange={(event) =>
                       setEvidenceValues((current) => ({ ...current, [dispute.id || ""]: event.target.value }))
                     }
-                    placeholder="Thêm ghi chú bằng chứng hoặc IPFS CID"
+                    placeholder={t("Thêm ghi chú bằng chứng hoặc IPFS CID")}
                     value={evidenceValues[dispute.id || ""] || ""}
                   />
                   <button
@@ -238,13 +240,13 @@ export default function DisputesPage() {
                     type="button"
                   >
                     <FilePlus2 className="h-4 w-4" />
-                    Thêm bằng chứng
+                    {t("Thêm bằng chứng")}
                   </button>
                 </div>
 
                 {dispute.evidence && dispute.evidence.length > 0 ? (
                   <div className="mt-3 rounded-md border bg-white p-3 text-xs">
-                    <p className="font-bold">Bằng chứng</p>
+                    <p className="font-bold">{t("Bằng chứng")}</p>
                     <ul className="mt-2 space-y-1">
                       {dispute.evidence.map((item) => (
                         <li className="break-all text-muted-foreground" key={item.id}>
