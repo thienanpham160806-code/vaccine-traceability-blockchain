@@ -272,16 +272,19 @@ router.post('/disputes', async (req: Request, res: Response) => {
 
     const now = Date.now();
     const id = `DISPUTE-${now}`;
-    const dispute = {
+    const dispute: any = {
       id,
       relatedSerialId,
       reportedBy,
       status: 'OPEN',
       reason,
-      evidenceIpfsCid,
       createdAt: now,
       updatedAt: now,
     };
+    
+    if (evidenceIpfsCid) {
+      dispute.evidenceIpfsCid = evidenceIpfsCid;
+    }
 
     await db.ref(`disputes/${id}`).set(dispute);
     res.json({ success: true, data: dispute });

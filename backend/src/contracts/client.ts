@@ -27,7 +27,7 @@ try {
     'function productExists(bytes32 serialID) external view returns (bool)',
     'function getCurrentOwner(bytes32 serialID) external view returns (address)',
     'function setTransferLedger(address newTransferLedger) external',
-    'function recallBatch(bytes32 batchHash, bytes32 reasonHash, bytes32[] calldata serials) external',
+    'function recallBatch(bytes32 batchHash, bytes32 reasonHash) external',
     'event ProductRegistered(bytes32 indexed serialID, bytes32 indexed batchHash, address indexed owner, bool isImported, bool zkpVerified, uint8 status)',
     'event ProductFlagged(bytes32 indexed serialID, uint8 riskLevel, bytes32 indexed reason)',
     'event BatchRecalled(bytes32 indexed batchHash, bytes32 indexed reasonHash, uint256 totalProducts)',
