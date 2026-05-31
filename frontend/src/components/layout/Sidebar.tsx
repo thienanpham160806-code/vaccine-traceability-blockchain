@@ -43,8 +43,8 @@ const themeOptions = [
 ] as const;
 
 const languageOptions = [
-  { value: "en", label: "EN", flag: "🇬🇧" },
-  { value: "vi", label: "VI", flag: "🇻🇳" },
+  { value: "en", label: "EN", flag: "https://flagcdn.com/gb.svg" },
+  { value: "vi", label: "VI", flag: "https://flagcdn.com/vn.svg" },
 ] as const;
 
 const roleColor: Record<string, string> = {
@@ -267,8 +267,12 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
                               : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400 dark:hover:border-zinc-500 dark:hover:text-zinc-100"
                           }`}
                         >
-                          <span className="flex items-center justify-center text-lg">
-                            {selected ? option.flag : option.label}
+                          <span className="flex items-center justify-center">
+                            {selected ? (
+                              <img src={option.flag} alt={option.label} className="w-6 rounded-[2px] object-cover shadow-sm" />
+                            ) : (
+                              option.label
+                            )}
                           </span>
                         </button>
                       );
