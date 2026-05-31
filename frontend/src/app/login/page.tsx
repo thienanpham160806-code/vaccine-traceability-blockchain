@@ -70,22 +70,45 @@ function MedicalBackdrop() {
       </div>
 
       <div
-        className="float-med absolute left-[5%] top-[18%] hidden h-44 w-16 rounded-full border border-blue-200/70 bg-white/80 shadow-lg shadow-blue-100/70 md:block"
+        className="float-med absolute left-[4%] top-[15%] hidden h-52 w-20 rounded-full border border-blue-200/80 bg-gradient-to-br from-white via-sky-50 to-blue-100/90 shadow-[18px_24px_45px_rgba(37,99,235,0.18),inset_-10px_-12px_22px_rgba(37,99,235,0.12),inset_8px_8px_18px_rgba(255,255,255,0.95)] md:block"
         style={{ "--rotate": "-18deg", "--move-x": "18px", "--move-y": "-16px" } as React.CSSProperties}
       >
-        <div className="absolute left-1/2 top-4 h-24 w-9 -translate-x-1/2 rounded-full border border-blue-200 bg-gradient-to-b from-sky-100 to-blue-200" />
-        <div className="absolute left-1/2 bottom-8 h-10 w-10 -translate-x-1/2 rounded-full border border-blue-200 bg-white" />
-        <div className="absolute left-1/2 -bottom-8 h-12 w-2 -translate-x-1/2 rounded-full bg-zinc-300" />
-        <div className="absolute left-1/2 -bottom-12 h-8 w-px -translate-x-1/2 bg-zinc-400" />
+        <div className="absolute left-1/2 top-3 h-7 w-11 -translate-x-1/2 rounded-lg border border-blue-200 bg-white shadow-inner" />
+        <div className="absolute left-1/2 top-14 h-28 w-11 -translate-x-1/2 rounded-full border border-blue-200 bg-gradient-to-b from-sky-100 via-blue-200 to-cyan-200 shadow-inner" />
+        <div className="absolute left-5 top-20 h-14 w-2 rounded-full bg-white/70 blur-[1px]" />
+        <div className="absolute left-1/2 bottom-8 h-11 w-12 -translate-x-1/2 rounded-full border border-blue-200 bg-white/90 shadow-inner" />
+        <div className="absolute left-1/2 -bottom-8 h-12 w-2 -translate-x-1/2 rounded-full bg-gradient-to-b from-zinc-200 to-zinc-400" />
+        <div className="absolute left-1/2 -bottom-14 h-8 w-px -translate-x-1/2 bg-zinc-500" />
       </div>
 
       <div
-        className="float-med-delay absolute bottom-[14%] left-[42%] hidden h-3 w-56 rounded-full bg-gradient-to-r from-zinc-300 via-white to-blue-100 shadow-lg shadow-blue-100/60 lg:block"
+        className="float-med-delay absolute bottom-[9%] left-[10%] hidden h-36 w-14 rounded-full border border-emerald-200/80 bg-gradient-to-br from-white via-emerald-50 to-cyan-100 shadow-[14px_20px_38px_rgba(16,185,129,0.16),inset_-8px_-10px_18px_rgba(6,182,212,0.12),inset_8px_8px_18px_rgba(255,255,255,0.92)] lg:block"
+        style={{ "--rotate": "14deg", "--move-x": "-14px", "--move-y": "12px" } as React.CSSProperties}
+      >
+        <div className="absolute left-1/2 -top-6 h-8 w-8 -translate-x-1/2 rounded-lg border border-emerald-200 bg-white" />
+        <div className="absolute left-1/2 top-8 h-20 w-8 -translate-x-1/2 rounded-full bg-gradient-to-b from-emerald-100 to-cyan-200 shadow-inner" />
+        <div className="absolute left-4 top-12 h-10 w-1.5 rounded-full bg-white/70 blur-[1px]" />
+      </div>
+
+      <div
+        className="float-med-delay absolute bottom-[14%] left-[38%] hidden h-4 w-64 rounded-full bg-gradient-to-r from-zinc-300 via-white to-blue-100 shadow-[14px_18px_34px_rgba(37,99,235,0.16),inset_0_3px_8px_rgba(255,255,255,0.9),inset_0_-3px_8px_rgba(71,85,105,0.16)] lg:block"
         style={{ "--rotate": "22deg", "--move-x": "-18px", "--move-y": "12px" } as React.CSSProperties}
       >
-        <div className="absolute -left-9 top-1/2 h-9 w-12 -translate-y-1/2 rounded-md border border-zinc-200 bg-white" />
-        <div className="absolute -right-20 top-1/2 h-px w-20 -translate-y-1/2 bg-zinc-400" />
-        <div className="absolute -right-24 top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-r border-t border-zinc-400" />
+        <div className="absolute -left-12 top-1/2 h-12 w-16 -translate-y-1/2 rounded-lg border border-zinc-200 bg-gradient-to-br from-white to-zinc-100 shadow-inner" />
+        <div className="absolute left-6 top-1/2 h-7 w-1 -translate-y-1/2 rounded-full bg-blue-200/70" />
+        <div className="absolute left-16 top-1/2 h-7 w-1 -translate-y-1/2 rounded-full bg-blue-200/70" />
+        <div className="absolute left-26 top-1/2 h-7 w-1 -translate-y-1/2 rounded-full bg-blue-200/70" />
+        <div className="absolute -right-24 top-1/2 h-px w-24 -translate-y-1/2 bg-zinc-500" />
+        <div className="absolute -right-29 top-1/2 h-3 w-3 -translate-y-1/2 rotate-45 border-r border-t border-zinc-500" />
+      </div>
+
+      <div
+        className="float-med absolute right-[10%] top-[16%] hidden h-3 w-44 rounded-full bg-gradient-to-r from-cyan-100 via-white to-zinc-300 shadow-[10px_14px_28px_rgba(6,182,212,0.14)] xl:block"
+        style={{ "--rotate": "-28deg", "--move-x": "10px", "--move-y": "18px" } as React.CSSProperties}
+      >
+        <div className="absolute -left-8 top-1/2 h-8 w-10 -translate-y-1/2 rounded-md border border-cyan-100 bg-white/90" />
+        <div className="absolute -right-16 top-1/2 h-px w-16 -translate-y-1/2 bg-zinc-400" />
+        <div className="absolute -right-19 top-1/2 h-2 w-2 -translate-y-1/2 rotate-45 border-r border-t border-zinc-400" />
       </div>
     </div>
   );
