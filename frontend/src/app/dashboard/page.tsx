@@ -243,7 +243,14 @@ export default function DashboardPage() {
               return (
                 <div key={day.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
                   <div className="flex h-28 w-full items-end rounded bg-white px-1 dark:bg-zinc-800">
-                    <div className="w-full rounded bg-blue-500" style={{ height: `${height}%` }} />
+                    <div
+                      className="group relative w-full rounded bg-blue-500 transition-colors hover:bg-blue-600"
+                      style={{ height: `${height}%` }}
+                    >
+                      <div className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2 -translate-x-1/2 whitespace-nowrap rounded-md bg-zinc-950 px-2 py-1 text-xs font-semibold text-white opacity-0 shadow-lg ring-1 ring-zinc-800 transition-opacity group-hover:opacity-100 dark:bg-white dark:text-zinc-950 dark:ring-zinc-200">
+                        {day.count}
+                      </div>
+                    </div>
                   </div>
                   <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{day.date.slice(5)}</span>
                 </div>
