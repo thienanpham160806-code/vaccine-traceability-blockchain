@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useTheme } from "next-themes";
 import {
   Boxes,
@@ -22,6 +22,8 @@ import {
   Truck,
 } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import { translateRole } from "@/lib/i18n";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 
 const menuItems = [
@@ -45,17 +47,6 @@ const languageOptions = [
   { value: "vi", label: "VI", flag: "🇻🇳" },
 ] as const;
 
-const roleLabel: Record<string, string> = {
-  MANUFACTURER: "Manufacturer",
-  IMPORTER: "Importer",
-  DISTRIBUTOR: "Distributor",
-  CLINIC: "Clinic",
-  PHARMACY: "Pharmacy",
-  PUBLIC: "Public",
-  ADMIN: "Admin",
-  RECALL_AUTHORITY: "Recall Authority",
-};
-
 const roleColor: Record<string, string> = {
   MANUFACTURER: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   IMPORTER: "bg-purple-500/20 text-purple-400 border-purple-500/30",
@@ -71,29 +62,17 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { language, setLanguage } = useLanguage();
+  const t = useTranslation();
   const [serialId, setSerialId] = useState("");
   const [user] = useState<DemoUser | null>(() => {
     if (typeof window === "undefined") return null;
     return getStoredUser();
   });
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [language, setLanguage] = useState<"en" | "vi">(() => {
-    if (typeof window === "undefined") return "vi";
-    const storedLanguage = window.localStorage.getItem("vaxitrust-language");
-    return storedLanguage === "en" || storedLanguage === "vi" ? storedLanguage : "vi";
-  });
-  const [showLanguageFlag, setShowLanguageFlag] = useState<"en" | "vi" | null>(null);
-
-  useEffect(() => {
-    if (!showLanguageFlag) return;
-    const timer = window.setTimeout(() => setShowLanguageFlag(null), 1000);
-    return () => window.clearTimeout(timer);
-  }, [showLanguageFlag]);
 
   const handleLanguageChange = (value: "en" | "vi") => {
     setLanguage(value);
-    setShowLanguageFlag(value);
-    window.localStorage.setItem("vaxitrust-language", value);
   };
 
   const isActive = (href: string) =>
@@ -142,7 +121,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
             }`}
           >
             <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
-            {roleLabel[user.role] ?? user.role}
+            {translateRole(user.role, language)}
             <span className="ml-auto font-mono text-[10px] opacity-60">
               {user.address.slice(0, 6)}...{user.address.slice(-4)}
             </span>
@@ -166,7 +145,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
               }`}
             >
               <Icon className={`h-4 w-4 transition-colors ${active ? "text-blue-400" : "text-zinc-500 group-hover:text-zinc-300"}`} />
-              {item.title}
+              {t(item.title)}
             </Link>
           );
         })}
@@ -200,7 +179,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           href="mailto:support@vaxitrust.local"
         >
           <HelpCircle className="h-4 w-4" />
-          Hỗ trợ
+          {t("Hỗ trợ")}
         </a>
 
         <button
@@ -208,7 +187,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-800 hover:text-red-400"
         >
           <LogOut className="h-4 w-4" />
-          Đăng xuất
+          {t("Đăng xuất")}
         </button>
 
         <div
@@ -229,7 +208,9 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
             <div className="absolute bottom-0 left-full z-50 ml-2 w-44 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">
               <div className="space-y-2">
                 <div>
-                  <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Giao diện</p>
+                  <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
+                    {t("Giao diện")}
+                  </p>
                   {themeOptions.map((option) => {
                     const Icon = option.icon;
                     const selected = (theme || "system") === option.value;
@@ -243,7 +224,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
                         type="button"
                       >
                         <Icon className="h-4 w-4" />
-                        <span>{option.label}</span>
+                        <span>{t(option.label)}</span>
                         {selected ? <Check className="ml-auto h-3.5 w-3.5" /> : null}
                       </button>
                     );
@@ -251,7 +232,9 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
                 </div>
 
                 <div>
-                  <p className="px-2 pb-2 pt-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Ngôn ngữ</p>
+                  <p className="px-2 pb-2 pt-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">
+                    {t("Ngôn ngữ")}
+                  </p>
                   <div className="grid grid-cols-2 gap-2">
                     {languageOptions.map((option) => {
                       const selected = language === option.value;
@@ -266,8 +249,8 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
                               : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-500 hover:text-zinc-100"
                           }`}
                         >
-                          <span className="flex items-center justify-center text-sm">
-                            {showLanguageFlag === option.value ? option.flag : option.label}
+                          <span className="flex items-center justify-center text-lg">
+                            {selected ? option.flag : option.label}
                           </span>
                         </button>
                       );

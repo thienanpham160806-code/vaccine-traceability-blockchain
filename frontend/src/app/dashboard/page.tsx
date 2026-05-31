@@ -86,15 +86,15 @@ function StatCard({
   hint?: string;
 }) {
   return (
-    <div className="min-h-[116px] rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+    <div className="min-h-[116px] rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
       <div className="flex items-start justify-between gap-3">
         <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${tone}`}>
           <Icon className="h-5 w-5" />
         </div>
-        {hint ? <span className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-semibold text-zinc-500">{hint}</span> : null}
+        {hint ? <span className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{hint}</span> : null}
       </div>
-      <p className="mt-3 text-2xl font-bold text-zinc-900">{value}</p>
-      <p className="mt-0.5 text-xs font-medium text-zinc-500">{label}</p>
+      <p className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{value}</p>
+      <p className="mt-0.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</p>
     </div>
   );
 }
@@ -106,24 +106,24 @@ function ActivityRow({ item }: { item: DashboardActivity }) {
   return (
     <Link
       href={item.href || "/dashboard"}
-      className="flex min-h-[72px] items-center gap-3 px-4 py-3 transition hover:bg-zinc-50 sm:px-6"
+      className="group flex min-h-[72px] items-center gap-3 px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-sky-500/10 sm:px-6"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-zinc-800">{item.title || item.type}</p>
-        <p className="truncate font-mono text-[11px] text-zinc-400">{item.subtitle || "No details"}</p>
+        <p className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100 group-hover:dark:text-black">{item.title || item.type}</p>
+        <p className="truncate font-mono text-[11px] text-zinc-400 dark:text-zinc-400 group-hover:dark:text-black">{item.subtitle || "No details"}</p>
       </div>
       <div className="hidden text-right sm:block">
         {item.status ? (
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusChipClass(item.status)}`}>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusChipClass(item.status)} group-hover:dark:text-black`}>
             {statusText}
           </span>
         ) : null}
-        <p className="mt-1 text-[11px] text-zinc-400">{formatTime(item.timestamp)}</p>
+        <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-400 group-hover:dark:text-black">{formatTime(item.timestamp)}</p>
       </div>
-      <ArrowRight className="h-4 w-4 shrink-0 text-zinc-300" />
+      <ArrowRight className="h-4 w-4 shrink-0 text-zinc-300 dark:text-zinc-400" />
     </Link>
   );
 }
@@ -163,15 +163,15 @@ export default function DashboardPage() {
     <div className="space-y-5 pb-20 lg:pb-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-zinc-900">
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
             {user ? `Xin chào, ${user.role}` : "Tổng quan"}
           </h1>
-          <p className="text-sm text-zinc-500">Theo dõi lô vaccine, chuyển giao, thu hồi và cảnh báo vận hành.</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">Theo dõi lô vaccine, chuyển giao, thu hồi và cảnh báo vận hành.</p>
         </div>
 
-        <div className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm">
+        <div className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
           <span className={`h-2 w-2 rounded-full ${health?.status === "ok" ? "bg-emerald-500" : "bg-red-400"}`} />
-          <span className="font-mono text-xs text-zinc-600">
+          <span className="font-mono text-xs text-zinc-600 dark:text-zinc-300">
             {health?.status === "ok" ? "BACKEND ĐANG HOẠT ĐỘNG" : "BACKEND MẤT KẾT NỐI"}
           </span>
         </div>
@@ -196,41 +196,41 @@ export default function DashboardPage() {
               className={`flex min-h-14 items-center justify-between rounded-lg border p-4 text-sm font-bold shadow-sm transition ${
                 primary
                   ? "border-blue-600 bg-blue-600 text-white hover:bg-blue-700"
-                  : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50"
+                  : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-800"
               }`}
             >
               <span>{action.label}</span>
-              <Icon className={`h-5 w-5 ${primary ? "text-white/80" : "text-zinc-400"}`} />
+              <Icon className={`h-5 w-5 ${primary ? "text-white/80" : "text-zinc-400 dark:text-zinc-400"}`} />
             </Link>
           );
         })}
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <section className="rounded-lg border border-zinc-200 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-6">
+        <section className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-6 dark:border-zinc-800">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-blue-500" />
-              <h2 className="font-semibold text-zinc-800">Hoạt động gần đây</h2>
+              <h2 className="font-semibold text-zinc-800 dark:text-zinc-100">Hoạt động gần đây</h2>
             </div>
-            <Link href="/dashboard/transfers" className="flex min-h-11 items-center gap-1 text-xs font-semibold text-blue-600 hover:underline">
+            <Link href="/dashboard/transfers" className="flex min-h-11 items-center gap-1 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-300">
               Lệnh chuyển <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
 
-          <div className="divide-y divide-zinc-100">
+          <div className="divide-y divide-zinc-100 dark:divide-transparent">
             {activity.length === 0 ? (
-              <p className="px-6 py-10 text-center text-sm text-zinc-400">Chưa có hoạt động gần đây.</p>
+              <p className="px-6 py-10 text-center text-sm text-zinc-400 dark:text-zinc-400">Chưa có hoạt động gần đây.</p>
             ) : (
               activity.map((item) => <ActivityRow key={item.id} item={item} />)
             )}
           </div>
         </section>
 
-        <aside className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+        <aside className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
           <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-zinc-500" />
-            <h2 className="font-semibold text-zinc-800">7 ngày gần đây</h2>
+            <Clock className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
+            <h2 className="font-semibold text-zinc-800 dark:text-zinc-100">7 ngày gần đây</h2>
           </div>
           <div className="mt-4 flex h-36 items-end gap-2">
             {(stats?.last7DaysTrend || []).map((day) => {
@@ -238,10 +238,10 @@ export default function DashboardPage() {
               const height = Math.max(8, Math.round((day.count / max) * 100));
               return (
                 <div key={day.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                  <div className="flex h-28 w-full items-end rounded bg-zinc-50 px-1">
+                  <div className="flex h-28 w-full items-end rounded bg-zinc-50 px-1 dark:bg-zinc-800">
                     <div className="w-full rounded bg-blue-500" style={{ height: `${height}%` }} />
                   </div>
-                  <span className="text-[10px] text-zinc-400">{day.date.slice(5)}</span>
+                  <span className="text-[10px] text-zinc-400 dark:text-zinc-500">{day.date.slice(5)}</span>
                 </div>
               );
             })}

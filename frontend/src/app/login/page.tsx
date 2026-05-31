@@ -6,6 +6,8 @@ import { useAccount, useConnect, useConnectors, useDisconnect, useSignMessage } 
 import { Activity, Building2, Link2, Lock, Shield, Stethoscope, Truck, UserCheck } from "lucide-react";
 import { getApiErrorMessage, getDemoActors, loginWithSignature, requestAuthNonce } from "@/lib/api";
 import { demoActors as fallbackActors, loginDemo, setSession } from "@/lib/auth";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import { translateRole } from "@/lib/i18n";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 
 const roleIcon: Record<string, React.ElementType> = {
@@ -122,6 +124,8 @@ export default function LoginPage() {
   const connectors = useConnectors();
   const { disconnect } = useDisconnect();
   const { signMessageAsync } = useSignMessage();
+  const { language } = useLanguage();
+  const t = useTranslation();
 
   const [actors, setActors] = useState(fallbackActors);
   const [selectedRole, setSelectedRole] = useState(fallbackActors[0]?.role || "MANUFACTURER");
@@ -224,24 +228,24 @@ export default function LoginPage() {
         <section className="space-y-7 py-6">
           <div className="space-y-4">
             <h1 className="max-w-2xl text-4xl font-extrabold leading-tight text-zinc-950 dark:text-zinc-100 sm:text-5xl">
-              Xác thực chuỗi cung ứng vaccine
+              {t("Xác thực chuỗi cung ứng vaccine")}
             </h1>
             <p className="max-w-xl text-base leading-7 text-zinc-600 dark:text-zinc-400">
-              Nền tảng quản lý logistics y tế ứng dụng Blockchain để theo dõi lô vaccine, chuyển giao và xác minh công khai.
+              {t("Nền tảng quản lý logistics y tế ứng dụng Blockchain để theo dõi lô vaccine, chuyển giao và xác minh công khai.")}
             </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
-            <InfoRow icon={Shield} text="Phân quyền bằng Smart Contract" />
-            <InfoRow icon={Lock} text="Đăng nhập bằng chữ ký MetaMask" />
-            <InfoRow icon={Activity} text="Đồng bộ dữ liệu Firebase và IPFS" />
+            <InfoRow icon={Shield} text={t("Phân quyền bằng Smart Contract")} />
+            <InfoRow icon={Lock} text={t("Đăng nhập bằng chữ ký MetaMask")} />
+            <InfoRow icon={Activity} text={t("Đồng bộ dữ liệu Firebase và IPFS")} />
           </div>
         </section>
 
         <section className="max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-lg border border-zinc-200 bg-white/92 p-6 shadow-xl shadow-blue-950/5 backdrop-blur dark:border-zinc-700 dark:bg-zinc-950/95 dark:shadow-black/20">
           <div className="text-center">
-            <h2 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50">Đăng nhập hệ thống</h2>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Chọn ví demo hoặc đăng nhập trực tiếp bằng MetaMask.</p>
+            <h2 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50">{t("Đăng nhập hệ thống")}</h2>
+            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{t("Chọn ví demo hoặc đăng nhập trực tiếp bằng MetaMask.")}</p>
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
@@ -259,16 +263,18 @@ export default function LoginPage() {
                   }`}
                 >
                   <Icon className="mx-auto h-6 w-6" />
-                  <span className="mt-2 block text-sm font-bold">{roleLabel[actor.role] || actor.label || actor.role}</span>
+                  <span className="mt-2 block text-sm font-bold">
+                    {translateRole(actor.role, language) || actor.label || actor.role}
+                  </span>
                 </button>
               );
             })}
           </div>
 
           <div className="mt-5 space-y-2">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">Ví demo</p>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">{t("Ví demo")}</p>
             <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-950/80 dark:text-zinc-300">
-              {selectedActor?.address || "Chưa có ví demo"}
+              {selectedActor?.address || t("Chưa có ví demo")}
             </div>
           </div>
 
@@ -284,12 +290,12 @@ export default function LoginPage() {
             disabled={isLoading || !selectedActor}
             className="mt-5 flex min-h-12 w-full items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {isLoading ? "Đang đăng nhập..." : "Đăng nhập bằng ví demo"}
+            {isLoading ? t("Đang đăng nhập...") : t("Đăng nhập bằng ví demo")}
           </button>
 
           <div className="my-5 flex items-center gap-3">
             <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
-            <span className="text-xs font-bold text-zinc-400 dark:text-zinc-500">HOẶC</span>
+            <span className="text-xs font-bold text-zinc-400 dark:text-zinc-500">{t("HOẶC")}</span>
             <div className="h-px flex-1 bg-zinc-200 dark:bg-zinc-700" />
           </div>
 
@@ -315,11 +321,11 @@ export default function LoginPage() {
           {isConnected && address ? (
             <div className="mt-5 flex items-center justify-between rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-950/80">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">Ví đang kết nối</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-400 dark:text-zinc-500">{t("Ví đang kết nối")}</p>
                 <p className="mt-1 font-mono text-xs text-blue-700 dark:text-blue-300">{shortAddress(address)}</p>
               </div>
               <button onClick={() => disconnect()} className="text-xs font-bold text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
-                Ngắt kết nối
+                {t("Ngắt kết nối")}
               </button>
             </div>
           ) : null}

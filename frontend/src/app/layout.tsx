@@ -3,6 +3,7 @@ import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Web3Provider } from "@/providers/Web3Provider";
 import { ThemeProvider } from "@/providers/ThemeProvider";
+import { LanguageProvider } from "@/providers/LanguageProvider";
 import { Toaster } from "@/components/ui/sonner";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -34,10 +35,12 @@ export default function RootLayout({
     <html lang="vi" className={`${plusJakartaSans.variable} ${jetBrainsMono.variable}`} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <ThemeProvider>
-          <Web3Provider>
-            {children}
-            <Toaster />
-          </Web3Provider>
+          <LanguageProvider>
+            <Web3Provider>
+              {children}
+              <Toaster />
+            </Web3Provider>
+          </LanguageProvider>
         </ThemeProvider>
       </body>
     </html>

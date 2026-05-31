@@ -7,6 +7,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Bell, ChevronRight, LogOut, Menu, Wallet } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
 import { getDashboardRecentActivity } from "@/lib/api";
+import { translateRole } from "@/lib/i18n";
+import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import type { DashboardActivity } from "@/lib/types";
 
 const pageTitles: Record<string, { title: string; sub: string }> = {
@@ -76,6 +78,8 @@ function getNotificationTitle(activity: DashboardActivity) {
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { language } = useLanguage();
+  const t = useTranslation();
   const [user, setUser] = useState<DemoUser | null>(null);
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
@@ -138,7 +142,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         <button
           onClick={onMenuClick}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 lg:hidden"
-          aria-label="Mở menu"
+          aria-label={t("Mở menu")}
         >
           <Menu className="h-4 w-4" />
         </button>
@@ -163,7 +167,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <button
             className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50"
             onClick={() => setNotificationsOpen((current) => !current)}
-            title={unreadCount > 0 ? `${unreadCount} thông báo chưa xem` : "Không có thông báo mới"}
+            title={unreadCount > 0 ? `${unreadCount} ${t("thông báo chưa xem")}` : t("Không có thông báo mới")}
             type="button"
           >
             <Bell className="h-4 w-4" />
@@ -178,8 +182,8 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             <div className="absolute right-0 top-12 z-50 w-[340px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl">
               <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
                 <div>
-                  <p className="text-sm font-bold text-zinc-900">Thông báo</p>
-                  <p className="text-xs text-zinc-500">{unreadCount} chưa xem cho {user?.role || "role hiện tại"}</p>
+                  <p className="text-sm font-bold text-zinc-900">{t("Thông báo")}</p>
+                  <p className="text-xs text-zinc-500">{unreadCount} {t("chưa xem cho")} {translateRole(user?.role || "", language) || t("role hiện tại")}</p>
                 </div>
                 {unreadCount > 0 ? (
                   <button
@@ -187,7 +191,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                     onClick={markNotificationsRead}
                     type="button"
                   >
-                    Đánh dấu đã xem
+                    {t("Đánh dấu đã xem")}
                   </button>
                 ) : null}
               </div>
@@ -222,7 +226,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                     );
                   })
                 ) : (
-                  <p className="px-4 py-8 text-center text-sm text-zinc-500">Chưa có thông báo cho role này.</p>
+                  <p className="px-4 py-8 text-center text-sm text-zinc-500">{t("Chưa có thông báo cho role này.")}</p>
                 )}
               </div>
             </div>
@@ -236,7 +240,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             }`}
           >
             <Wallet className="h-3.5 w-3.5" />
-            <span>{user.role}</span>
+            <span>{translateRole(user.role, language)}</span>
             <span className="font-mono opacity-60">
               {user.address.slice(0, 6)}...{user.address.slice(-4)}
             </span>
@@ -247,7 +251,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
           >
             <Wallet className="h-3.5 w-3.5" />
-            Đăng nhập
+            {t("Đăng nhập")}
           </button>
         )}
 
@@ -255,7 +259,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           <button
             onClick={logout}
             className="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500"
-            title="Đăng xuất"
+            title={t("Đăng xuất")}
           >
             <LogOut className="h-4 w-4" />
           </button>

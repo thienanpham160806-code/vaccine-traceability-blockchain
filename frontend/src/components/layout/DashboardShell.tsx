@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Boxes, Home, ListChecks, MoreHorizontal, Truck } from "lucide-react";
 import { getStoredUser } from "@/lib/auth";
+import { useTranslation } from "@/providers/LanguageProvider";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -18,6 +19,7 @@ const bottomItems = [
 
 function BottomNav() {
   const pathname = usePathname();
+  const t = useTranslation();
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden">
@@ -34,7 +36,7 @@ function BottomNav() {
               }`}
             >
               <Icon className="h-4 w-4" />
-              {item.title}
+              {t(item.title)}
             </Link>
           );
         })}
@@ -45,6 +47,7 @@ function BottomNav() {
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const t = useTranslation();
   const [isReady, setIsReady] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -63,7 +66,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   if (!isReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-zinc-50 text-sm font-semibold text-zinc-500">
-        Đang kiểm tra phiên đăng nhập...
+        {t("Đang kiểm tra phiên đăng nhập...")}
       </div>
     );
   }
