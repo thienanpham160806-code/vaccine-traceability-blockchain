@@ -26,6 +26,21 @@ type ApiErrorLike = {
   };
 };
 
+const productionApiUrl = "https://vaccine-traceability-blockchain.onrender.com";
+
+function resolveApiBaseUrl() {
+  const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+  if (configuredUrl) return configuredUrl;
+
+  if (typeof window !== "undefined") {
+    const hostname = window.location.hostname;
+    const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+    return isLocalhost ? "http://localhost:5000" : productionApiUrl;
+  }
+
+  return process.env.NODE_ENV === "production" ? productionApiUrl : "http://localhost:5000";
+}
+
 function requireApiData<T>(data: T | undefined, fallback: string): T {
   if (data === undefined) {
     throw new Error(fallback);
@@ -110,7 +125,7 @@ export type LoginResponse = {
 };
 
 export const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000",
+  baseURL: resolveApiBaseUrl(),
   timeout: 20000,
   headers: {
     "Content-Type": "application/json",

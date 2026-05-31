@@ -30,6 +30,8 @@ NEXT_PUBLIC_APP_NAME=Vaccine Traceability
 NEXT_PUBLIC_CONSUMER_VERIFY_BASE_URL=https://<your-vercel-domain>/consumer/verify
 NEXT_PUBLIC_IPFS_GATEWAY_URL=https://gateway.pinata.cloud/ipfs
 NEXT_PUBLIC_CHAIN_EXPLORER_BASE_URL=https://sepolia.etherscan.io
+NEXT_PUBLIC_SEPOLIA_RPC_URL=<sepolia_rpc_url_from_alchemy_or_infura>
+NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=false
 ```
 
 Sau khi Vercel cap domain production, quay lai cap nhat:
@@ -69,6 +71,8 @@ NEXT_PUBLIC_APP_NAME=Vaccine Traceability
 NEXT_PUBLIC_CONSUMER_VERIFY_BASE_URL=http://localhost:3000/consumer/verify
 NEXT_PUBLIC_IPFS_GATEWAY_URL=https://gateway.pinata.cloud/ipfs
 NEXT_PUBLIC_CHAIN_EXPLORER_BASE_URL=https://sepolia.etherscan.io
+NEXT_PUBLIC_SEPOLIA_RPC_URL=<sepolia_rpc_url_from_alchemy_or_infura>
+NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=true
 ```
 
 Sau do chay:
