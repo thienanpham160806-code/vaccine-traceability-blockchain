@@ -6,11 +6,13 @@ import { useRouter } from "next/navigation";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { ArrowRight, Camera, Keyboard, ShieldCheck } from "lucide-react";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
+import { useTranslation } from "@/providers/LanguageProvider";
 
 type ScanMode = "manual" | "camera";
 
 export default function HomePage() {
   const router = useRouter();
+  const t = useTranslation();
   const [serialId, setSerialId] = useState("");
   const [scanMode, setScanMode] = useState<ScanMode>("manual");
   const [scanError, setScanError] = useState<string | null>(null);
@@ -45,7 +47,7 @@ export default function HomePage() {
             <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500">
               VaxiTrust Network
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-white">Xác thực vaccine</h1>
+            <h1 className="mt-1 text-2xl font-bold text-white">{t("Xác thực vaccine")}</h1>
           </div>
         </div>
 
@@ -53,13 +55,13 @@ export default function HomePage() {
         <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-4 py-1.5">
           <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
           <span className="font-mono text-xs font-semibold uppercase tracking-widest text-emerald-400">
-            Blockchain Live
+            {t("Blockchain Live")}
           </span>
         </div>
 
         {/* Description */}
         <p className="text-sm leading-relaxed text-zinc-400">
-          Quét mã QR hoặc nhập Serial ID để xác minh nguồn gốc, lịch sử vận chuyển và tình trạng an toàn của vaccine.
+          {t("Quét mã QR hoặc nhập Serial ID để xác minh nguồn gốc, lịch sử vận chuyển và tình trạng an toàn của vaccine.")}
         </p>
 
         {/* Verify widget */}
@@ -75,7 +77,7 @@ export default function HomePage() {
               }`}
             >
               <Keyboard className="h-3.5 w-3.5" />
-              Nhập Serial
+              {t("Nhập Serial")}
             </button>
             <button
               onClick={() => { setScanMode("camera"); setScanError(null); }}
@@ -86,7 +88,7 @@ export default function HomePage() {
               }`}
             >
               <Camera className="h-3.5 w-3.5" />
-              Quét QR
+              {t("Quét QR")}
             </button>
           </div>
 
@@ -126,7 +128,7 @@ export default function HomePage() {
                 onClick={() => setScanMode("manual")}
                 className="w-full rounded-lg border border-zinc-700 py-2 text-sm text-zinc-400 transition hover:border-zinc-600 hover:text-white"
               >
-                Chuyển sang nhập thủ công
+                {t("Chuyển sang nhập thủ công")}
               </button>
             </div>
           )}
@@ -138,19 +140,19 @@ export default function HomePage() {
             href="/login"
             className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-400 transition hover:border-zinc-500 hover:text-white"
           >
-            Đăng nhập B2B <ArrowRight className="h-3.5 w-3.5" />
+            {t("Đăng nhập B2B")} <ArrowRight className="h-3.5 w-3.5" />
           </Link>
           <Link
             href="/dashboard"
             className="flex items-center gap-1.5 rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-400 transition hover:border-zinc-500 hover:text-white"
           >
-            Dashboard
+            {t("Dashboard")}
           </Link>
         </div>
 
         {/* Footer */}
         <p className="font-mono text-[10px] text-zinc-600">
-          Powered by Ethereum · IPFS · Zero-Knowledge Proof
+          {t("Powered by Ethereum · IPFS · Zero-Knowledge Proof")}
         </p>
       </div>
     </main>

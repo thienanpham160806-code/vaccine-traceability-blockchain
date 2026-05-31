@@ -152,9 +152,9 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
               VaxiTrust
             </Link>
             <ChevronRight className="h-3 w-3" />
-            <span className="truncate text-zinc-600">{meta.title}</span>
+            <span className="truncate text-zinc-600">{t(meta.title)}</span>
           </div>
-          <h2 className="truncate text-sm font-semibold text-zinc-800">{meta.sub}</h2>
+          <h2 className="truncate text-sm font-semibold text-zinc-800">{t(meta.sub)}</h2>
         </div>
       </div>
 
