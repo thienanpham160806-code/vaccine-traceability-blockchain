@@ -54,6 +54,6 @@ export const transferRejectSchema = z.object({
   rejectionReason: z
     .string({ message: 'rejectionReason must be a string' })
     .trim()
-    .min(3, 'rejectionReason is required')
-    .max(500, 'rejectionReason is too long'),
+    .min(1, 'rejectionReason is required')
+    .max(1000, 'rejectionReason is too long'),
 });

@@ -68,7 +68,7 @@ export const transferConfirmFormSchema = z.object({
 
 export const transferRejectFormSchema = z.object({
   serialId: z.string().trim().min(3, "Serial ID phải có ít nhất 3 ký tự.").max(128).regex(idPattern, idMessage),
-  rejectionReason: z.string().trim().min(3, "Lý do từ chối phải có ít nhất 3 ký tự.").max(500),
+  rejectionReason: z.string().trim().min(1, "Vui lòng nhập lý do từ chối.").max(1000, "Lý do từ chối quá dài."),
 });
 
 export function getZodFieldErrors(error: z.ZodError) {
