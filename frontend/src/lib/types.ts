@@ -114,6 +114,7 @@ export type DashboardActivity = {
   status?: string;
   href: string;
   timestamp: number;
+  audienceRoles?: string[];
 };
 
 export type Batch = {

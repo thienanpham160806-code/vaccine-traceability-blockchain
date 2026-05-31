@@ -2,9 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Bell, ChevronRight, LogOut, Menu, Wallet } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
+import { getDashboardRecentActivity } from "@/lib/api";
+import type { DashboardActivity } from "@/lib/types";
 
 const pageTitles: Record<string, { title: string; sub: string }> = {
   "/dashboard": { title: "Tổng quan", sub: "Bảng điều khiển hệ thống" },
@@ -35,15 +38,73 @@ const roleColor: Record<string, string> = {
   RECALL_AUTHORITY: "bg-orange-50 text-orange-700 border-orange-200",
 };
 
+const fallbackAudienceRoles = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY", "RECALL_AUTHORITY", "ADMIN"];
+
+function getNotificationStorageKey(user: DemoUser | null) {
+  if (!user) return null;
+  return `notifications:lastSeen:${user.role}:${user.address.toLowerCase()}`;
+}
+
+function formatNotificationTime(timestamp: number) {
+  if (!timestamp) return "";
+  return new Date(timestamp).toLocaleString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
+function getNotificationTitle(activity: DashboardActivity) {
+  if (activity.type === "TRANSFER") return `Lệnh chuyển ${activity.status || ""}`.trim();
+  if (activity.type === "RISK") return "Cảnh báo rủi ro";
+  if (activity.type === "RECALL") return "Thông báo thu hồi";
+  return "Cập nhật sản phẩm";
+}
+
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<DemoUser | null>(null);
+  const [lastSeenAt, setLastSeenAt] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const meta = getPageMeta(pathname);
 
   useEffect(() => {
-    setUser(getStoredUser());
+    const storedUser = getStoredUser();
+    setUser(storedUser);
+
+    const storageKey = getNotificationStorageKey(storedUser);
+    setLastSeenAt(storageKey ? Number(window.localStorage.getItem(storageKey) || 0) : 0);
   }, []);
+
+  const { data: activities = [] } = useQuery({
+    queryKey: ["topbar-notifications", user?.role, user?.address],
+    queryFn: () => getDashboardRecentActivity(50),
+    enabled: Boolean(user),
+    refetchInterval: 30_000,
+  });
+
+  const roleNotifications = useMemo(() => {
+    if (!user) return [];
+
+    return activities.filter((activity) => {
+      const audience = activity.audienceRoles?.length ? activity.audienceRoles : fallbackAudienceRoles;
+      return user.role === "ADMIN" || audience.includes(user.role);
+    });
+  }, [activities, user]);
+
+  const visibleNotifications = roleNotifications.slice(0, 8);
+  const unreadCount = roleNotifications.filter((activity) => activity.timestamp > lastSeenAt).length;
+
+  const markNotificationsRead = () => {
+    const storageKey = getNotificationStorageKey(user);
+    if (!storageKey) return;
+
+    const newestTimestamp = Math.max(Date.now(), ...roleNotifications.map((activity) => activity.timestamp || 0));
+    window.localStorage.setItem(storageKey, String(newestTimestamp));
+    setLastSeenAt(newestTimestamp);
+  };
 
   const logout = () => {
     clearSession();
@@ -56,13 +117,15 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         <button
           onClick={onMenuClick}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 lg:hidden"
-          aria-label="Open menu"
+          aria-label="Mở menu"
         >
           <Menu className="h-4 w-4" />
         </button>
         <div className="min-w-0">
           <div className="flex items-center gap-1 text-[11px] text-zinc-400">
-            <Link href="/dashboard" className="hover:text-blue-600">VaxiTrust</Link>
+            <Link href="/dashboard" className="hover:text-blue-600">
+              VaxiTrust
+            </Link>
             <ChevronRight className="h-3 w-3" />
             <span className="truncate text-zinc-600">{meta.title}</span>
           </div>
@@ -71,10 +134,79 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
 
       <div className="flex shrink-0 items-center gap-2">
-        <button className="relative hidden h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 sm:flex">
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-red-500" />
-        </button>
+        <div
+          className="relative hidden sm:block"
+          onMouseEnter={() => setNotificationsOpen(true)}
+          onMouseLeave={() => setNotificationsOpen(false)}
+        >
+          <button
+            className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50"
+            onClick={() => setNotificationsOpen((current) => !current)}
+            title={unreadCount > 0 ? `${unreadCount} thông báo chưa xem` : "Không có thông báo mới"}
+            type="button"
+          >
+            <Bell className="h-4 w-4" />
+            {unreadCount > 0 ? (
+              <span className="absolute -right-1 -top-1 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-none text-white">
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            ) : null}
+          </button>
+
+          {notificationsOpen ? (
+            <div className="absolute right-0 top-12 z-50 w-[340px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+                <div>
+                  <p className="text-sm font-bold text-zinc-900">Thông báo</p>
+                  <p className="text-xs text-zinc-500">{unreadCount} chưa xem cho {user?.role || "role hiện tại"}</p>
+                </div>
+                {unreadCount > 0 ? (
+                  <button
+                    className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                    onClick={markNotificationsRead}
+                    type="button"
+                  >
+                    Đánh dấu đã xem
+                  </button>
+                ) : null}
+              </div>
+
+              <div className="max-h-[360px] overflow-y-auto">
+                {visibleNotifications.length > 0 ? (
+                  visibleNotifications.map((activity) => {
+                    const unread = activity.timestamp > lastSeenAt;
+                    return (
+                      <Link
+                        className="flex gap-3 border-b border-zinc-100 px-4 py-3 transition last:border-b-0 hover:bg-zinc-50"
+                        href={activity.href}
+                        key={activity.id}
+                        onClick={markNotificationsRead}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <p className={`truncate text-sm ${unread ? "font-bold text-zinc-950" : "font-medium text-zinc-700"}`}>
+                              {getNotificationTitle(activity)}
+                            </p>
+                            <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-red-500" : "bg-blue-500"}`} />
+                          </div>
+                          <p className={`mt-1 line-clamp-2 text-xs ${unread ? "font-semibold text-zinc-700" : "text-zinc-500"}`}>
+                            {activity.title}
+                          </p>
+                          <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-zinc-400">
+                            <span className="truncate">{activity.subtitle}</span>
+                            <span className="shrink-0">{formatNotificationTime(activity.timestamp)}</span>
+                          </div>
+                        </div>
+                      </Link>
+                    );
+                  })
+                ) : (
+                  <p className="px-4 py-8 text-center text-sm text-zinc-500">Chưa có thông báo cho role này.</p>
+                )}
+              </div>
+            </div>
+          ) : null}
+        </div>
 
         {user ? (
           <div

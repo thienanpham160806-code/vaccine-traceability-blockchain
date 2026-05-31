@@ -5,6 +5,9 @@ import { DashboardActivity, DashboardStats } from '../types';
 
 const router = Router();
 const DAY_MS = 24 * 60 * 60 * 1000;
+const ADMIN_ROLE = 'ADMIN';
+const OPERATION_ROLES = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY'];
+const ALL_DASHBOARD_ROLES = [...OPERATION_ROLES, 'RECALL_AUTHORITY', ADMIN_ROLE];
 
 function asRecord(value: unknown): Record<string, any> {
   return value && typeof value === 'object' ? (value as Record<string, any>) : {};
@@ -46,6 +49,7 @@ function makeTrend(items: any[]): Array<{ date: string; count: number }> {
 
 function recentProductActivity(key: string, product: any): DashboardActivity {
   const serialId = fallbackSerial(key, product);
+  const ownerRole = product?.origin === 'IMPORTED' ? 'IMPORTER' : 'MANUFACTURER';
   return {
     id: `product-${key}`,
     type: 'PRODUCT',
@@ -54,19 +58,28 @@ function recentProductActivity(key: string, product: any): DashboardActivity {
     status: product?.status || 'UNKNOWN',
     href: `/dashboard/verify/${encodeURIComponent(serialId)}`,
     timestamp: timestampOf(product),
+    audienceRoles: [ownerRole, ADMIN_ROLE],
   };
 }
 
 function recentTransferActivity(key: string, transfer: any): DashboardActivity {
   const serialId = transfer?.serialId || key;
+  const fromRole = transfer?.fromRole || 'UNKNOWN';
+  const toRole = transfer?.toRole || 'UNKNOWN';
+  const audienceRoles =
+    transfer?.status === 'PENDING'
+      ? [toRole, ADMIN_ROLE]
+      : Array.from(new Set([fromRole, toRole, ADMIN_ROLE].filter((role) => role !== 'UNKNOWN')));
+
   return {
     id: `transfer-${key}`,
     type: 'TRANSFER',
-    title: `${transfer?.fromRole || 'UNKNOWN'} -> ${transfer?.toRole || 'UNKNOWN'}`,
+    title: `${fromRole} -> ${toRole}`,
     subtitle: serialId,
     status: transfer?.status || 'UNKNOWN',
     href: `/dashboard/transfers/${encodeURIComponent(transfer?.id || key)}`,
     timestamp: timestampOf(transfer),
+    audienceRoles,
   };
 }
 
@@ -80,6 +93,7 @@ function recentRiskActivity(key: string, risk: any): DashboardActivity {
     status: risk?.level ? `LEVEL_${risk.level}` : 'ALERT',
     href: '/dashboard/risk-dispute',
     timestamp: timestampOf(risk),
+    audienceRoles: ['RECALL_AUTHORITY', ADMIN_ROLE],
   };
 }
 
@@ -93,6 +107,7 @@ function recentRecallActivity(key: string, recall: any): DashboardActivity {
     status: 'RECALLED',
     href: '/dashboard/recall',
     timestamp: timestampOf(recall),
+    audienceRoles: ALL_DASHBOARD_ROLES,
   };
 }
 

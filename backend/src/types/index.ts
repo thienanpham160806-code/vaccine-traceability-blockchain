@@ -122,6 +122,7 @@ export interface DashboardActivity {
   status?: string;
   href: string;
   timestamp: number;
+  audienceRoles?: string[];
 }
 
 // ============= Verify =============
