@@ -1,0 +1,57 @@
+type VaxiTrustLogoProps = {
+  className?: string;
+  iconClassName?: string;
+  wordmarkClassName?: string;
+  showWordmark?: boolean;
+};
+
+export function VaxiTrustLogo({
+  className = "h-12 w-12",
+  iconClassName = "h-7 w-7",
+  wordmarkClassName = "text-2xl",
+  showWordmark = false,
+}: VaxiTrustLogoProps) {
+  const icon = (
+    <div
+      className={`flex shrink-0 items-center justify-center rounded-[28%] border border-blue-400/55 bg-blue-100/70 shadow-[0_0_32px_rgba(46,125,255,0.24)] dark:border-blue-700/70 dark:bg-blue-950/55 ${className}`}
+    >
+      <svg
+        aria-hidden="true"
+        className={iconClassName}
+        fill="none"
+        viewBox="0 0 64 64"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <path
+          d="M32 5 54 12v17c0 14.4-8.5 25.6-22 30-13.5-4.4-22-15.6-22-30V12l22-7Z"
+          fill="#2E7DFF"
+        />
+        <path
+          d="M32 55.5C20.2 51.2 13 41.4 13 29V14.3L32 8.2l19 6.1V29c0 12.4-7.2 22.2-19 26.5Z"
+          fill="url(#shieldGlow)"
+        />
+        <path
+          className="fill-white dark:fill-zinc-950"
+          d="M32 45.5 19.9 33.8c-2.9-2.8-3.1-7.5-.4-10.5 2.8-3.1 7.6-3.2 10.5-.3l2 2 2-2c2.9-2.9 7.7-2.8 10.5.3 2.7 3 2.5 7.7-.4 10.5L32 45.5Z"
+        />
+        <defs>
+          <linearGradient gradientUnits="userSpaceOnUse" id="shieldGlow" x1="32" x2="32" y1="8" y2="56">
+            <stop stopColor="#3B82F6" />
+            <stop offset="1" stopColor="#1D4ED8" />
+          </linearGradient>
+        </defs>
+      </svg>
+    </div>
+  );
+
+  if (!showWordmark) return icon;
+
+  return (
+    <div className="flex items-center gap-4">
+      {icon}
+      <span className={`font-extrabold leading-none tracking-normal text-zinc-950 dark:text-zinc-50 ${wordmarkClassName}`}>
+        VaxiTrust
+      </span>
+    </div>
+  );
+}

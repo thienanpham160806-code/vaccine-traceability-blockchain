@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Web3Provider } from "@/providers/Web3Provider";
+import { ThemeProvider } from "@/providers/ThemeProvider";
 import { Toaster } from "@/components/ui/sonner";
 
 const plusJakartaSans = Plus_Jakarta_Sans({
@@ -17,8 +18,11 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "VaxiTrust — Vaccine Traceability",
+  title: "VaxiTrust - Vaccine Traceability",
   description: "Blockchain-based vaccine traceability dashboard",
+  icons: {
+    icon: "/icon.svg",
+  },
 };
 
 export default function RootLayout({
@@ -27,12 +31,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${plusJakartaSans.variable} ${jetBrainsMono.variable}`}>
+    <html lang="vi" className={`${plusJakartaSans.variable} ${jetBrainsMono.variable}`} suppressHydrationWarning>
       <body className="font-sans antialiased">
-        <Web3Provider>
-          {children}
-          <Toaster />
-        </Web3Provider>
+        <ThemeProvider>
+          <Web3Provider>
+            {children}
+            <Toaster />
+          </Web3Provider>
+        </ThemeProvider>
       </body>
     </html>
   );

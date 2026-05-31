@@ -10,6 +10,66 @@
   ::file-selector-button {
     border-color: var(--color-zinc-200, currentColor);
   }
+
+  body {
+    background: #f8fafc;
+    color: #18181b;
+  }
+
+  .dark body {
+    background: #09090b;
+    color: #f4f4f5;
+  }
+}
+
+@layer utilities {
+  .dark .bg-white {
+    background-color: #18181b !important;
+  }
+
+  .dark .bg-zinc-50 {
+    background-color: #09090b !important;
+  }
+
+  .dark .bg-zinc-100 {
+    background-color: #27272a !important;
+  }
+
+  .dark .bg-gray-50 {
+    background-color: #18181b !important;
+  }
+
+  .dark .text-zinc-950,
+  .dark .text-zinc-900,
+  .dark .text-zinc-800,
+  .dark .text-gray-900 {
+    color: #f4f4f5 !important;
+  }
+
+  .dark .text-zinc-700,
+  .dark .text-zinc-600,
+  .dark .text-gray-700,
+  .dark .text-gray-600 {
+    color: #d4d4d8 !important;
+  }
+
+  .dark .text-zinc-500,
+  .dark .text-gray-500,
+  .dark .text-muted-foreground {
+    color: #a1a1aa !important;
+  }
+
+  .dark .border-zinc-100,
+  .dark .border-zinc-200,
+  .dark .border-gray-200 {
+    border-color: #27272a !important;
+  }
+
+  .dark input,
+  .dark select,
+  .dark textarea {
+    color: #f4f4f5;
+  }
 }
 
 @layer utilities {

@@ -6,6 +6,7 @@ import { useAccount, useConnect, useConnectors, useDisconnect, useSignMessage } 
 import { Activity, Building2, Link2, Lock, Shield, Stethoscope, Truck, UserCheck } from "lucide-react";
 import { getApiErrorMessage, getDemoActors, loginWithSignature, requestAuthNonce } from "@/lib/api";
 import { demoActors as fallbackActors, loginDemo, setSession } from "@/lib/auth";
+import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 
 const roleIcon: Record<string, React.ElementType> = {
   MANUFACTURER: Building2,
@@ -205,10 +206,12 @@ export default function LoginPage() {
       <MedicalBackdrop />
       <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between px-5 py-5 lg:px-8">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600/10">
-            <Activity className="h-5 w-5 text-blue-600" />
-          </div>
-          <span className="text-xl font-bold text-zinc-950">VaxiTrust</span>
+          <VaxiTrustLogo
+            className="h-12 w-12"
+            iconClassName="h-7 w-7"
+            showWordmark
+            wordmarkClassName="text-2xl"
+          />
         </div>
         {address ? (
           <div className="hidden rounded-lg border border-zinc-200 bg-white px-3 py-2 font-mono text-xs text-zinc-600 shadow-sm sm:block">

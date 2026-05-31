@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Scanner } from "@yudiel/react-qr-scanner";
-import { Activity, ArrowRight, Camera, Keyboard, ShieldCheck } from "lucide-react";
+import { ArrowRight, Camera, Keyboard, ShieldCheck } from "lucide-react";
+import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 
 type ScanMode = "manual" | "camera";
 
@@ -34,9 +35,12 @@ export default function HomePage() {
       <div className="w-full max-w-md space-y-8 text-center">
         {/* Logo */}
         <div className="flex flex-col items-center gap-3">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/20">
-            <Activity className="h-7 w-7 text-blue-400" />
-          </div>
+          <VaxiTrustLogo
+            className="h-20 w-20"
+            iconClassName="h-12 w-12"
+            showWordmark
+            wordmarkClassName="text-5xl text-white"
+          />
           <div>
             <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500">
               VaxiTrust Network

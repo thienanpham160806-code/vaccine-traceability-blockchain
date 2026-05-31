@@ -42,7 +42,18 @@ const fallbackAudienceRoles = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "CLINI
 
 function getNotificationStorageKey(user: DemoUser | null) {
   if (!user) return null;
-  return `notifications:lastSeen:${user.role}:${user.address.toLowerCase()}`;
+  return `notifications:readIds:${user.role}:${user.address.toLowerCase()}`;
+}
+
+function loadReadNotificationIds(storageKey: string | null) {
+  if (!storageKey) return [];
+
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
 }
 
 function formatNotificationTime(timestamp: number) {
@@ -66,7 +77,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
   const pathname = usePathname();
   const [user, setUser] = useState<DemoUser | null>(null);
-  const [lastSeenAt, setLastSeenAt] = useState(0);
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const meta = getPageMeta(pathname);
 
@@ -75,7 +86,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     setUser(storedUser);
 
     const storageKey = getNotificationStorageKey(storedUser);
-    setLastSeenAt(storageKey ? Number(window.localStorage.getItem(storageKey) || 0) : 0);
+    setReadNotificationIds(loadReadNotificationIds(storageKey));
   }, []);
 
   const { data: activities = [] } = useQuery({
@@ -95,15 +106,25 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   }, [activities, user]);
 
   const visibleNotifications = roleNotifications.slice(0, 8);
-  const unreadCount = roleNotifications.filter((activity) => activity.timestamp > lastSeenAt).length;
+  const readNotificationIdSet = useMemo(() => new Set(readNotificationIds), [readNotificationIds]);
+  const unreadCount = roleNotifications.filter((activity) => !readNotificationIdSet.has(activity.id)).length;
 
   const markNotificationsRead = () => {
     const storageKey = getNotificationStorageKey(user);
     if (!storageKey) return;
 
-    const newestTimestamp = Math.max(Date.now(), ...roleNotifications.map((activity) => activity.timestamp || 0));
-    window.localStorage.setItem(storageKey, String(newestTimestamp));
-    setLastSeenAt(newestTimestamp);
+    const nextIds = Array.from(new Set([...readNotificationIds, ...roleNotifications.map((activity) => activity.id)]));
+    window.localStorage.setItem(storageKey, JSON.stringify(nextIds));
+    setReadNotificationIds(nextIds);
+  };
+
+  const markNotificationRead = (notificationId: string) => {
+    const storageKey = getNotificationStorageKey(user);
+    if (!storageKey || readNotificationIdSet.has(notificationId)) return;
+
+    const nextIds = [...readNotificationIds, notificationId];
+    window.localStorage.setItem(storageKey, JSON.stringify(nextIds));
+    setReadNotificationIds(nextIds);
   };
 
   const logout = () => {
@@ -174,13 +195,13 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
               <div className="max-h-[360px] overflow-y-auto">
                 {visibleNotifications.length > 0 ? (
                   visibleNotifications.map((activity) => {
-                    const unread = activity.timestamp > lastSeenAt;
+                    const unread = !readNotificationIdSet.has(activity.id);
                     return (
                       <Link
                         className="flex gap-3 border-b border-zinc-100 px-4 py-3 transition last:border-b-0 hover:bg-zinc-50"
                         href={activity.href}
                         key={activity.id}
-                        onClick={markNotificationsRead}
+                        onClick={() => markNotificationRead(activity.id)}
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">

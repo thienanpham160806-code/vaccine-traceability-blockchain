@@ -3,19 +3,26 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTheme } from "next-themes";
 import {
-  Activity,
   Boxes,
+  Check,
   ClipboardList,
+  HelpCircle,
   LayoutDashboard,
   ListChecks,
   LogOut,
+  Monitor,
+  Moon,
   RotateCcw,
   Search,
+  Settings,
   ShieldAlert,
+  Sun,
   Truck,
 } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
+import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 
 const menuItems = [
   { title: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
@@ -26,6 +33,12 @@ const menuItems = [
   { title: "Rủi ro & tranh chấp", href: "/dashboard/risk-dispute", icon: ShieldAlert },
   { title: "Thu hồi", href: "/dashboard/recall", icon: RotateCcw },
 ];
+
+const themeOptions = [
+  { value: "light", label: "Sáng", icon: Sun },
+  { value: "dark", label: "Tối", icon: Moon },
+  { value: "system", label: "Hệ thống", icon: Monitor },
+] as const;
 
 const roleLabel: Record<string, string> = {
   MANUFACTURER: "Manufacturer",
@@ -52,8 +65,10 @@ const roleColor: Record<string, string> = {
 export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { theme, setTheme } = useTheme();
   const [serialId, setSerialId] = useState("");
   const [user, setUser] = useState<DemoUser | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   useEffect(() => {
     setUser(getStoredUser());
@@ -88,14 +103,13 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
 
   return (
     <aside className={`${mobile ? "flex h-full w-72" : "hidden min-h-screen w-64 lg:flex"} flex-col border-r border-zinc-800 bg-zinc-950`}>
-      <Link href="/dashboard" onClick={onNavigate} className="flex min-h-16 items-center gap-3 border-b border-zinc-800 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-500/20">
-          <Activity className="h-5 w-5 text-blue-400" />
-        </div>
-        <div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">VaxiTrust</p>
-          <p className="text-sm font-semibold text-white">Truy xuất vaccine</p>
-        </div>
+      <Link href="/dashboard" onClick={onNavigate} className="flex min-h-16 items-center border-b border-zinc-800 px-5 py-5">
+        <VaxiTrustLogo
+          className="h-12 w-12"
+          iconClassName="h-7 w-7"
+          showWordmark
+          wordmarkClassName="text-2xl text-white"
+        />
       </Link>
 
       {user && (
@@ -151,14 +165,22 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           <button
             onClick={goVerify}
             className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700"
-            aria-label="Verify serial"
+            aria-label="Xác minh serial"
           >
             <Search className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
-      <div className="border-t border-zinc-800 p-3">
+      <div className="space-y-1 border-t border-zinc-800 p-3">
+        <a
+          className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-800 hover:text-blue-400"
+          href="mailto:support@vaxitrust.local"
+        >
+          <HelpCircle className="h-4 w-4" />
+          Hỗ trợ
+        </a>
+
         <button
           onClick={logout}
           className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-800 hover:text-red-400"
@@ -166,6 +188,45 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           <LogOut className="h-4 w-4" />
           Đăng xuất
         </button>
+
+        <div
+          className="relative"
+          onMouseEnter={() => setSettingsOpen(true)}
+          onMouseLeave={() => setSettingsOpen(false)}
+        >
+          <button
+            className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-800 hover:text-blue-400"
+            onClick={() => setSettingsOpen((current) => !current)}
+            type="button"
+          >
+            <Settings className="h-4 w-4" />
+            Cài đặt
+          </button>
+
+          {settingsOpen ? (
+            <div className="absolute bottom-0 left-full z-50 ml-2 w-44 rounded-xl border border-zinc-800 bg-zinc-950 p-2 shadow-xl">
+              <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">Giao diện</p>
+              {themeOptions.map((option) => {
+                const Icon = option.icon;
+                const selected = (theme || "system") === option.value;
+                return (
+                  <button
+                    className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-sm transition ${
+                      selected ? "bg-blue-600/15 text-blue-400" : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                    }`}
+                    key={option.value}
+                    onClick={() => setTheme(option.value)}
+                    type="button"
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span>{option.label}</span>
+                    {selected ? <Check className="ml-auto h-3.5 w-3.5" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
       </div>
     </aside>
   );

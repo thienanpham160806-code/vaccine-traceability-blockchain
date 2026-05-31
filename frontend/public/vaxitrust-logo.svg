@@ -1,0 +1,7 @@
+<svg width="860" height="260" viewBox="0 0 860 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="860" height="260" fill="#F8FAFC"/>
+  <rect x="16" y="28" width="220" height="220" rx="60" fill="#DBEAFE" stroke="#93C5FD" stroke-width="5"/>
+  <path d="M126 74L177 91V128C177 162 157.4 187.8 126 198C94.6 187.8 75 162 75 128V91L126 74Z" fill="#2E7DFF"/>
+  <path d="M126 157L98.6 130.5C92 124.1 91.5 113.5 97.7 106.6C104 99.7 114.8 99.5 121.5 106.2L126 110.7L130.5 106.2C137.2 99.5 148 99.7 154.3 106.6C160.5 113.5 160 124.1 153.4 130.5L126 157Z" fill="#F8FAFC"/>
+  <text x="280" y="194" fill="#020617" font-family="Plus Jakarta Sans, Inter, Arial, sans-serif" font-size="132" font-weight="800">VaxiTrust</text>
+</svg>
