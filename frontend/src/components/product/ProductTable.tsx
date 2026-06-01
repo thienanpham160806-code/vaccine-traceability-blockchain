@@ -135,7 +135,31 @@ export function ProductTable() {
           </div>
         ) : null}
         {!isLoading && !error ? (
-          <div className="max-h-[520px] overflow-auto lg:max-h-[calc(100dvh-25rem)]">
+          <>
+          <div className="max-h-[60dvh] space-y-3 overflow-y-auto p-3 md:hidden">
+            {products.map((product) => (
+              <article key={product.serialId} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/70">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">{product.serialId}</p>
+                    <p className="mt-1 text-base font-semibold text-zinc-900 dark:text-zinc-100">{product.productName}</p>
+                  </div>
+                  <ProductStatusBadge status={product.status} />
+                </div>
+                <div className="mt-3 grid gap-2 text-xs text-zinc-500 dark:text-zinc-400">
+                  <p><span className="font-semibold">{t("Mã lô")}:</span> {product.batchId}</p>
+                  <p><span className="font-semibold">{t("Nhà sản xuất")}:</span> {product.manufacturerName}</p>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-3 text-sm">
+                  <Link href={`/dashboard/products/${encodeURIComponent(product.serialId)}`} className="font-semibold text-blue-600 hover:underline">{t("Chi tiết")}</Link>
+                  <Link href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`} className="font-semibold text-emerald-600 hover:underline">{t("Chuyển giao")}</Link>
+                  <Link href={`/consumer/verify/${encodeURIComponent(product.serialId)}`} className="font-semibold text-zinc-600 hover:underline dark:text-zinc-300">{t("Công khai")}</Link>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden max-h-[520px] overflow-auto md:block lg:max-h-[calc(100dvh-25rem)]">
             <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
                 <tr>
@@ -165,6 +189,7 @@ export function ProductTable() {
               </tbody>
             </table>
           </div>
+          </>
         ) : null}
         {!isLoading && !error && products.length === 0 ? <p className="p-4 text-sm text-gray-500 dark:text-zinc-400">{t("Không tìm thấy sản phẩm.")}</p> : null}
       </div>

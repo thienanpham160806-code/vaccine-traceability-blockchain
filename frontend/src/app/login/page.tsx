@@ -103,6 +103,57 @@ function PreferenceControls() {
   );
 }
 
+function LoginTechBackdrop() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      <style jsx>{`
+        @keyframes loginFloat {
+          0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--rotate)); opacity: 0.18; }
+          50% { transform: translate3d(var(--x), var(--y), 0) rotate(calc(var(--rotate) + 9deg)); opacity: 0.34; }
+        }
+        @keyframes loginPulse {
+          0%, 100% { transform: scale(0.96); opacity: 0.08; }
+          50% { transform: scale(1.08); opacity: 0.18; }
+        }
+        @keyframes loginScan {
+          0% { transform: translateX(-15%); opacity: 0; }
+          20%, 72% { opacity: 0.42; }
+          100% { transform: translateX(115%); opacity: 0; }
+        }
+        .login-float { animation: loginFloat 10s ease-in-out infinite; }
+        .login-pulse { animation: loginPulse 6s ease-in-out infinite; }
+        .login-scan { animation: loginScan 8s ease-in-out infinite; }
+      `}</style>
+
+      <div className="absolute left-[8%] top-24 h-72 w-72 rounded-full border border-blue-300/20 bg-[radial-gradient(circle,rgba(46,125,255,0.14),transparent_62%)] blur-[1px] dark:border-cyan-300/10 dark:bg-[radial-gradient(circle,rgba(56,189,248,0.12),transparent_62%)]" />
+      <div className="login-scan absolute left-0 top-[22%] h-px w-3/4 bg-gradient-to-r from-transparent via-blue-500/35 to-transparent dark:via-cyan-300/35" />
+      <div className="login-pulse absolute -left-8 bottom-28 h-32 w-32 text-emerald-300/60 dark:text-emerald-300/35">
+        <div className="absolute left-1/2 top-0 h-full w-7 -translate-x-1/2 rounded-full bg-current" />
+        <div className="absolute left-0 top-1/2 h-7 w-full -translate-y-1/2 rounded-full bg-current" />
+      </div>
+      <div
+        className="login-float absolute bottom-[18%] left-[12%] h-28 w-12 rounded-full border border-emerald-200/45 bg-emerald-100/40 shadow-[inset_8px_8px_18px_rgba(255,255,255,0.4),0_18px_45px_rgba(16,185,129,0.16)] dark:border-emerald-300/15 dark:bg-emerald-300/10"
+        style={{ "--rotate": "18deg", "--x": "18px", "--y": "-14px" } as React.CSSProperties}
+      >
+        <div className="absolute left-1/2 top-3 h-5 w-8 -translate-x-1/2 rounded-md bg-white/50 dark:bg-white/15" />
+        <div className="absolute left-1/2 top-12 h-11 w-6 -translate-x-1/2 rounded-full bg-cyan-300/45 dark:bg-cyan-300/25" />
+      </div>
+      <div
+        className="login-float absolute right-[9%] top-[20%] h-28 w-7 rounded-full bg-blue-300/20 shadow-[0_0_28px_rgba(59,130,246,0.32)]"
+        style={{ "--rotate": "-24deg", "--x": "-18px", "--y": "10px", animationDelay: "1.2s" } as React.CSSProperties}
+      >
+        <div className="absolute -bottom-7 left-1/2 h-9 w-1 -translate-x-1/2 rounded-full bg-blue-300/35" />
+        <div className="absolute -top-3 left-1/2 h-4 w-12 -translate-x-1/2 rounded-full border border-blue-300/25" />
+      </div>
+      <div className="absolute bottom-10 right-10 hidden grid-cols-6 gap-2 opacity-20 dark:opacity-15 sm:grid">
+        {Array.from({ length: 24 }).map((_, index) => (
+          <span key={index} className="h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-cyan-300" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { address, isConnected } = useAccount();
@@ -187,17 +238,18 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-x-hidden bg-[radial-gradient(circle_at_20%_20%,#dbeafe_0,#f8fafc_34%,#f8fafc_100%)] px-5 py-5 text-zinc-950 dark:bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.1)_0,rgba(15,23,42,0.88)_32%,#09090b_100%)] dark:text-white">
-      <div className="mx-auto flex min-h-[calc(100dvh-11rem)] w-full max-w-5xl flex-1 flex-col">
-        <header className="flex flex-wrap items-center justify-between gap-3">
+    <main className="relative flex min-h-screen flex-col overflow-x-hidden bg-[radial-gradient(circle_at_20%_20%,#dbeafe_0,#f8fafc_34%,#f8fafc_100%)] px-4 py-4 text-zinc-950 dark:bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.1)_0,rgba(15,23,42,0.88)_32%,#09090b_100%)] dark:text-white sm:px-5 sm:py-5">
+      <LoginTechBackdrop />
+      <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-11rem)] w-full max-w-5xl flex-1 flex-col">
+        <header className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
           <VaxiTrustLogo className="h-12 w-12" iconClassName="h-7 w-7" showWordmark wordmarkClassName="text-2xl" />
-          <div className="flex flex-wrap items-center justify-end gap-2">
+          <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
             <PreferenceControls />
             {address ? <span className="rounded-lg border border-zinc-200 bg-white/80 px-3 py-2 font-mono text-xs text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-400">{shortAddress(address)}</span> : null}
           </div>
         </header>
 
-        <section className="mx-auto mt-7 w-full max-w-xl rounded-xl border border-zinc-200 bg-white/92 p-5 shadow-2xl shadow-blue-950/5 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/20">
+        <section className="mx-auto mt-5 w-full max-w-xl rounded-xl border border-zinc-200 bg-white/92 p-4 shadow-2xl shadow-blue-950/5 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/20 sm:mt-7 sm:p-5">
           <div className="grid grid-cols-2 gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950">
             {(["login", "verify"] as const).map((tab) => (
               <button
@@ -221,7 +273,7 @@ export default function LoginPage() {
                 <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{t("Chọn ví demo hoặc đăng nhập trực tiếp bằng MetaMask.")}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {actors.map((actor) => {
                   const Icon = roleIcon[actor.role] || Building2;
                   return (
@@ -250,7 +302,7 @@ export default function LoginPage() {
                 {isLoading ? t("Đang đăng nhập...") : t("Đăng nhập bằng ví demo")}
               </button>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button type="button" onClick={handleMetaMask} disabled={isLoading} className="flex min-h-12 items-center justify-center rounded-lg border border-zinc-200 bg-white text-sm font-bold text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-800">
                   MetaMask
                 </button>
@@ -277,7 +329,7 @@ export default function LoginPage() {
                 </button>
               </div>
               {verifyMode === "manual" ? (
-                <div className="flex gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <input className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2.5 font-mono text-sm text-zinc-900 outline-none focus:border-blue-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-white" value={serialId} onChange={(event) => setSerialId(event.target.value)} onKeyDown={(event) => event.key === "Enter" && goVerify()} placeholder="VCN-DEMO-001" />
                   <button type="button" onClick={() => goVerify()} disabled={!serialId.trim()} className="flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-40">
                     <ShieldCheck className="h-4 w-4" />
@@ -302,7 +354,7 @@ export default function LoginPage() {
           )}
         </section>
       </div>
-      <ContactFooter animatedBackdrop className="-mx-5 mt-8 rounded-none border-x-0 border-b-0 px-5 sm:px-8" />
+      <ContactFooter animatedBackdrop className="relative z-10 -mx-4 mt-8 rounded-none border-x-0 border-b-0 px-4 sm:-mx-5 sm:px-8" />
     </main>
   );
 }

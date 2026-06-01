@@ -73,8 +73,8 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-white dark:bg-zinc-950">
-      <div className="flex min-h-screen">
+    <div className="min-h-screen overflow-x-hidden bg-white dark:bg-zinc-950">
+      <div className="flex min-h-screen min-w-0">
         <Sidebar />
 
         {mobileMenuOpen && (
@@ -93,7 +93,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
         <div className="flex min-w-0 flex-1 flex-col">
           <Topbar onMenuClick={() => setMobileMenuOpen(true)} />
 
-          <main className="flex-1 p-4 sm:p-6">
+          <main className="min-w-0 flex-1 px-3 py-4 pb-24 sm:p-6 sm:pb-24 lg:pb-6">
             {children}
           </main>
         </div>
