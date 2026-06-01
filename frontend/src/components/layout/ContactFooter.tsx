@@ -13,9 +13,10 @@ const contactCopy = {
     addressLabel: "Address",
     address: "669 Do Muoi, Quarter 13, Linh Xuan Ward, Ho Chi Minh City",
     phoneLabel: "Phone",
-    emailLabel: "Website issue",
+    emailLabel: "Website support",
     webEmailLabel: "System email",
-    note: "For urgent website issues, contact the project maintainers by email.",
+    note:
+      "Use the system email for workflow support. Contact Thiên An or Mạnh Quyền directly for website troubleshooting.",
     backTop: "Back to top",
   },
   vi: {
@@ -27,9 +28,10 @@ const contactCopy = {
     addressLabel: "Địa chỉ",
     address: "669 Đỗ Mười, khu phố 13, phường Linh Xuân, TP.HCM",
     phoneLabel: "Điện thoại",
-    emailLabel: "Website gặp sự cố",
+    emailLabel: "Hỗ trợ các vấn đề liên quan đến website",
     webEmailLabel: "E-mail hệ thống",
-    note: "Nếu website có vấn đề, vui lòng liên hệ nhóm phụ trách qua email.",
+    note:
+      "Liên hệ e-mail hệ thống nếu cần hỗ trợ công việc. Liên hệ mail Thiên An hoặc Mạnh Quyền nếu cần giải quyết các vấn đề của web.",
     backTop: "Lên đầu trang",
   },
 } as const;
@@ -60,7 +62,7 @@ export function ContactFooter({ className = "" }: { className?: string }) {
       <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-blue-400/15 blur-2xl" />
       <div className="pointer-events-none absolute -bottom-16 left-1/3 h-40 w-40 rounded-full bg-emerald-400/10 blur-2xl" />
 
-      <div className="relative grid gap-8 lg:grid-cols-[1.1fr_1.4fr_auto] lg:items-start">
+      <div className="relative grid gap-8 lg:grid-cols-[0.85fr_2fr_auto] lg:items-start xl:grid-cols-[0.75fr_2.25fr_auto]">
         <div className="space-y-4">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-blue-200 bg-blue-100 text-blue-600 shadow-sm dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300">
@@ -78,7 +80,7 @@ export function ContactFooter({ className = "" }: { className?: string }) {
 
         <div className="space-y-4">
           <h2 className="text-lg font-extrabold text-blue-700 dark:text-blue-300">{text.title}</h2>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
             <div className="space-y-3 rounded-xl border border-white/80 bg-white/70 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
                 {text.contactTitle}
@@ -100,7 +102,7 @@ export function ContactFooter({ className = "" }: { className?: string }) {
                   <div>
                     <p className="font-semibold">{text.emailLabel}</p>
                     {maintainerEmails.map((item) => (
-                      <a key={item.email} className="block break-all text-zinc-600 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-300" href={`mailto:${item.email}`}>
+                      <a key={item.email} className="block break-words text-zinc-600 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-300 xl:whitespace-nowrap" href={`mailto:${item.email}`}>
                         {item.name}: {item.email}
                       </a>
                     ))}
@@ -121,7 +123,7 @@ export function ContactFooter({ className = "" }: { className?: string }) {
                 <Mail className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
                 <div>
                   <p className="font-semibold">{text.webEmailLabel}</p>
-                  <a className="break-all text-zinc-600 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-300" href="mailto:vaccinetraceabilityblockchain@gmail.com">
+                  <a className="break-words text-zinc-600 hover:text-blue-600 dark:text-zinc-300 dark:hover:text-blue-300 xl:whitespace-nowrap" href="mailto:vaccinetraceabilityblockchain@gmail.com">
                     vaccinetraceabilityblockchain@gmail.com
                   </a>
                 </div>

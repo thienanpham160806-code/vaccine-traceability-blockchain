@@ -94,7 +94,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
           {children}
-          <ContactFooter className="mt-10" />
+          <ContactFooter className="mt-10 lg:-ml-[calc(16rem+1.5rem)] lg:w-[calc(100%+16rem+1.5rem)]" />
         </main>
       </div>
 
