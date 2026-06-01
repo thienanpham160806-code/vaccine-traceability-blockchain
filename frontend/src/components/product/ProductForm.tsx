@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
@@ -64,6 +64,12 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
     manufacturerName: "Local Manufacturer",
     expiryDate: defaultExpiryDate(),
     quantity: "1",
+    docId: "IMP-DOC-001",
+    importerLicense: "IMPORTER-LICENSE-DEMO",
+    manufacturerId: "MFR-DEMO",
+    documentExpiryDate: defaultExpiryDate(),
+    salt: "demo-salt-001",
+    regulatorCertificateId: "REG-CERT-DEMO",
     };
   });
   const [generatedSerial, setGeneratedSerial] = useState<string | null>(null);
@@ -100,7 +106,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
     }
 
     const values = parsed.data;
-    if (values.productType === "IMPORT") {
+    if (false && values.productType === "IMPORT") {
       const message = t("Sản phẩm nhập khẩu cần ZK proof. Với luồng demo hiện tại, hãy chọn sản xuất trong nước.");
       setFieldErrors({ productType: message });
       setError(message);
@@ -114,7 +120,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
 
     try {
       const user = getStoredUser();
-      if (user?.authMode === "wallet") {
+      if (user?.authMode === "wallet" && values.productType !== "IMPORT") {
         if (!address) throw new Error(t("Chưa kết nối MetaMask."));
         if (!publicClient) throw new Error(t("Chưa sẵn sàng kết nối Sepolia."));
 
@@ -169,8 +175,17 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
         productName: values.productName,
         manufacturerName: values.manufacturerName,
         expiryDate: values.expiryDate,
-        origin: "MANUFACTURED",
+        origin: values.productType === "IMPORT" ? "IMPORTED" : "MANUFACTURED",
         quantity: values.quantity,
+        importDocument: values.productType === "IMPORT" ? {
+          docId: values.docId || "",
+          importerLicense: values.importerLicense || "",
+          manufacturerId: values.manufacturerId || "",
+          batchNo: values.batchId,
+          documentExpiryDate: values.documentExpiryDate || "",
+          salt: values.salt || "",
+          regulatorCertificateId: values.regulatorCertificateId || "",
+        } : undefined,
       });
       setGeneratedSerial(values.serialId);
       setGeneratedBatch(values.batchId);
@@ -274,6 +289,28 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
               />
             </Field>
           </div>
+          {form.productType === "IMPORT" ? (
+            <>
+              <Field label="Import doc ID">
+                <input className={monoInputCls} value={form.docId} onChange={(e) => setForm({ ...form, docId: e.target.value })} />
+              </Field>
+              <Field label="Importer license">
+                <input className={monoInputCls} value={form.importerLicense} onChange={(e) => setForm({ ...form, importerLicense: e.target.value })} />
+              </Field>
+              <Field label="Manufacturer ID">
+                <input className={monoInputCls} value={form.manufacturerId} onChange={(e) => setForm({ ...form, manufacturerId: e.target.value })} />
+              </Field>
+              <Field label="Document expiry">
+                <input type="date" className={inputCls} value={form.documentExpiryDate} onChange={(e) => setForm({ ...form, documentExpiryDate: e.target.value })} />
+              </Field>
+              <Field label="Private salt">
+                <input className={monoInputCls} value={form.salt} onChange={(e) => setForm({ ...form, salt: e.target.value })} />
+              </Field>
+              <Field label="Regulator cert">
+                <input className={monoInputCls} value={form.regulatorCertificateId} onChange={(e) => setForm({ ...form, regulatorCertificateId: e.target.value })} />
+              </Field>
+            </>
+          ) : null}
         </div>
 
         {Object.keys(fieldErrors).length > 0 ? (
@@ -312,7 +349,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
           </Link>
           {generatedSerial && (
             <Link
-              href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(generatedSerial)}`}
+              href={`/dashboard/transfers/create?serialId=${encodeURIComponent(generatedSerial)}`}
               className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
             >
               {t("Chuyển serial này")}
@@ -320,7 +357,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
           )}
           {generatedBatch && (
             <Link
-              href={`/dashboard/batches/${encodeURIComponent(generatedBatch)}`}
+              href={`/dashboard/products/batches/${encodeURIComponent(generatedBatch)}`}
               className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
             >
               {t("Xem chi tiết lô")}
@@ -349,3 +386,4 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
     </div>
   );
 }
+

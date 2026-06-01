@@ -1,22 +1,11 @@
 import type { ProductStatus, RiskLevel } from "@/lib/types";
-import { getProductStatusLabel } from "@/lib/status";
+import { getProductStatusLabel, getStatusChipClass } from "@/lib/status";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 export function ProductStatusBadge({ status }: { status: ProductStatus }) {
   const { language } = useLanguage();
-  const colors: Record<string, string> = {
-    VERIFIED: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
-    DELIVERED: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
-    PENDING_DELIVERY: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-200",
-    IN_TRANSIT: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-200",
-    FLAGGED: "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200",
-    RECALLED: "border-zinc-200 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200",
-    INVALID: "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200",
-  };
-  const colorClass = colors[status] || "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-200";
-
   return (
-    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
+    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${getStatusChipClass(status)}`}>
       {getProductStatusLabel(status, language)}
     </span>
   );

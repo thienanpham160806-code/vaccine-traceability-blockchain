@@ -15,6 +15,25 @@ export const productRegistrationSchema = z.object({
     message: "Ngày hết hạn không hợp lệ.",
   }),
   quantity: z.coerce.number().int("Số lượng phải là số nguyên.").min(1).max(10000),
+  docId: z.string().trim().max(120).optional(),
+  importerLicense: z.string().trim().max(120).optional(),
+  manufacturerId: z.string().trim().max(120).optional(),
+  documentExpiryDate: z.string().trim().optional(),
+  salt: z.string().trim().max(160).optional(),
+  regulatorCertificateId: z.string().trim().max(120).optional(),
+}).superRefine((value, ctx) => {
+  if (value.productType !== "IMPORT") return;
+
+  const requiredFields = ["docId", "importerLicense", "manufacturerId", "documentExpiryDate", "salt", "regulatorCertificateId"] as const;
+  for (const field of requiredFields) {
+    if (!value[field]) {
+      ctx.addIssue({ code: "custom", path: [field], message: "Truong nay bat buoc cho vaccine nhap khau." });
+    }
+  }
+
+  if (value.documentExpiryDate && Number.isNaN(new Date(value.documentExpiryDate).getTime())) {
+    ctx.addIssue({ code: "custom", path: ["documentExpiryDate"], message: "Ngay het han giay to khong hop le." });
+  }
 });
 
 export const productMetadataSchema = z.object({
@@ -38,6 +57,13 @@ export const bulkProductCsvSchema = z.object({
   quantity: z.coerce.number().int("quantity phải là số nguyên.").min(1).max(10000).optional(),
   importDocHash: z.string().trim().regex(/^0x[a-fA-F0-9]{64}$/, "importDocHash phải là chuỗi hex 32-byte.").optional(),
   zkpProof: z.string().trim().regex(hexPattern, "zkpProof phải là chuỗi hex.").optional(),
+  docId: z.string().trim().max(120).optional(),
+  importerLicense: z.string().trim().max(120).optional(),
+  manufacturerId: z.string().trim().max(120).optional(),
+  batchNo: z.string().trim().max(128).optional(),
+  documentExpiryDate: z.string().trim().optional(),
+  salt: z.string().trim().max(160).optional(),
+  regulatorCertificateId: z.string().trim().max(120).optional(),
 });
 
 export const transferInitiatorRoles = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR"] as const;

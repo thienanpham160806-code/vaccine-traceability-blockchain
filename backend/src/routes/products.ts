@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { ipfsService } from '../services/ipfs';
+import { importZkpService } from '../services/importZkp';
 import { CryptoUtils } from '../utils/crypto';
 import { QRCodeGenerator } from '../utils/qr';
 import { Logger } from '../utils/logger';
@@ -134,6 +135,8 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
       search,
       status,
       manufacturer,
+      batch,
+      origin,
       sort = 'createdAt:desc',
       page: rawPage,
       pageSize: rawPageSize,
@@ -143,6 +146,8 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
       search,
       status,
       manufacturer,
+      batch,
+      origin,
       sort,
       page: rawPage,
       pageSize: rawPageSize,
@@ -157,6 +162,8 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
     const searchText = normalizeText(String(search || ''));
     const statusText = normalizeText(String(status || ''));
     const manufacturerText = normalizeText(String(manufacturer || ''));
+    const batchText = normalizeText(String(batch || ''));
+    const originText = normalizeText(String(origin || ''));
 
     if (searchText) {
       products = products.filter((product) => {
@@ -191,6 +198,22 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
       });
     }
 
+    if (batchText) {
+      products = products.filter((product) => {
+        return (
+          normalizeText(product.batchId).includes(batchText) ||
+          normalizeText(product.batchHash).includes(batchText)
+        );
+      });
+    }
+
+    if (originText) {
+      products = products.filter((product) => {
+        const productOrigin = product.isImported ? 'imported' : 'manufactured';
+        return productOrigin === originText;
+      });
+    }
+
     const [sortField, sortDirection = 'asc'] = String(sort).split(':');
     const direction = sortDirection === 'desc' ? -1 : 1;
 
@@ -210,6 +233,15 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
 
         case 'manufacturerName':
           return a.manufacturerName.localeCompare(b.manufacturerName) * direction;
+
+        case 'batchId':
+          return String(a.batchId || '').localeCompare(String(b.batchId || '')) * direction;
+
+        case 'batchHash':
+          return String(a.batchHash || '').localeCompare(String(b.batchHash || '')) * direction;
+
+        case 'origin':
+          return (Number(a.isImported) - Number(b.isImported)) * direction;
 
         case 'createdAt':
         default:
@@ -583,6 +615,7 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       origin = 'MANUFACTURED',
       importDocHash: rawImportDocHash,
       zkpProof,
+      importDocument,
     } = req.body;
 
     if (!serialId || !productName || !expiryDate) {
@@ -620,8 +653,13 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       });
     }
 
-    const batchQR = batchId || QRCodeGenerator.generateBatchId();
-    const batchHash = rawBatchHash ? toBytes32(rawBatchHash) : toBytes32(batchQR);
+    const isImported = origin === 'IMPORTED';
+    const batchQR = isImported
+      ? (importDocument?.batchNo || batchId || QRCodeGenerator.generateBatchId())
+      : (batchId || QRCodeGenerator.generateBatchId());
+    const batchHash = isImported
+      ? importZkpService.batchNoToBytes32(batchQR)
+      : (rawBatchHash ? toBytes32(rawBatchHash) : toBytes32(batchQR));
     const metadataPayload = {
       serialId,
       serialHash,
@@ -640,7 +678,7 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       : toBytes32(JSON.stringify(metadataPayload));
     const importDocHash = rawImportDocHash ? toBytes32(rawImportDocHash) : ZERO_BYTES32;
     const proofBytes = zkpProof || '0x';
-    const signerRole = origin === 'IMPORTED' ? 'IMPORTER' : 'MANUFACTURER';
+    const signerRole = isImported ? 'IMPORTER' : 'MANUFACTURER';
     const signerHasRequiredRole = await contractClient.signerHasRole(signerRole);
     if (!signerHasRequiredRole) {
       return res.status(403).json({
@@ -661,14 +699,59 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       qrContent,
     });
 
-    const txHash = await contractClient.registerProduct(
-      serialHash,
-      batchHash,
-      metadataHash,
-      importDocHash,
-      proofBytes,
-      signerRole
-    );
+    let txHash: string;
+    let importDocumentIpfsCid: string | undefined;
+    let importDocCommitment: string | undefined;
+    let approvedImportRoot: string | undefined;
+    let importProofMode: string | undefined;
+
+    if (isImported) {
+      const importDocIpfsResult = await ipfsService.pinJson(`import-doc-${batchQR}-${serialId}`, {
+        ...importDocument,
+        serialId,
+        batchHash,
+        metadataHash,
+      });
+      importDocumentIpfsCid = importDocIpfsResult?.cid;
+
+      const zkp = await importZkpService.generateRegistrationProof({
+        importDocument,
+        batchHash,
+        vaccineExpiryDate: expiryDate,
+      });
+
+      const onChainRoot = await contractClient.getApprovedImportRoot();
+      if (onChainRoot !== zkp.approvedRoot) {
+        return res.status(400).json({
+          success: false,
+          error: {
+            code: 'IMPORT_ROOT_NOT_APPROVED_ON_CHAIN',
+            message: 'Approved import root is not set on-chain. Run POST /import-zkp/approvals before registering imported products.',
+          },
+          timestamp: Date.now(),
+        });
+      }
+
+      txHash = await contractClient.registerImportedProductZK(
+        serialHash,
+        batchHash,
+        metadataHash,
+        zkp.proof,
+        signerRole
+      );
+      importDocCommitment = zkp.commitment;
+      approvedImportRoot = zkp.approvedRoot;
+      importProofMode = zkp.proof.mode;
+    } else {
+      txHash = await contractClient.registerProduct(
+        serialHash,
+        batchHash,
+        metadataHash,
+        importDocHash,
+        proofBytes,
+        signerRole
+      );
+    }
 
     const now = Date.now();
     const batch: Batch = {
@@ -681,8 +764,11 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       manufacturerAddress: manufacturerAddress || contractClient.getRoleAddress(signerRole),
       manufacturerName,
       expiryDate,
-      origin: origin === 'IMPORTED' ? 'IMPORTED' : 'MANUFACTURED',
+      origin: isImported ? 'IMPORTED' : 'MANUFACTURED',
       ipfsCid: ipfsResult?.cid,
+      ...(importDocumentIpfsCid ? { importDocumentIpfsCid } : {}),
+      ...(importDocCommitment ? { importDocCommitment } : {}),
+      ...(approvedImportRoot ? { approvedImportRoot } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -698,9 +784,13 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       status: 'VERIFIED',
       riskLevel: 'SAFE',
       expiryDate,
-      isImported: origin === 'IMPORTED',
-      zkpVerified: Boolean(zkpProof && importDocHash !== ZERO_BYTES32),
+      isImported,
+      zkpVerified: isImported ? true : Boolean(zkpProof && importDocHash !== ZERO_BYTES32),
       blockchainTx: txHash,
+      ...(importDocumentIpfsCid ? { importDocumentIpfsCid } : {}),
+      ...(importDocCommitment ? { importDocCommitment } : {}),
+      ...(approvedImportRoot ? { approvedImportRoot } : {}),
+      ...(importProofMode ? { importProofMode } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -720,6 +810,10 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
         metadataHash,
         serialHash,
         ipfsCid: ipfsResult?.cid,
+        importDocumentIpfsCid,
+        importDocCommitment,
+        approvedImportRoot,
+        importProofMode,
         qrContent,
         qrImage,
         txHash,
@@ -741,7 +835,7 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
  * POST /products/sync-wallet-register
  * Sync Firebase/IPFS after a user-signed ProductRegistry.registerProduct tx.
  */
-router.post('/sync-wallet-register', verifyToken, validateRequest({ body: registerProductSchema.extend({
+router.post('/sync-wallet-register', verifyToken, validateRequest({ body: registerProductSchema.safeExtend({
   txHash: z.string().trim().regex(/^0x[a-fA-F0-9]{64}$/, 'txHash must be a transaction hash'),
 }) }), async (req: AuthRequest, res: Response) => {
   try {
@@ -953,9 +1047,15 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
             ? rawProduct.manufacturerName.trim()
             : 'Unknown manufacturer';
         const origin = rawProduct?.origin === 'IMPORTED' ? 'IMPORTED' : 'MANUFACTURED';
+        const isImported = origin === 'IMPORTED';
+        if (isImported && !rawProduct?.importDocument) {
+          throw new Error(`products[${index}].importDocument is required for imported products`);
+        }
         const quantity = parsePositiveInt(rawProduct?.quantity, 1);
         const batchQR =
-          typeof rawProduct?.batchId === 'string' && rawProduct.batchId.trim()
+          isImported
+            ? rawProduct.importDocument.batchNo
+            : typeof rawProduct?.batchId === 'string' && rawProduct.batchId.trim()
             ? rawProduct.batchId.trim()
             : QRCodeGenerator.generateBatchId();
 
@@ -965,8 +1065,9 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           throw new Error(`Product with serial ID ${serialId} already exists`);
         }
 
-        const batchHash =
-          typeof rawProduct?.batchHash === 'string' && rawProduct.batchHash.trim()
+        const batchHash = isImported
+          ? importZkpService.batchNoToBytes32(batchQR)
+          : typeof rawProduct?.batchHash === 'string' && rawProduct.batchHash.trim()
             ? toBytes32(rawProduct.batchHash)
             : toBytes32(batchQR);
         const importDocHash =
@@ -977,7 +1078,7 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           typeof rawProduct?.zkpProof === 'string' && rawProduct.zkpProof.trim()
             ? rawProduct.zkpProof
             : '0x';
-        const signerRole = origin === 'IMPORTED' ? 'IMPORTER' : 'MANUFACTURER';
+        const signerRole = isImported ? 'IMPORTER' : 'MANUFACTURER';
         const signerHasRequiredRole = await contractClient.signerHasRole(signerRole);
         if (!signerHasRequiredRole) {
           throw new Error(
@@ -1009,14 +1110,51 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           metadataHash,
           qrContent,
         });
-        const txHash = await contractClient.registerProduct(
-          serialHash,
-          batchHash,
-          metadataHash,
-          importDocHash,
-          zkpProof,
-          signerRole
-        );
+        let txHash: string;
+        let importDocumentIpfsCid: string | undefined;
+        let importDocCommitment: string | undefined;
+        let approvedImportRoot: string | undefined;
+        let importProofMode: string | undefined;
+
+        if (isImported) {
+          const importDocIpfsResult = await ipfsService.pinJson(`bulk-import-doc-${batchQR}-${serialId}`, {
+            ...rawProduct.importDocument,
+            serialId,
+            batchHash,
+            metadataHash,
+          });
+          importDocumentIpfsCid = importDocIpfsResult?.cid;
+
+          const zkp = await importZkpService.generateRegistrationProof({
+            importDocument: rawProduct.importDocument,
+            batchHash,
+            vaccineExpiryDate: expiryDate,
+          });
+          const onChainRoot = await contractClient.getApprovedImportRoot();
+          if (onChainRoot !== zkp.approvedRoot) {
+            throw new Error('Approved import root is not set on-chain for imported product');
+          }
+
+          txHash = await contractClient.registerImportedProductZK(
+            serialHash,
+            batchHash,
+            metadataHash,
+            zkp.proof,
+            signerRole
+          );
+          importDocCommitment = zkp.commitment;
+          approvedImportRoot = zkp.approvedRoot;
+          importProofMode = zkp.proof.mode;
+        } else {
+          txHash = await contractClient.registerProduct(
+            serialHash,
+            batchHash,
+            metadataHash,
+            importDocHash,
+            zkpProof,
+            signerRole
+          );
+        }
         const now = Date.now();
         const batch: Batch = {
           id: batchQR,
@@ -1030,6 +1168,9 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           expiryDate,
           origin,
           ipfsCid: ipfsResult?.cid,
+          ...(importDocumentIpfsCid ? { importDocumentIpfsCid } : {}),
+          ...(importDocCommitment ? { importDocCommitment } : {}),
+          ...(approvedImportRoot ? { approvedImportRoot } : {}),
           createdAt: now,
           updatedAt: now,
         };
@@ -1044,12 +1185,16 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           status: 'VERIFIED',
           riskLevel: 'SAFE',
           expiryDate,
-          isImported: origin === 'IMPORTED',
-          zkpVerified: Boolean(zkpProof && zkpProof !== '0x' && importDocHash !== ZERO_BYTES32),
+          isImported,
+          zkpVerified: isImported ? true : Boolean(zkpProof && zkpProof !== '0x' && importDocHash !== ZERO_BYTES32),
           blockchainTx: txHash,
           metadataHash,
           ipfsCid: ipfsResult?.cid,
           qrImage,
+          ...(importDocumentIpfsCid ? { importDocumentIpfsCid } : {}),
+          ...(importDocCommitment ? { importDocCommitment } : {}),
+          ...(approvedImportRoot ? { approvedImportRoot } : {}),
+          ...(importProofMode ? { importProofMode } : {}),
           createdAt: now,
           updatedAt: now,
         };

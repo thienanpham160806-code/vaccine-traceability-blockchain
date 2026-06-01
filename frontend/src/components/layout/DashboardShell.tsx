@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -14,8 +14,8 @@ const bottomItems = [
   { title: "Tổng quan", href: "/dashboard", icon: Home },
   { title: "Sản phẩm", href: "/dashboard/products", icon: Boxes },
   { title: "Lệnh", href: "/dashboard/transfers", icon: ListChecks },
-  { title: "Tạo lệnh", href: "/dashboard/scan-transfer", icon: Truck },
-  { title: "Thêm", href: "/dashboard/batches", icon: MoreHorizontal },
+  { title: "Tạo lệnh", href: "/dashboard/transfers/create", icon: Truck },
+  { title: "Thêm", href: "/dashboard/products/batches", icon: MoreHorizontal },
 ];
 
 function BottomNav() {
@@ -104,3 +104,4 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     </div>
   );
 }
+

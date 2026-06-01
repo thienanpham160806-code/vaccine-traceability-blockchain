@@ -14,8 +14,13 @@ const csvHeaders = [
   "expiryDate",
   "origin",
   "quantity",
-  "importDocHash",
-  "zkpProof",
+  "docId",
+  "importerLicense",
+  "manufacturerId",
+  "batchNo",
+  "documentExpiryDate",
+  "salt",
+  "regulatorCertificateId",
 ];
 
 type BulkProductRow = {
@@ -26,8 +31,15 @@ type BulkProductRow = {
   expiryDate: string;
   origin?: "MANUFACTURED" | "IMPORTED";
   quantity?: number;
-  importDocHash?: string;
-  zkpProof?: string;
+  importDocument?: {
+    docId: string;
+    importerLicense: string;
+    manufacturerId: string;
+    batchNo: string;
+    documentExpiryDate: string;
+    salt: string;
+    regulatorCertificateId: string;
+  };
 };
 
 type BulkRegisterResult = {
@@ -58,19 +70,39 @@ function makeSampleCsv() {
       "1",
       "",
       "",
+      "",
+      "",
+      "",
+      "",
+      "",
     ].join(","),
     [
       `VCN-BULK-${stamp}-002`,
-      `BATCH-BULK-${stamp}`,
-      "Bulk Demo Vaccine",
-      "Local Manufacturer",
+      `IMP-BATCH-${stamp}`,
+      "Imported Demo Vaccine",
+      "Global Vaccine Ltd",
       "2027-12-31",
-      "MANUFACTURED",
+      "IMPORTED",
       "1",
-      "",
-      "",
+      `IMP-DOC-${stamp}`,
+      "IMPORTER-LICENSE-DEMO",
+      "GLOBAL-VACCINE-LTD",
+      `IMP-BATCH-${stamp}`,
+      "2027-12-31",
+      `salt-${stamp}`,
+      "REG-CERT-DEMO",
     ].join(","),
   ].join("\n");
+}
+
+function downloadSampleCsv() {
+  const blob = new Blob([makeSampleCsv()], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "vaxitrust-bulk-products-template.csv";
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function parseCsvLine(line: string) {
@@ -129,16 +161,31 @@ function parseCsvProducts(csv: string): BulkProductRow[] {
       throw new Error(`Dòng ${rowIndex + 2} thiếu serialId, productName hoặc expiryDate.`);
     }
 
+    const isImported = row.origin === "IMPORTED";
+    if (isImported) {
+      const missingImportFields = ["docId", "importerLicense", "manufacturerId", "batchNo", "documentExpiryDate", "salt", "regulatorCertificateId"].filter((field) => !row[field]);
+      if (missingImportFields.length > 0) {
+        throw new Error(`Dòng ${rowIndex + 2} thiếu cột nhập khẩu: ${missingImportFields.join(", ")}`);
+      }
+    }
+
     const product: BulkProductRow = {
       serialId: row.serialId,
       batchId: row.batchId || undefined,
       productName: row.productName,
       manufacturerName: row.manufacturerName || undefined,
       expiryDate: row.expiryDate,
-      origin: row.origin === "IMPORTED" ? "IMPORTED" : "MANUFACTURED",
+      origin: isImported ? "IMPORTED" : "MANUFACTURED",
       quantity: row.quantity ? Number(row.quantity) : undefined,
-      importDocHash: row.importDocHash || undefined,
-      zkpProof: row.zkpProof || undefined,
+      importDocument: isImported ? {
+        docId: row.docId,
+        importerLicense: row.importerLicense,
+        manufacturerId: row.manufacturerId,
+        batchNo: row.batchNo || row.batchId,
+        documentExpiryDate: row.documentExpiryDate,
+        salt: row.salt,
+        regulatorCertificateId: row.regulatorCertificateId,
+      } : undefined,
     };
 
     const parsed = bulkProductCsvSchema.safeParse(product);
@@ -148,7 +195,7 @@ function parseCsvProducts(csv: string): BulkProductRow[] {
       throw new Error(`Dòng ${rowIndex + 2} - ${field}: ${issue?.message || "giá trị không hợp lệ"}`);
     }
 
-    return parsed.data;
+    return product;
   });
 }
 
@@ -222,6 +269,13 @@ export default function BulkRegisterProductsPage() {
         <div className="flex flex-wrap gap-2">
           <button
             className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+            onClick={downloadSampleCsv}
+            type="button"
+          >
+            Tải CSV mẫu
+          </button>
+          <button
+            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
             onClick={resetSample}
             type="button"
           >
@@ -238,7 +292,7 @@ export default function BulkRegisterProductsPage() {
           <div className="mb-4 border-b border-zinc-200 pb-4">
             <h2 className="text-xl font-bold">Dữ liệu CSV</h2>
             <p className="text-sm text-muted-foreground">
-              Cột bắt buộc: serialId, productName, expiryDate. Cột tùy chọn: batchId, manufacturerName, origin, quantity, importDocHash, zkpProof.
+              Cột bắt buộc: serialId, productName, expiryDate. Nếu origin là IMPORTED, nhập thêm các cột chứng từ ZKP.
             </p>
           </div>
 

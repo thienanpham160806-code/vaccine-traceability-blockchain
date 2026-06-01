@@ -21,7 +21,11 @@ try {
   // Fallback to minimal ABIs
   PRODUCT_REGISTRY_ABI = [
     'function registerProduct(bytes32 serialID, bytes32 batchHash, bytes32 metadataHash, bytes32 importDocHash, bytes zkpProof) external',
-    'function getProduct(bytes32 serialID) external view returns (tuple(bytes32, bytes32, bytes32, bytes32, address, address, uint8, uint8, bool, bool, uint8, bytes32, uint256, bool))',
+    'function registerImportedProductZK(bytes32 serialID, bytes32 batchHash, bytes32 metadataHash, uint[2] a, uint[2][2] b, uint[2] c, uint[5] input) external',
+    'function approvedImportRoot() external view returns (uint256)',
+    'function setApprovedImportRoot(uint256 newApprovedImportRoot) external',
+    'function setImportVerifier(address newImportVerifier) external',
+    'function getProduct(bytes32 serialID) external view returns (tuple(bytes32, bytes32, bytes32, bytes32, uint256, uint256, address, address, uint8, uint8, bool, bool, uint8, bytes32, uint256, bool))',
     'function getStatus(bytes32 serialID) external view returns (uint8)',
     'function getRiskLevel(bytes32 serialID) external view returns (uint8)',
     'function productExists(bytes32 serialID) external view returns (bool)',
@@ -56,6 +60,14 @@ try {
     'function CLINIC_ROLE() external view returns (bytes32)',
   ];
 }
+
+PRODUCT_REGISTRY_ABI = [
+  ...PRODUCT_REGISTRY_ABI,
+  'function registerImportedProductZK(bytes32 serialID, bytes32 batchHash, bytes32 metadataHash, uint[2] a, uint[2][2] b, uint[2] c, uint[5] input) external',
+  'function approvedImportRoot() external view returns (uint256)',
+  'function setApprovedImportRoot(uint256 newApprovedImportRoot) external',
+  'function setImportVerifier(address newImportVerifier) external',
+];
 
 /**
  * Contract client - manages interaction with smart contracts
@@ -229,6 +241,10 @@ export class ContractClient {
   }
 
   roleNameToBytes32(role: string): string {
+    if (role.toLowerCase() === 'admin' || role.toLowerCase() === 'default_admin') {
+      return ethers.ZeroHash;
+    }
+
     return ethers.keccak256(ethers.toUtf8Bytes(`${role.toUpperCase()}_ROLE`));
   }
 
@@ -311,6 +327,66 @@ export class ContractClient {
       Logger.error('Failed to register product', error);
       throw error;
     }
+  }
+
+  async registerImportedProductZK(
+    serialId: string,
+    batchHash: string,
+    metadataHash: string,
+    proof: {
+      a: [string, string];
+      b: [[string, string], [string, string]];
+      c: [string, string];
+      input: [string, string, string, string, string];
+    },
+    signerRole: string = 'IMPORTER'
+  ): Promise<string> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    try {
+      Logger.info(`📝 Registering imported product with ZKP: ${serialId}`);
+
+      const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const tx = await registry.registerImportedProductZK(
+        serialId,
+        batchHash,
+        metadataHash,
+        proof.a,
+        proof.b,
+        proof.c,
+        proof.input
+      );
+
+      const receipt = await tx.wait();
+      Logger.success(`✅ Imported product registered with ZKP. TX: ${receipt?.hash}`);
+
+      return receipt?.hash || tx.hash;
+    } catch (error) {
+      Logger.error('Failed to register imported product with ZKP', error);
+      throw error;
+    }
+  }
+
+  async getApprovedImportRoot(): Promise<string> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    const root = await this.productRegistry.approvedImportRoot();
+    return root.toString();
+  }
+
+  async setApprovedImportRoot(root: string, signerRole: string = 'admin'): Promise<string> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
+    const tx = await registry.setApprovedImportRoot(root);
+    const receipt = await tx.wait();
+    return receipt?.hash || tx.hash;
   }
 
   /**

@@ -40,14 +40,26 @@ const optionalBytes32 = z
   .regex(bytes32Pattern, 'hash must be a 32-byte hex string')
   .optional();
 
+export const importDocumentSchema = z.object({
+  docId: trimmedString('docId', 2, 120),
+  importerLicense: trimmedString('importerLicense', 2, 120),
+  manufacturerId: trimmedString('manufacturerId', 2, 120),
+  batchNo: trimmedString('batchNo', 2, 120),
+  documentExpiryDate: dateString,
+  salt: trimmedString('salt', 4, 160),
+  regulatorCertificateId: trimmedString('regulatorCertificateId', 2, 120),
+});
+
 export const productListQuerySchema = z.object({
   search: optionalTrimmedString('search', 120),
   status: optionalTrimmedString('status', 40),
   manufacturer: optionalTrimmedString('manufacturer', 120),
+  batch: optionalTrimmedString('batch', 128),
+  origin: z.enum(['MANUFACTURED', 'IMPORTED']).optional(),
   sort: z
     .string()
     .trim()
-    .regex(/^(createdAt|expiryDate|status|productName|manufacturerName):(asc|desc)$/, {
+    .regex(/^(createdAt|expiryDate|status|productName|manufacturerName|batchId|batchHash|origin):(asc|desc)$/, {
       message: 'sort must be field:direction, for example createdAt:desc',
     })
     .optional(),
@@ -77,22 +89,28 @@ export const updateProductSchema = z
     }
   );
 
-export const registerProductSchema = z.object({
-  serialId,
-  batchId: batchId.optional(),
-  batchHash: optionalBytes32,
-  metadataHash: optionalBytes32,
-  productName: trimmedString('productName', 2, 120),
-  manufacturerName: optionalTrimmedString('manufacturerName', 120),
-  manufacturerAddress: z.string().trim().regex(ethAddressPattern, 'manufacturerAddress must be an Ethereum address').optional(),
-  expiryDate: dateString,
-  quantity: z.coerce.number().int().min(1).max(10000).optional(),
-  origin: z.enum(['MANUFACTURED', 'IMPORTED']).optional(),
-  importDocHash: optionalBytes32,
-  zkpProof: z.string().trim().regex(hexPattern, 'zkpProof must be a hex string').optional(),
-});
+export const registerProductSchema = z
+  .object({
+    serialId,
+    batchId: batchId.optional(),
+    batchHash: optionalBytes32,
+    metadataHash: optionalBytes32,
+    productName: trimmedString('productName', 2, 120),
+    manufacturerName: optionalTrimmedString('manufacturerName', 120),
+    manufacturerAddress: z.string().trim().regex(ethAddressPattern, 'manufacturerAddress must be an Ethereum address').optional(),
+    expiryDate: dateString,
+    quantity: z.coerce.number().int().min(1).max(10000).optional(),
+    origin: z.enum(['MANUFACTURED', 'IMPORTED']).optional(),
+    importDocHash: optionalBytes32,
+    zkpProof: z.string().trim().regex(hexPattern, 'zkpProof must be a hex string').optional(),
+    importDocument: importDocumentSchema.optional(),
+  })
+  .refine((value) => value.origin !== 'IMPORTED' || value.importDocument !== undefined, {
+    message: 'importDocument is required for imported products',
+    path: ['importDocument'],
+  });
 
-export const bulkProductItemSchema = registerProductSchema.extend({
+export const bulkProductItemSchema = registerProductSchema.safeExtend({
   batchId: batchId.optional(),
 });
 
