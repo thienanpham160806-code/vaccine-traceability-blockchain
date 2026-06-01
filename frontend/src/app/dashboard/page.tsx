@@ -211,7 +211,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <section className="rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+        <section className="flex max-h-[430px] min-h-[320px] flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
           <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-6 dark:border-zinc-800">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-blue-500" />
@@ -222,7 +222,7 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          <div className="divide-y divide-zinc-100 dark:divide-transparent">
+          <div className="min-h-0 flex-1 divide-y divide-zinc-100 overflow-y-auto dark:divide-transparent">
             {activity.length === 0 ? (
               <p className="px-6 py-10 text-center text-sm text-zinc-400 dark:text-zinc-400">{t("Chưa có hoạt động gần đây.")}</p>
             ) : (
