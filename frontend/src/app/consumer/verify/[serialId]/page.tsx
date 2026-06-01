@@ -2,10 +2,22 @@
 
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCircle2, HelpCircle, ShieldCheck } from "lucide-react";
+import { useTheme } from "next-themes";
+import {
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  HelpCircle,
+  Languages,
+  Monitor,
+  Moon,
+  ShieldCheck,
+  Sun,
+} from "lucide-react";
 import { api, endpoints } from "@/lib/api";
 import { getProductStatusLabel } from "@/lib/status";
 import type { VerifyResult } from "@/lib/types";
+import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { ContactFooter } from "@/components/layout/ContactFooter";
 import { TransferTimeline } from "@/components/trace/TransferTimeline";
 import { useLanguage } from "@/providers/LanguageProvider";
@@ -49,6 +61,11 @@ const copy = {
     timeline: "Supply chain timeline",
     noTimeline: "No transfer timeline has been recorded yet.",
     unknown: "Unknown",
+    theme: "Theme",
+    language: "Language",
+    light: "Light",
+    dark: "Dark",
+    system: "System",
   },
   vi: {
     loading: "Đang xác minh trên blockchain...",
@@ -82,30 +99,102 @@ const copy = {
     timeline: "Lịch sử chuỗi cung ứng",
     noTimeline: "Chưa có lịch sử chuyển giao nào được ghi nhận.",
     unknown: "Không rõ",
+    theme: "Giao diện",
+    language: "Ngôn ngữ",
+    light: "Sáng",
+    dark: "Tối",
+    system: "Hệ thống",
   },
 } as const;
 
-function LanguageSwitch() {
+const themeOptions = [
+  { value: "light", icon: Sun, labelKey: "light" },
+  { value: "dark", icon: Moon, labelKey: "dark" },
+  { value: "system", icon: Monitor, labelKey: "system" },
+] as const;
+
+function VerifyControls() {
+  const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
+  const text = copy[language];
 
   return (
-    <div className="fixed right-4 top-4 z-20 flex rounded-full border border-zinc-800 bg-zinc-900/90 p-1 shadow-lg backdrop-blur">
-      {(["vi", "en"] as const).map((item) => (
-        <button
-          key={item}
-          type="button"
-          onClick={() => setLanguage(item)}
-          className={`rounded-full px-3 py-1.5 text-xs font-bold transition ${
-            language === item ? "bg-emerald-500 text-white" : "text-zinc-400 hover:text-white"
-          }`}
-        >
-          {item.toUpperCase()}
-        </button>
-      ))}
+    <div className="flex flex-wrap items-center justify-end gap-2">
+      <div
+        aria-label={text.theme}
+        className="flex rounded-lg border border-zinc-200 bg-white/80 p-1 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80"
+      >
+        {themeOptions.map((option) => {
+          const Icon = option.icon;
+          const selected = (theme || "system") === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setTheme(option.value)}
+              className={`flex h-9 w-9 items-center justify-center rounded-md transition ${
+                selected
+                  ? "bg-blue-600 text-white"
+                  : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+              }`}
+              title={text[option.labelKey]}
+              aria-label={text[option.labelKey]}
+            >
+              <Icon className="h-4 w-4" />
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        aria-label={text.language}
+        className="flex rounded-lg border border-zinc-200 bg-white/80 p-1 text-xs font-bold shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80"
+      >
+        <Languages className="mx-2 my-auto h-4 w-4 text-zinc-400" />
+        {(["vi", "en"] as const).map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => setLanguage(item)}
+            className={`flex h-9 min-w-10 items-center justify-center gap-1 rounded-md px-2 transition ${
+              language === item
+                ? "bg-blue-600 text-white"
+                : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
+            }`}
+          >
+            {language === item ? <Check className="h-3 w-3" /> : null}
+            {item.toUpperCase()}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
 
+function VerifyShell({ children }: { children: React.ReactNode }) {
+  const { language } = useLanguage();
+
+  return (
+    <main className="relative flex min-h-screen flex-col overflow-x-hidden bg-[radial-gradient(circle_at_20%_18%,#dbeafe_0,#f8fafc_34%,#f8fafc_100%)] px-5 py-5 text-zinc-950 dark:bg-[radial-gradient(circle_at_20%_18%,rgba(56,189,248,0.1)_0,rgba(15,23,42,0.88)_32%,#09090b_100%)] dark:text-white">
+      <div className="mx-auto flex min-h-[calc(100dvh-11rem)] w-full max-w-5xl flex-1 flex-col">
+        <header className="flex flex-wrap items-center justify-between gap-3">
+          <VaxiTrustLogo
+            className="h-12 w-12"
+            iconClassName="h-7 w-7"
+            showWordmark
+            wordmarkClassName="text-2xl"
+            subtitle={language === "en" ? "VACCINE TRACEABILITY" : "TRUY XUẤT VACCINE"}
+          />
+          <VerifyControls />
+        </header>
+
+        {children}
+      </div>
+
+      <ContactFooter animatedBackdrop className="-mx-5 mt-8 rounded-none border-x-0 border-b-0 px-5 sm:px-8" />
+    </main>
+  );
+}
 
 function StatusBadge({
   status,
@@ -118,22 +207,22 @@ function StatusBadge({
 }) {
   if (recalled) {
     return (
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/15 px-3 py-1 text-sm font-bold text-red-300">
-        <span className="h-2 w-2 rounded-full bg-red-400" />
+      <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-3 py-1 text-sm font-bold text-red-700 dark:bg-red-500/15 dark:text-red-300">
+        <span className="h-2 w-2 rounded-full bg-current" />
         {getProductStatusLabel("RECALLED", language)}
       </span>
     );
   }
 
   const map: Record<string, string> = {
-    VERIFIED: "bg-emerald-500/15 text-emerald-300",
-    DELIVERED: "bg-blue-500/15 text-blue-300",
-    PENDING_DELIVERY: "bg-yellow-500/15 text-yellow-200",
-    FLAGGED: "bg-orange-500/15 text-orange-300",
+    VERIFIED: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
+    DELIVERED: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+    PENDING_DELIVERY: "bg-yellow-50 text-yellow-700 dark:bg-yellow-500/15 dark:text-yellow-200",
+    FLAGGED: "bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
   };
 
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${map[status] ?? "bg-zinc-800 text-zinc-300"}`}>
+    <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-bold ${map[status] ?? "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"}`}>
       <span className="h-2 w-2 rounded-full bg-current" />
       {getProductStatusLabel(status, language)}
     </span>
@@ -180,118 +269,121 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
 
   if (viewState === "loading") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-950">
-        <LanguageSwitch />
-        <div className="space-y-4 text-center">
-          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent" />
-          <p className="text-sm text-zinc-400">{text.loading}</p>
-        </div>
-      </main>
+      <VerifyShell>
+        <section className="flex flex-1 items-center justify-center py-16">
+          <div className="space-y-4 rounded-2xl border border-zinc-200 bg-white/80 px-10 py-8 text-center shadow-xl backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/90">
+            <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
+            <p className="text-sm text-zinc-500 dark:text-zinc-400">{text.loading}</p>
+          </div>
+        </section>
+      </VerifyShell>
     );
   }
 
   if (viewState === "not_found" || viewState === "error") {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-        <LanguageSwitch />
-        <div className="w-full max-w-2xl space-y-6 text-center">
-          <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-500/10 text-red-300">
-            <HelpCircle className="h-9 w-9" />
-          </div>
-          <div className="space-y-2">
-            <h1 className="text-2xl font-bold text-white">{text.notFoundTitle}</h1>
-            <p className="break-words text-sm text-zinc-400">
-              {text.notFoundPrefix} <span className="font-mono text-zinc-300">{decodedLookup}</span>.
-            </p>
-            <p className="text-sm text-zinc-500">{text.notFoundHint}</p>
-          </div>
-
-          <div className="mx-auto max-w-xl space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-4">
-            <p className="text-xs text-zinc-500">{text.tryAnother}</p>
-            <div className="flex gap-2">
-              <input
-                className="min-w-0 flex-1 rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                value={retryId}
-                onChange={(e) => setRetryId(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && goRetry()}
-                placeholder={text.placeholder}
-              />
-              <button
-                onClick={goRetry}
-                disabled={!retryId.trim()}
-                className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-40"
-              >
-                {text.verify}
-              </button>
+      <VerifyShell>
+        <section className="mx-auto flex w-full max-w-2xl flex-1 items-center py-10">
+          <div className="w-full space-y-6 rounded-2xl border border-zinc-200 bg-white/90 p-6 text-center shadow-2xl shadow-blue-950/5 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/20">
+            <div className="mx-auto inline-flex h-16 w-16 items-center justify-center rounded-full bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300">
+              <HelpCircle className="h-9 w-9" />
             </div>
-          </div>
+            <div className="space-y-2">
+              <h1 className="text-2xl font-bold">{text.notFoundTitle}</h1>
+              <p className="break-words text-sm text-zinc-500 dark:text-zinc-400">
+                {text.notFoundPrefix} <span className="font-mono text-zinc-700 dark:text-zinc-200">{decodedLookup}</span>.
+              </p>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">{text.notFoundHint}</p>
+            </div>
 
-          <a href="/" className="text-sm text-zinc-500 transition hover:text-zinc-300">
-            {text.backHome}
-          </a>
-        </div>
-      </main>
+            <div className="mx-auto max-w-xl space-y-3 rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-950">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-zinc-400">{text.tryAnother}</p>
+              <div className="flex gap-2">
+                <input
+                  className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-950 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-white dark:placeholder-zinc-500"
+                  value={retryId}
+                  onChange={(e) => setRetryId(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && goRetry()}
+                  placeholder={text.placeholder}
+                />
+                <button
+                  onClick={goRetry}
+                  disabled={!retryId.trim()}
+                  className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40"
+                >
+                  {text.verify}
+                </button>
+              </div>
+            </div>
+
+            <a href="/" className="inline-flex text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
+              {text.backHome}
+            </a>
+          </div>
+        </section>
+      </VerifyShell>
     );
   }
 
   if (viewState === "duplicate" && data) {
     const { product } = data;
     return (
-      <main className="flex min-h-screen items-center justify-center bg-zinc-950 px-4">
-        <LanguageSwitch />
-        <div className="w-full max-w-md space-y-6">
-          <div className="space-y-3 text-center">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-orange-500/10 text-orange-300">
-              <AlertTriangle className="h-9 w-9" />
+      <VerifyShell>
+        <section className="mx-auto flex w-full max-w-md flex-1 items-center py-10">
+          <div className="w-full space-y-6 rounded-2xl border border-orange-200 bg-white/90 p-6 shadow-2xl shadow-orange-950/5 backdrop-blur dark:border-orange-500/30 dark:bg-zinc-900/95 dark:shadow-black/20">
+            <div className="space-y-3 text-center">
+              <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-orange-50 text-orange-600 dark:bg-orange-500/10 dark:text-orange-300">
+                <AlertTriangle className="h-9 w-9" />
+              </div>
+              <h1 className="text-2xl font-bold">{text.duplicateTitle}</h1>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">{text.duplicateText}</p>
             </div>
-            <h1 className="text-2xl font-bold text-white">{text.duplicateTitle}</h1>
-            <p className="text-sm text-zinc-400">{text.duplicateText}</p>
-          </div>
 
-          <div className="space-y-3 rounded-xl border border-orange-500/30 bg-orange-500/10 p-5">
-            <p className="text-xs font-semibold uppercase tracking-wide text-orange-300">{text.productDetails}</p>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between gap-4">
-                <span className="text-zinc-400">{text.serialId}</span>
-                <span className="font-mono text-white">{product.serialId}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-zinc-400">{text.product}</span>
-                <span className="text-white">{product.productName}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-zinc-400">{text.status}</span>
-                <span className="font-semibold text-orange-300">{getProductStatusLabel(product.status, language)}</span>
-              </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-zinc-400">{text.risk}</span>
-                <span className="font-semibold text-orange-300">{product.riskLevel}</span>
+            <div className="space-y-3 rounded-xl border border-orange-200 bg-orange-50 p-5 dark:border-orange-500/30 dark:bg-orange-500/10">
+              <p className="text-xs font-semibold uppercase tracking-wide text-orange-700 dark:text-orange-300">{text.productDetails}</p>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between gap-4">
+                  <span className="text-zinc-500 dark:text-zinc-400">{text.serialId}</span>
+                  <span className="font-mono font-semibold">{product.serialId}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-zinc-500 dark:text-zinc-400">{text.product}</span>
+                  <span className="font-semibold">{product.productName}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-zinc-500 dark:text-zinc-400">{text.status}</span>
+                  <span className="font-semibold text-orange-700 dark:text-orange-300">{getProductStatusLabel(product.status, language)}</span>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <span className="text-zinc-500 dark:text-zinc-400">{text.risk}</span>
+                  <span className="font-semibold text-orange-700 dark:text-orange-300">{product.riskLevel}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-400">
-            <p className="font-semibold text-zinc-300">{text.whatToDo}</p>
-            <ul className="list-inside list-disc space-y-1 text-xs">
-              <li>{text.action1}</li>
-              <li>{text.action2}</li>
-              <li>{text.action3}</li>
-            </ul>
-          </div>
+            <div className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">
+              <p className="font-semibold text-zinc-800 dark:text-zinc-200">{text.whatToDo}</p>
+              <ul className="list-inside list-disc space-y-1 text-xs">
+                <li>{text.action1}</li>
+                <li>{text.action2}</li>
+                <li>{text.action3}</li>
+              </ul>
+            </div>
 
-          <div className="flex flex-wrap justify-center gap-3">
-            <button
-              onClick={() => setViewState("success")}
-              className="rounded-lg border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 hover:bg-zinc-800"
-            >
-              {text.viewAnyway}
-            </button>
-            <a href="/" className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700">
-              {text.backHome}
-            </a>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button
+                onClick={() => setViewState("success")}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                {text.viewAnyway}
+              </button>
+              <a href="/" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                {text.backHome}
+              </a>
+            </div>
           </div>
-        </div>
-      </main>
+        </section>
+      </VerifyShell>
     );
   }
 
@@ -300,68 +392,66 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
   const { product, batch, timeline, recallStatus, zkProofVerified } = data;
 
   return (
-    <main className="min-h-screen bg-zinc-950 px-4 py-12">
-      <LanguageSwitch />
-      <div className="mx-auto max-w-xl space-y-6">
+    <VerifyShell>
+      <section className="mx-auto flex w-full max-w-2xl flex-1 flex-col justify-center gap-6 py-10">
         <div className="space-y-3 text-center">
-          <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-300">
+          <div className="mx-auto inline-flex h-14 w-14 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-300">
             <CheckCircle2 className="h-8 w-8" />
           </div>
-          <h1 className="text-2xl font-bold text-white">{text.verifiedTitle}</h1>
-          <p className="text-sm text-zinc-400">{text.verifiedText}</p>
+          <h1 className="text-3xl font-bold">{text.verifiedTitle}</h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">{text.verifiedText}</p>
         </div>
 
-        <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className="space-y-4 rounded-2xl border border-zinc-200 bg-white/90 p-5 shadow-2xl shadow-blue-950/5 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/20">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-wide text-zinc-500">{text.serialId}</p>
-              <p className="mt-0.5 font-mono text-sm font-bold text-white">{product?.serialId}</p>
+              <p className="mt-0.5 font-mono text-sm font-bold">{product?.serialId}</p>
             </div>
             <StatusBadge status={product?.status ?? "UNKNOWN"} recalled={recallStatus ?? false} language={language} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4 border-t border-zinc-800 pt-4 text-sm">
+          <div className="grid gap-4 border-t border-zinc-200 pt-4 text-sm dark:border-zinc-800 sm:grid-cols-2">
             <div>
               <p className="text-xs text-zinc-500">{text.product}</p>
-              <p className="mt-0.5 font-semibold text-white">{product?.productName || batch?.productName || text.unknown}</p>
+              <p className="mt-0.5 font-semibold">{product?.productName || batch?.productName || text.unknown}</p>
             </div>
             <div>
               <p className="text-xs text-zinc-500">{text.manufacturer}</p>
-              <p className="mt-0.5 font-semibold text-white">{product?.manufacturerName || batch?.manufacturerName || text.unknown}</p>
+              <p className="mt-0.5 font-semibold">{product?.manufacturerName || batch?.manufacturerName || text.unknown}</p>
             </div>
             <div>
               <p className="text-xs text-zinc-500">{text.expiryDate}</p>
-              <p className="mt-0.5 font-semibold text-white">{product?.expiryDate || batch?.expiryDate || text.unknown}</p>
+              <p className="mt-0.5 font-semibold">{product?.expiryDate || batch?.expiryDate || text.unknown}</p>
             </div>
             <div>
               <p className="text-xs text-zinc-500">{text.zkProof}</p>
-              <p className={`mt-0.5 font-semibold ${zkProofVerified ? "text-emerald-300" : "text-zinc-500"}`}>
+              <p className={`mt-0.5 font-semibold ${zkProofVerified ? "text-emerald-600 dark:text-emerald-300" : "text-zinc-500"}`}>
                 {zkProofVerified ? text.zkVerified : text.zkNotVerified}
               </p>
             </div>
           </div>
 
           {recallStatus ? (
-            <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
               {text.recallWarning}
             </div>
           ) : null}
         </div>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-5">
+        <div className="rounded-2xl border border-zinc-200 bg-white/90 p-5 shadow-2xl shadow-blue-950/5 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/20">
           <div className="mb-4 flex items-center gap-2">
-            <ShieldCheck className="h-4 w-4 text-emerald-300" />
-            <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">{text.timeline}</h2>
+            <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-300" />
+            <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">{text.timeline}</h2>
           </div>
 
           <TransferTimeline events={timeline || []} currentOwner={product?.currentOwner} language={language} emptyText={text.noTimeline} />
         </div>
 
-        <a href="/" className="block text-center text-sm text-zinc-500 transition hover:text-zinc-300">
+        <a href="/" className="block text-center text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
           {text.backHome}
         </a>
-      </div>
-      <ContactFooter className="mx-auto mt-12 max-w-5xl" />
-    </main>
+      </section>
+    </VerifyShell>
   );
 }

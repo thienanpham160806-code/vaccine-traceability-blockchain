@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowRight, AlertTriangle, CheckCircle2, Clock, MapPin, XCircle } from "lucide-react";
-import { getTransferStatusLabel } from "@/lib/status";
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, MapPin, XCircle } from "lucide-react";
 import { translateRole } from "@/lib/i18n";
+import { getTransferStatusLabel } from "@/lib/status";
 import type { AppLanguage } from "@/lib/i18n";
 
 function formatTime(value: unknown, language: AppLanguage) {
@@ -52,26 +52,33 @@ export function TransferTimeline({
         return (
           <div key={event.id || event.blockchainTx || event.txHash || index} className="grid grid-cols-[32px_1fr] gap-3">
             <div className="flex flex-col items-center">
-              <div className={`flex h-8 w-8 items-center justify-center rounded-full border ${
-                isLast ? "border-blue-300 bg-blue-50 text-blue-700" : "border-zinc-200 bg-white text-zinc-500"
-              }`}>
+              <div
+                className={`flex h-8 w-8 items-center justify-center rounded-full border ${
+                  isLast
+                    ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/15 dark:text-blue-300"
+                    : "border-zinc-200 bg-white text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+                }`}
+              >
                 <Icon className="h-4 w-4" />
               </div>
-              {!isLast ? <div className="h-full min-h-10 w-px bg-zinc-200" /> : null}
+              {!isLast ? <div className="h-full min-h-10 w-px bg-zinc-200 dark:bg-zinc-800" /> : null}
             </div>
             <div className="pb-5">
-              <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
+              <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/70">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-bold text-zinc-900">
+                  <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
                     {fromRole || shortValue(event.fromAddress || event.sender)}
-                    <ArrowRight className="mx-1 inline h-3.5 w-3.5 text-zinc-400" />
+                    <ArrowRight className="mx-1 inline h-3.5 w-3.5 text-zinc-400 dark:text-zinc-500" />
                     {toRole || shortValue(event.toAddress || event.receiver)}
                   </p>
-                  <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-semibold text-zinc-600" title={time}>
+                  <span
+                    className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                    title={time}
+                  >
                     {getTransferStatusLabel(event.status, language)}
                   </span>
                 </div>
-                <div className="mt-2 grid gap-2 text-xs text-zinc-500 sm:grid-cols-2">
+                <div className="mt-2 grid gap-2 text-xs text-zinc-500 dark:text-zinc-400 sm:grid-cols-2">
                   <p className="flex items-center gap-1.5" title={String(event.fromLocationHash || "")}>
                     <MapPin className="h-3.5 w-3.5" />
                     {fromLocation}
@@ -81,10 +88,22 @@ export function TransferTimeline({
                     {toLocation}
                   </p>
                 </div>
-                <p className="mt-2 text-xs text-zinc-400" title={time}>{time}</p>
-                {currentOwner && isLast ? <p className="mt-2 text-xs font-semibold text-blue-700">{language === "en" ? "Current node" : "Node hiện tại"}: {shortValue(currentOwner)}</p> : null}
-                {event.blockchainTx || event.txHash ? <p className="mt-1 truncate font-mono text-[11px] text-zinc-400">{event.blockchainTx || event.txHash}</p> : null}
-                {event.dispute || event.riskReason ? <p className="mt-2 rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700">{event.dispute || event.riskReason}</p> : null}
+                <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500" title={time}>
+                  {time}
+                </p>
+                {currentOwner && isLast ? (
+                  <p className="mt-2 text-xs font-semibold text-blue-700 dark:text-blue-300">
+                    {language === "en" ? "Current node" : "Node hiện tại"}: {shortValue(currentOwner)}
+                  </p>
+                ) : null}
+                {event.blockchainTx || event.txHash ? (
+                  <p className="mt-1 truncate font-mono text-[11px] text-zinc-400 dark:text-zinc-500">{event.blockchainTx || event.txHash}</p>
+                ) : null}
+                {event.dispute || event.riskReason ? (
+                  <p className="mt-2 rounded-md border border-orange-200 bg-orange-50 px-2 py-1 text-xs font-semibold text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300">
+                    {event.dispute || event.riskReason}
+                  </p>
+                ) : null}
               </div>
             </div>
           </div>
