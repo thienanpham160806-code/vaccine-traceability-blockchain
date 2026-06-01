@@ -125,25 +125,31 @@ function LoginTechBackdrop() {
         .login-scan { animation: loginScan 8s ease-in-out infinite; }
       `}</style>
 
-      <div className="absolute left-[8%] top-24 h-72 w-72 rounded-full border border-blue-300/20 bg-[radial-gradient(circle,rgba(46,125,255,0.14),transparent_62%)] blur-[1px] dark:border-cyan-300/10 dark:bg-[radial-gradient(circle,rgba(56,189,248,0.12),transparent_62%)]" />
-      <div className="login-scan absolute left-0 top-[22%] h-px w-3/4 bg-gradient-to-r from-transparent via-blue-500/35 to-transparent dark:via-cyan-300/35" />
-      <div className="login-pulse absolute -left-8 bottom-28 h-32 w-32 text-emerald-300/60 dark:text-emerald-300/35">
+      <div className="absolute -left-20 top-16 h-80 w-80 rounded-full border border-blue-200/60 bg-[radial-gradient(circle,rgba(147,197,253,0.34),transparent_64%)] blur-[1px] dark:border-cyan-300/10 dark:bg-[radial-gradient(circle,rgba(56,189,248,0.12),transparent_62%)]" />
+      <div className="absolute right-[-7rem] top-20 h-72 w-72 rounded-full bg-[radial-gradient(circle,rgba(34,211,238,0.18),transparent_62%)] dark:bg-[radial-gradient(circle,rgba(37,99,235,0.10),transparent_62%)]" />
+      <div className="login-scan absolute left-0 top-[22%] h-px w-3/4 bg-gradient-to-r from-transparent via-blue-400/45 to-transparent dark:via-cyan-300/35" />
+      <div className="login-pulse absolute -left-8 bottom-28 h-32 w-32 text-emerald-200/80 dark:text-emerald-300/35">
         <div className="absolute left-1/2 top-0 h-full w-7 -translate-x-1/2 rounded-full bg-current" />
         <div className="absolute left-0 top-1/2 h-7 w-full -translate-y-1/2 rounded-full bg-current" />
       </div>
       <div
-        className="login-float absolute bottom-[18%] left-[12%] h-28 w-12 rounded-full border border-emerald-200/45 bg-emerald-100/40 shadow-[inset_8px_8px_18px_rgba(255,255,255,0.4),0_18px_45px_rgba(16,185,129,0.16)] dark:border-emerald-300/15 dark:bg-emerald-300/10"
+        className="login-float absolute bottom-[18%] left-[8%] h-32 w-14 rounded-full border border-emerald-200/70 bg-emerald-100/70 shadow-[inset_8px_8px_18px_rgba(255,255,255,0.68),0_18px_45px_rgba(16,185,129,0.18)] dark:border-emerald-300/15 dark:bg-emerald-300/10"
         style={{ "--rotate": "18deg", "--x": "18px", "--y": "-14px" } as React.CSSProperties}
       >
-        <div className="absolute left-1/2 top-3 h-5 w-8 -translate-x-1/2 rounded-md bg-white/50 dark:bg-white/15" />
-        <div className="absolute left-1/2 top-12 h-11 w-6 -translate-x-1/2 rounded-full bg-cyan-300/45 dark:bg-cyan-300/25" />
+        <div className="absolute left-1/2 top-3 h-5 w-8 -translate-x-1/2 rounded-md bg-white/80 dark:bg-white/15" />
+        <div className="absolute left-1/2 top-14 h-12 w-7 -translate-x-1/2 rounded-full bg-cyan-300/55 dark:bg-cyan-300/25" />
       </div>
       <div
-        className="login-float absolute right-[9%] top-[20%] h-28 w-7 rounded-full bg-blue-300/20 shadow-[0_0_28px_rgba(59,130,246,0.32)]"
+        className="login-float absolute right-[9%] top-[20%] h-32 w-8 rounded-full bg-blue-300/30 shadow-[0_0_28px_rgba(59,130,246,0.30)] dark:bg-blue-300/20"
         style={{ "--rotate": "-24deg", "--x": "-18px", "--y": "10px", animationDelay: "1.2s" } as React.CSSProperties}
       >
-        <div className="absolute -bottom-7 left-1/2 h-9 w-1 -translate-x-1/2 rounded-full bg-blue-300/35" />
-        <div className="absolute -top-3 left-1/2 h-4 w-12 -translate-x-1/2 rounded-full border border-blue-300/25" />
+        <div className="absolute -bottom-8 left-1/2 h-10 w-1 -translate-x-1/2 rounded-full bg-blue-300/45" />
+        <div className="absolute -top-3 left-1/2 h-4 w-12 -translate-x-1/2 rounded-full border border-blue-300/40 bg-white/30 dark:bg-transparent" />
+      </div>
+      <div className="login-float absolute bottom-[10%] right-[12%] hidden h-28 w-28 rounded-[2rem] border border-blue-200/60 bg-white/45 shadow-[0_20px_60px_rgba(37,99,235,0.12)] backdrop-blur-sm dark:border-blue-400/10 dark:bg-white/[0.03] sm:block" style={{ "--rotate": "8deg", "--x": "-12px", "--y": "12px", animationDelay: "0.6s" } as React.CSSProperties}>
+        <div className="absolute left-6 top-8 h-px w-16 bg-blue-400/30" />
+        <div className="absolute left-6 top-14 h-px w-20 bg-emerald-400/25" />
+        <div className="absolute bottom-6 right-6 h-9 w-9 rounded-full border border-blue-400/25" />
       </div>
       <div className="absolute bottom-10 right-10 hidden grid-cols-6 gap-2 opacity-20 dark:opacity-15 sm:grid">
         {Array.from({ length: 24 }).map((_, index) => (
@@ -238,7 +244,7 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="relative flex min-h-screen flex-col overflow-x-hidden bg-[radial-gradient(circle_at_20%_20%,#dbeafe_0,#f8fafc_34%,#f8fafc_100%)] px-4 py-4 text-zinc-950 dark:bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.1)_0,rgba(15,23,42,0.88)_32%,#09090b_100%)] dark:text-white sm:px-5 sm:py-5">
+    <main className="relative flex min-h-screen flex-col overflow-x-hidden bg-[linear-gradient(135deg,#f8fbff_0%,#eef6ff_42%,#ffffff_100%)] px-4 py-4 text-zinc-950 dark:bg-[radial-gradient(circle_at_20%_20%,rgba(56,189,248,0.1)_0,rgba(15,23,42,0.88)_32%,#09090b_100%)] dark:text-white sm:px-5 sm:py-5">
       <LoginTechBackdrop />
       <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-11rem)] w-full max-w-5xl flex-1 flex-col">
         <header className="flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-center">
@@ -249,8 +255,8 @@ export default function LoginPage() {
           </div>
         </header>
 
-        <section className="mx-auto mt-5 w-full max-w-xl rounded-xl border border-zinc-200 bg-white/92 p-4 shadow-2xl shadow-blue-950/5 backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/20 sm:mt-7 sm:p-5">
-          <div className="grid grid-cols-2 gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950">
+        <section className="mx-auto mt-5 w-full max-w-xl rounded-xl border border-blue-100 bg-white/95 p-4 shadow-[0_24px_80px_rgba(37,99,235,0.12)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95 dark:shadow-black/20 sm:mt-7 sm:p-5">
+          <div className="grid grid-cols-2 gap-2 rounded-lg border border-blue-100 bg-blue-50/60 p-1 dark:border-zinc-800 dark:bg-zinc-950">
             {(["login", "verify"] as const).map((tab) => (
               <button
                 key={tab}
@@ -259,7 +265,7 @@ export default function LoginPage() {
                   setActiveTab(tab);
                   setError(null);
                 }}
-                className={`min-h-10 rounded-md text-sm font-bold transition ${activeTab === tab ? "bg-blue-600 text-white" : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"}`}
+                className={`min-h-10 rounded-md text-sm font-bold transition ${activeTab === tab ? "bg-blue-600 text-white shadow-sm" : "text-zinc-500 hover:bg-white/80 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-transparent dark:hover:text-white"}`}
               >
                 {tab === "login" ? t("Đăng nhập") : t("Xác minh nguồn gốc")}
               </button>
@@ -283,8 +289,8 @@ export default function LoginPage() {
                       onClick={() => setSelectedRole(actor.role)}
                       className={`min-h-[5.5rem] rounded-lg border p-3 text-center transition ${
                         selectedRole === actor.role
-                          ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm dark:bg-blue-500/15 dark:text-blue-100"
-                          : "border-zinc-200 bg-white text-zinc-500 hover:border-zinc-300 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:hover:border-zinc-600"
+                          ? "border-blue-500 bg-blue-50 text-blue-700 shadow-sm shadow-blue-100 dark:bg-blue-500/15 dark:text-blue-100 dark:shadow-none"
+                          : "border-zinc-200 bg-white text-zinc-500 shadow-sm hover:border-blue-200 hover:bg-blue-50/50 hover:text-zinc-900 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400 dark:shadow-none dark:hover:border-zinc-600 dark:hover:bg-zinc-950"
                       }`}
                     >
                       <Icon className="mx-auto h-5 w-5" />
@@ -296,7 +302,7 @@ export default function LoginPage() {
 
               <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">{selectedActor?.address || t("Chưa có ví demo")}</div>
 
-              {error ? <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-semibold text-red-200">{error}</p> : null}
+              {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">{error}</p> : null}
 
               <button type="button" onClick={handleDemoLogin} disabled={isLoading || !selectedActor} className="flex min-h-12 w-full items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
                 {isLoading ? t("Đang đăng nhập...") : t("Đăng nhập bằng ví demo")}
@@ -318,12 +324,12 @@ export default function LoginPage() {
                 <h1 className="text-2xl font-bold">{t("Xác minh nguồn gốc")}</h1>
                 <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{t("Quét QR hoặc nhập serial để xem nguồn gốc và lịch sử chuyển giao.")}</p>
               </div>
-              <div className="grid grid-cols-2 gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-1 dark:border-zinc-800 dark:bg-zinc-950">
-                <button type="button" onClick={() => setVerifyMode("manual")} className={`flex min-h-10 items-center justify-center gap-2 rounded-md text-sm font-bold ${verifyMode === "manual" ? "bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white" : "text-zinc-500"}`}>
+              <div className="grid grid-cols-2 gap-2 rounded-lg border border-blue-100 bg-blue-50/60 p-1 dark:border-zinc-800 dark:bg-zinc-950">
+                <button type="button" onClick={() => setVerifyMode("manual")} className={`flex min-h-10 items-center justify-center gap-2 rounded-md text-sm font-bold ${verifyMode === "manual" ? "bg-white text-blue-700 shadow-sm dark:bg-zinc-800 dark:text-white" : "text-zinc-500"}`}>
                   <Keyboard className="h-4 w-4" />
                   {t("Nhập serial")}
                 </button>
-                <button type="button" onClick={() => setVerifyMode("camera")} className={`flex min-h-10 items-center justify-center gap-2 rounded-md text-sm font-bold ${verifyMode === "camera" ? "bg-zinc-200 text-zinc-950 dark:bg-zinc-800 dark:text-white" : "text-zinc-500"}`}>
+                <button type="button" onClick={() => setVerifyMode("camera")} className={`flex min-h-10 items-center justify-center gap-2 rounded-md text-sm font-bold ${verifyMode === "camera" ? "bg-white text-blue-700 shadow-sm dark:bg-zinc-800 dark:text-white" : "text-zinc-500"}`}>
                   <Camera className="h-4 w-4" />
                   {t("Quét QR")}
                 </button>
@@ -347,7 +353,7 @@ export default function LoginPage() {
                       onError={(err) => setScanError(String(err))}
                     />
                   </div>
-                  {scanError ? <p className="text-xs text-red-300">{scanError}</p> : <p className="text-xs text-zinc-500">{t("Hướng camera vào mã QR trên vaccine.")}</p>}
+                  {scanError ? <p className="text-xs text-red-600 dark:text-red-300">{scanError}</p> : <p className="text-xs text-zinc-500">{t("Hướng camera vào mã QR trên vaccine.")}</p>}
                 </div>
               )}
             </div>
