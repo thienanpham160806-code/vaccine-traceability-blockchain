@@ -107,7 +107,7 @@ export default function RiskFlagsPage() {
           <h2 className="font-bold">{t("Cảnh báo đang mở")}</h2>
         </div>
 
-        <div className="space-y-3 p-4">
+        <div className="max-h-[460px] space-y-3 overflow-y-auto p-4 lg:max-h-[calc(100dvh-27rem)]">
           {isLoading ? (
             [1, 2, 3].map((item) => <div className="h-24 animate-pulse rounded-lg bg-zinc-100" key={item} />)
           ) : openFlags.length === 0 ? (
@@ -171,7 +171,7 @@ export default function RiskFlagsPage() {
           <AlertTriangle className="h-4 w-4 text-emerald-500" />
           <h2 className="font-bold">{t("Lịch sử đã xử lý")}</h2>
         </div>
-        <div className="divide-y">
+        <div className="max-h-[360px] divide-y overflow-y-auto lg:max-h-[calc(100dvh-31rem)]">
           {resolvedFlags.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">{t("Chưa có cảnh báo nào được xử lý.")}</p>
           ) : (

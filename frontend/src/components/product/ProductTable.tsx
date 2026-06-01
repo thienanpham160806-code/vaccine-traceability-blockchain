@@ -132,9 +132,9 @@ export function ProductTable() {
         ) : null}
 
         {!isLoading && !error ? (
-          <div className="overflow-x-auto">
+          <div className="max-h-[520px] overflow-auto lg:max-h-[calc(100dvh-25rem)]">
             <table className="w-full min-w-[920px] text-left text-sm">
-              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <thead className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
                 <tr>
                   <th className="px-5 py-4">Serial ID</th>
                   <th className="px-5 py-4">{t("Mã lô")}</th>

@@ -116,7 +116,7 @@ export default function RiskDisputePage() {
             </div>
           </div>
 
-          <div className="space-y-2 p-3">
+          <div className="max-h-[360px] space-y-2 overflow-y-auto p-3 lg:max-h-[calc(100dvh-24rem)]">
             {flagsLoading ? (
               <div className="space-y-2 p-2">
                 {[1, 2].map((i) => <div key={i} className="h-16 animate-pulse rounded-lg bg-zinc-100" />)}
@@ -222,7 +222,7 @@ export default function RiskDisputePage() {
           </button>
         </div>
 
-        <div className="p-4">
+        <div className="max-h-[430px] overflow-y-auto p-4 lg:max-h-[calc(100dvh-26rem)]">
           {disputesLoading ? (
             <div className="space-y-2">
               {[1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-lg bg-zinc-100" />)}

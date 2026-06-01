@@ -38,12 +38,12 @@ function TransferCard({
   return (
     <Link
       href={`/dashboard/transfers/${encodeURIComponent(transfer.id)}`}
-      className="block rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/30"
+      className="block rounded-lg border border-zinc-200 bg-white p-4 shadow-sm transition hover:border-blue-200 hover:bg-blue-50/30 dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none dark:hover:border-blue-500/60 dark:hover:bg-zinc-900/70"
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate font-mono text-sm font-semibold text-zinc-800">{transfer.serialId || t("Chưa có serial")}</p>
-          <p className="mt-1 text-xs text-zinc-500">
+          <p className="truncate font-mono text-sm font-semibold text-zinc-800 dark:text-zinc-100">{transfer.serialId || t("Chưa có serial")}</p>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
             {translateRole(transfer.fromRole || "", language) || t("Không rõ")} <ArrowRight className="inline h-3 w-3" /> {translateRole(transfer.toRole || "", language) || t("Không rõ")}
           </p>
         </div>
@@ -52,22 +52,22 @@ function TransferCard({
         </span>
       </div>
 
-      <div className="mt-4 grid gap-3 text-xs text-zinc-500 sm:grid-cols-3">
+      <div className="mt-4 grid gap-3 text-xs text-zinc-500 dark:text-zinc-400 sm:grid-cols-3">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">{t("Từ")}</p>
-          <p className="mt-1 font-semibold text-zinc-700">{shortAddress(transfer.fromAddress, language)}</p>
+          <p className="mt-1 font-semibold text-zinc-700 dark:text-zinc-200">{shortAddress(transfer.fromAddress, language)}</p>
         </div>
         <div>
           <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">{t("Đến")}</p>
-          <p className="mt-1 font-semibold text-zinc-700">{shortAddress(transfer.toAddress, language)}</p>
+          <p className="mt-1 font-semibold text-zinc-700 dark:text-zinc-200">{shortAddress(transfer.toAddress, language)}</p>
         </div>
         <div>
           <p className="font-mono text-[10px] uppercase tracking-widest text-zinc-400">{t("Cập nhật")}</p>
-          <p className="mt-1 font-semibold text-zinc-700">{formatTime(transfer.updatedAt || transfer.createdAt, language)}</p>
+          <p className="mt-1 font-semibold text-zinc-700 dark:text-zinc-200">{formatTime(transfer.updatedAt || transfer.createdAt, language)}</p>
         </div>
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3 border-t border-zinc-100 pt-3">
+      <div className="mt-4 flex items-center justify-between gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
         <span className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold ${
           canAct ? "bg-amber-50 text-amber-700" : "bg-zinc-50 text-zinc-500"
         }`}>
@@ -135,7 +135,7 @@ export default function TransfersPage() {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
           <p className="text-2xl font-bold text-zinc-900">{transfers.length}</p>
           <p className="text-xs text-zinc-500">{t("Tổng lệnh chuyển")}</p>
         </div>
@@ -143,7 +143,7 @@ export default function TransfersPage() {
           <p className="text-2xl font-bold text-amber-800">{pendingCount}</p>
           <p className="text-xs text-amber-700">{t("Chờ xác nhận")}</p>
         </div>
-        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm">
+        <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
           <p className="text-2xl font-bold text-zinc-900">
             {transfers.filter((transfer) => user?.role && transfer.toRole === user.role && transfer.status === "PENDING").length}
           </p>
@@ -151,14 +151,14 @@ export default function TransfersPage() {
         </div>
       </div>
 
-      <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm">
+      <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
         <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
-          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3">
+          <label className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 dark:border-zinc-800 dark:bg-zinc-900">
             <Search className="h-4 w-4 text-zinc-400" />
             <input
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              className="min-w-0 flex-1 bg-transparent text-sm text-zinc-800 outline-none"
+              className="min-w-0 flex-1 bg-transparent text-sm text-zinc-800 outline-none dark:text-zinc-100"
               placeholder={t("Tìm theo serial, mã lô hoặc vai trò")}
             />
           </label>
@@ -170,7 +170,7 @@ export default function TransfersPage() {
                 className={`min-h-11 shrink-0 rounded-lg border px-3 text-xs font-bold ${
                   status === option
                     ? "border-blue-600 bg-blue-50 text-blue-700"
-                    : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50"
+                    : "border-zinc-200 bg-white text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:bg-zinc-900"
                 }`}
               >
                 {option === "ALL" ? t("Tất cả") : getTransferStatusLabel(option, language)}
@@ -193,10 +193,12 @@ export default function TransfersPage() {
           <p className="mt-1 text-xs text-zinc-400">{t("Hãy thử trạng thái hoặc serial khác.")}</p>
         </div>
       ) : (
-        <div className="grid gap-3 lg:grid-cols-2">
+        <div className="max-h-[540px] overflow-y-auto pr-1 lg:max-h-[calc(100dvh-28rem)]">
+          <div className="grid gap-3 lg:grid-cols-2">
           {filtered.map((transfer) => (
             <TransferCard key={transfer.id} transfer={transfer} user={user} language={language} t={t} />
           ))}
+          </div>
         </div>
       )}
     </div>

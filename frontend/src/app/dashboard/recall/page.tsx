@@ -179,12 +179,12 @@ export default function RecallPage() {
             {[1, 2].map((i) => <div key={i} className="h-24 animate-pulse rounded-xl bg-zinc-100" />)}
           </div>
         ) : recalls.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-zinc-300 py-12 text-center">
+          <div className="rounded-2xl border border-dashed border-zinc-300 py-12 text-center dark:border-zinc-800">
             <RotateCcw className="mx-auto mb-2 h-8 w-8 text-zinc-300" />
             <p className="text-sm text-zinc-400">{t("Chưa có lệnh thu hồi nào.")}</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1 lg:max-h-[calc(100dvh-13rem)]">
             {recalls.map((recall) => (
               <RecallCard key={recall.id || recall.batchHash} recall={recall} />
             ))}

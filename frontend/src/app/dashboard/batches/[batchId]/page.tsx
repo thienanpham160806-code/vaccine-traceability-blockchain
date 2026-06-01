@@ -208,7 +208,7 @@ export default function BatchDetailPage({ params }: PageProps) {
               ))}
             </div>
           ) : serials.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-zinc-300 py-12 text-center">
+            <div className="rounded-2xl border border-dashed border-zinc-300 py-12 text-center dark:border-zinc-800">
               <p className="text-sm text-zinc-500">{t("Chưa có serial nào cho lô này.")}</p>
               <Link
                 href="/dashboard/batches"
@@ -218,9 +218,9 @@ export default function BatchDetailPage({ params }: PageProps) {
               </Link>
             </div>
           ) : (
-            <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <div className="max-h-[460px] overflow-auto rounded-2xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none lg:max-h-[calc(100dvh-30rem)]">
               <table className="w-full text-sm">
-                <thead className="border-b border-zinc-100 bg-zinc-50">
+                <thead className="sticky top-0 z-10 border-b border-zinc-100 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900">
                   <tr>
                     {["Serial ID", t("Trạng thái"), t("Rủi ro"), t("Chủ hiện tại"), t("Thao tác")].map((heading) => (
                       <th key={heading} className="px-4 py-3 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">
@@ -229,7 +229,7 @@ export default function BatchDetailPage({ params }: PageProps) {
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-100">
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                   {serials.map((serial) => (
                     <tr key={serial.serialId} className="hover:bg-zinc-50">
                       <td className="px-4 py-3 font-mono text-xs text-zinc-700">{serial.serialId}</td>
