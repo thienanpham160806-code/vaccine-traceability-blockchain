@@ -88,14 +88,14 @@ function StatCard({
   hint?: string;
 }) {
   return (
-    <div className="min-h-[116px] rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+    <div className="min-h-[104px] rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
       <div className="flex items-start justify-between gap-3">
         <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${tone}`}>
           <Icon className="h-5 w-5" />
         </div>
         {hint ? <span className="rounded-full bg-zinc-100 px-2 py-1 text-[11px] font-semibold text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{hint}</span> : null}
       </div>
-      <p className="mt-3 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{value}</p>
+      <p className="mt-2 text-2xl font-bold text-zinc-900 dark:text-zinc-100">{value}</p>
       <p className="mt-0.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</p>
     </div>
   );
@@ -108,7 +108,7 @@ function ActivityRow({ item, language }: { item: DashboardActivity; language: "e
   return (
     <Link
       href={item.href || "/dashboard"}
-      className="group flex min-h-[72px] items-center gap-3 px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-blue-950/30 sm:px-6"
+      className="group flex min-h-[64px] items-center gap-3 px-4 py-2.5 transition hover:bg-zinc-50 dark:hover:bg-blue-950/30 sm:px-5"
     >
       <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500 dark:bg-zinc-900 dark:text-blue-200">
         <Icon className="h-4 w-4" />
@@ -164,7 +164,7 @@ export default function DashboardPage() {
   const actions = roleActions(user?.role);
 
   return (
-    <div className="space-y-5 pb-20 lg:pb-0 bg-white dark:bg-zinc-950">
+    <div className="space-y-4 pb-20 lg:pb-0 bg-white dark:bg-zinc-950">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
@@ -211,8 +211,8 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1fr_360px]">
-        <section className="flex max-h-[430px] min-h-[320px] flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
-          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-4 sm:px-6 dark:border-zinc-800">
+        <section className="flex max-h-[340px] min-h-[260px] flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+          <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 sm:px-5 dark:border-zinc-800">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-blue-500" />
               <h2 className="font-semibold text-zinc-800 dark:text-zinc-100">{t("Hoạt động gần đây")}</h2>
@@ -231,18 +231,18 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <aside className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
+        <aside className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-zinc-500 dark:text-zinc-400" />
             <h2 className="font-semibold text-zinc-800 dark:text-zinc-100">{t("7 ngày gần đây")}</h2>
           </div>
-          <div className="mt-4 flex h-36 items-end gap-2">
+          <div className="mt-3 flex h-[7.5rem] items-end gap-2">
             {(stats?.last7DaysTrend || []).map((day) => {
               const max = Math.max(...(stats?.last7DaysTrend || []).map((d) => d.count), 1);
               const height = Math.max(8, Math.round((day.count / max) * 100));
               return (
                 <div key={day.date} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                  <div className="flex h-28 w-full items-end rounded bg-white px-1 dark:bg-zinc-800">
+                  <div className="flex h-24 w-full items-end rounded bg-white px-1 dark:bg-zinc-800">
                     <div
                       className="group relative w-full rounded bg-blue-500 transition-colors hover:bg-blue-600"
                       style={{ height: `${height}%` }}

@@ -58,13 +58,13 @@ export function ContactFooter({ className = "" }: { className?: string }) {
 
   return (
     <footer
-      className={`relative overflow-hidden rounded-2xl border border-blue-200/70 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-6 text-zinc-800 shadow-sm dark:border-blue-400/15 dark:from-zinc-950 dark:via-slate-950 dark:to-blue-950/40 dark:text-zinc-100 ${className}`}
+      className={`relative overflow-hidden rounded-2xl border border-blue-200/70 bg-gradient-to-br from-sky-50 via-white to-emerald-50 p-5 text-zinc-800 shadow-sm dark:border-blue-400/15 dark:from-zinc-950 dark:via-slate-950 dark:to-blue-950/40 dark:text-zinc-100 ${className}`}
     >
-      <div className="pointer-events-none absolute -right-10 -top-12 h-36 w-36 rounded-full bg-blue-400/15 blur-2xl" />
-      <div className="pointer-events-none absolute -bottom-16 left-1/3 h-40 w-40 rounded-full bg-emerald-400/10 blur-2xl" />
+      <div className="pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full bg-blue-400/15 blur-2xl" />
+      <div className="pointer-events-none absolute -bottom-14 left-1/3 h-32 w-32 rounded-full bg-emerald-400/10 blur-2xl" />
 
-      <div className="relative grid gap-8 lg:grid-cols-[0.85fr_2fr_auto] lg:items-start xl:grid-cols-[0.75fr_2.25fr_auto]">
-        <div className="space-y-4">
+      <div className="relative grid gap-5 lg:grid-cols-[0.85fr_2fr_auto] lg:items-start xl:grid-cols-[0.75fr_2.25fr_auto]">
+        <div className="space-y-3">
           <VaxiTrustLogo
             className="h-12 w-12"
             iconClassName="h-7 w-7"
@@ -73,13 +73,13 @@ export function ContactFooter({ className = "" }: { className?: string }) {
             subtitleClassName="text-xs"
             wordmarkClassName="text-2xl"
           />
-          <p className="max-w-md text-sm leading-6 text-zinc-600 dark:text-zinc-300">{text.intro}</p>
+          <p className="max-w-md text-sm leading-5 text-zinc-600 dark:text-zinc-300">{text.intro}</p>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <h2 className="text-lg font-extrabold text-blue-700 dark:text-blue-300">{text.title}</h2>
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-            <div className="space-y-3 rounded-xl border border-white/80 bg-white/70 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
+          <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
+            <div className="space-y-2.5 rounded-xl border border-white/80 bg-white/70 p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
               <p className="text-xs font-bold uppercase tracking-[0.22em] text-zinc-500 dark:text-zinc-400">
                 {text.contactTitle}
               </p>
@@ -109,7 +109,7 @@ export function ContactFooter({ className = "" }: { className?: string }) {
               </div>
             </div>
 
-            <div className="space-y-3 rounded-xl border border-white/80 bg-white/70 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
+            <div className="space-y-2.5 rounded-xl border border-white/80 bg-white/70 p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70">
               <div className="flex gap-2 text-sm">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-blue-600 dark:text-blue-300" />
                 <div>
