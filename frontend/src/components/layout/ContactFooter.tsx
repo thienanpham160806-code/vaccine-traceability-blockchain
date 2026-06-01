@@ -52,7 +52,43 @@ function scrollToTop() {
   document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-export function ContactFooter({ className = "" }: { className?: string }) {
+function FooterMedicalMotion() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      <style jsx>{`
+        @keyframes footerFloat {
+          0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--rotate)); opacity: 0.12; }
+          50% { transform: translate3d(var(--x), var(--y), 0) rotate(calc(var(--rotate) + 8deg)); opacity: 0.24; }
+        }
+        @keyframes footerPulse {
+          0%, 100% { transform: scale(0.96); opacity: 0.08; }
+          50% { transform: scale(1.08); opacity: 0.18; }
+        }
+        .footer-float { animation: footerFloat 9s ease-in-out infinite; }
+        .footer-pulse { animation: footerPulse 5s ease-in-out infinite; }
+      `}</style>
+      <div className="footer-pulse absolute -left-8 bottom-4 h-24 w-24 text-emerald-300/70">
+        <div className="absolute left-1/2 top-0 h-full w-6 -translate-x-1/2 rounded-full bg-current" />
+        <div className="absolute left-0 top-1/2 h-6 w-full -translate-y-1/2 rounded-full bg-current" />
+      </div>
+      <div
+        className="footer-float absolute bottom-6 right-[18%] h-24 w-10 rounded-full border border-cyan-200/40 bg-cyan-100/50 shadow-[inset_6px_6px_14px_rgba(255,255,255,0.35),0_12px_30px_rgba(34,211,238,0.18)] dark:bg-cyan-300/10"
+        style={{ "--rotate": "18deg", "--x": "16px", "--y": "-10px" } as React.CSSProperties}
+      >
+        <div className="absolute left-1/2 top-2 h-4 w-7 -translate-x-1/2 rounded-md bg-white/45 dark:bg-white/20" />
+        <div className="absolute left-1/2 top-10 h-9 w-5 -translate-x-1/2 rounded-full bg-cyan-300/45" />
+      </div>
+      <div
+        className="footer-float absolute left-[35%] top-5 h-20 w-6 rounded-full bg-blue-300/20 shadow-[0_0_24px_rgba(59,130,246,0.28)]"
+        style={{ "--rotate": "-22deg", "--x": "-14px", "--y": "8px", animationDelay: "1.4s" } as React.CSSProperties}
+      >
+        <div className="absolute -bottom-5 left-1/2 h-7 w-1 -translate-x-1/2 rounded-full bg-blue-200/30" />
+      </div>
+    </div>
+  );
+}
+
+export function ContactFooter({ className = "", animatedBackdrop = false }: { className?: string; animatedBackdrop?: boolean }) {
   const { language } = useLanguage();
   const text = contactCopy[language];
 
@@ -62,6 +98,7 @@ export function ContactFooter({ className = "" }: { className?: string }) {
     >
       <div className="pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full bg-blue-400/15 blur-2xl" />
       <div className="pointer-events-none absolute -bottom-14 left-1/3 h-32 w-32 rounded-full bg-emerald-400/10 blur-2xl" />
+      {animatedBackdrop ? <FooterMedicalMotion /> : null}
 
       <div className="relative grid gap-5 lg:grid-cols-[0.85fr_2fr_auto] lg:items-start xl:grid-cols-[0.75fr_2.25fr_auto]">
         <div className="space-y-3">
