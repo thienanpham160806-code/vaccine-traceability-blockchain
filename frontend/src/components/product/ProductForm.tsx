@@ -34,10 +34,10 @@ function makeIds() {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
+  "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-blue-500 dark:focus:bg-zinc-900 dark:focus:ring-blue-500/20";
 
 const monoInputCls =
-  "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
+  "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-blue-500 dark:focus:bg-zinc-900 dark:focus:ring-blue-500/20";
 
 function Field({ label, error, children }: { label: string; error?: string; children: React.ReactNode }) {
   return (
@@ -204,9 +204,9 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
   };
   return (
     <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
-      <form onChange={() => setFieldErrors({})} onSubmit={handleSubmit} className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+      <form onChange={() => setFieldErrors({})} onSubmit={handleSubmit} className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70 dark:shadow-none">
         {/* Header */}
-        <div className="mb-5 flex items-center justify-between border-b border-zinc-100 pb-4">
+        <div className="mb-5 flex items-center justify-between border-b border-zinc-100 pb-4 dark:border-zinc-800">
           <div>
             <h2 className="font-bold text-zinc-900">{t("Đăng ký lô vaccine mới")}</h2>
             <p className="text-xs text-zinc-500">{t("Tạo sản phẩm on-chain và sinh mã QR.")}</p>
@@ -214,7 +214,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
           <button
             type="button"
             onClick={regenerate}
-            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
+            className="flex items-center gap-1.5 rounded-lg border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
             <RefreshCw className="h-3 w-3" />
             {t("Tạo ID mới")}
@@ -223,7 +223,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
 
         {/* Status banner */}
         {statusMsg && (
-          <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
             <Zap className="h-3.5 w-3.5 shrink-0" />
             {statusMsg}
           </div>
@@ -314,7 +314,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
         </div>
 
         {Object.keys(fieldErrors).length > 0 ? (
-          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
             <p>{t("Vui lòng kiểm tra các trường sau:")}</p>
             <ul className="mt-1 list-disc pl-4">
               {Object.entries(fieldErrors).map(([field, message]) => (
@@ -327,7 +327,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
         ) : null}
 
         {error && (
-          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
+          <p className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
             {error}
           </p>
         )}
@@ -343,14 +343,14 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
           </button>
           <Link
             href="/dashboard/products"
-            className="rounded-lg border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+            className="rounded-lg border border-zinc-200 px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-800"
           >
             {t("Danh sách sản phẩm")}
           </Link>
           {generatedSerial && (
             <Link
               href={`/dashboard/transfers/create?serialId=${encodeURIComponent(generatedSerial)}`}
-              className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100"
+              className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200 dark:hover:bg-emerald-500/15"
             >
               {t("Chuyển serial này")}
             </Link>
@@ -358,7 +358,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
           {generatedBatch && (
             <Link
               href={`/dashboard/products/batches/${encodeURIComponent(generatedBatch)}`}
-              className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100"
+              className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/15"
             >
               {t("Xem chi tiết lô")}
             </Link>
@@ -375,8 +375,8 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
           qrImage={result?.qrImage}
         />
       ) : (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-10 text-center">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-zinc-300 bg-zinc-50 p-10 text-center dark:border-zinc-800 dark:bg-zinc-900/60">
+          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-zinc-100 dark:bg-zinc-800">
             <span className="text-2xl">📦</span>
           </div>
           <p className="text-sm font-semibold text-zinc-600">{t("Sau khi đăng ký")}</p>

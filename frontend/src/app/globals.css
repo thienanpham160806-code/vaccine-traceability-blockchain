@@ -13,6 +13,14 @@
     border-color: var(--color-zinc-200, currentColor);
   }
 
+  .dark *,
+  .dark ::after,
+  .dark ::before,
+  .dark ::backdrop,
+  .dark ::file-selector-button {
+    border-color: var(--color-zinc-800, #27272a);
+  }
+
   body {
     background: #f8fafc;
     color: #18181b;
@@ -37,8 +45,16 @@
     background-color: #27272a !important;
   }
 
+  .dark .bg-zinc-200 {
+    background-color: #3f3f46 !important;
+  }
+
   .dark .bg-gray-50 {
     background-color: #18181b !important;
+  }
+
+  .dark .bg-gray-100 {
+    background-color: #27272a !important;
   }
 
   .dark .text-zinc-950,
@@ -63,14 +79,35 @@
 
   .dark .border-zinc-100,
   .dark .border-zinc-200,
+  .dark .border-zinc-300,
+  .dark .border-gray-100,
   .dark .border-gray-200 {
+    border-color: #27272a !important;
+  }
+
+  .dark .divide-zinc-100 > :not(:last-child),
+  .dark .divide-zinc-200 > :not(:last-child),
+  .dark .divide-gray-200 > :not(:last-child) {
     border-color: #27272a !important;
   }
 
   .dark input,
   .dark select,
   .dark textarea {
+    background-color: #18181b;
+    border-color: #27272a;
     color: #f4f4f5;
+  }
+
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: #71717a;
+  }
+
+  .dark .shadow-sm,
+  .dark .shadow-md,
+  .dark .shadow-lg {
+    box-shadow: none !important;
   }
 }
 

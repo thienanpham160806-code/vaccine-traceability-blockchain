@@ -19,15 +19,15 @@ export function QrResultCard({
   const qrValue = `${baseUrl}/${encodeURIComponent(serialId)}`;
 
   return (
-    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
-      <div className="border-b border-zinc-200 bg-zinc-50 p-6">
+    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70 dark:shadow-none">
+      <div className="border-b border-zinc-200 bg-zinc-50 p-6 dark:border-zinc-800 dark:bg-zinc-950/60">
         <h3 className="text-lg font-bold text-zinc-900">{t("Đã tạo mã QR")}</h3>
       </div>
       <div className="space-y-4 p-6">
         <p className="text-sm text-muted-foreground">
           {t("Mã QR này trỏ tới trang xác minh công khai cho người dùng.")}
         </p>
-        <div className="flex justify-center rounded-2xl border border-zinc-200 bg-white p-6">
+        <div className="flex justify-center rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800">
           <QRCodeSVG value={qrValue} size={180} />
         </div>
         <div>
