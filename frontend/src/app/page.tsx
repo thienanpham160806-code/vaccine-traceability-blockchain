@@ -95,7 +95,14 @@ export default function HomePage() {
       <div className="w-full max-w-md space-y-8 text-center">
         <div className="flex flex-col items-center gap-3">
           <div className="flex w-full justify-center">
-            <VaxiTrustLogo className="h-20 w-20" iconClassName="h-12 w-12" />
+            <VaxiTrustLogo
+              className="h-20 w-20"
+              iconClassName="h-12 w-12"
+              showWordmark
+              subtitle={language === "en" ? "VACCINE TRACEABILITY" : "TRUY XUẤT VACCINE"}
+              subtitleClassName="text-[10px]"
+              wordmarkClassName="text-3xl text-white"
+            />
           </div>
           <div>
             <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500">

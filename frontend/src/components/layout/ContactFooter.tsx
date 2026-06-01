@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowUp, Mail, MapPin, Phone, ShieldCheck } from "lucide-react";
+import { ArrowUp, Mail, MapPin, Phone } from "lucide-react";
+import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 const contactCopy = {
@@ -64,17 +65,14 @@ export function ContactFooter({ className = "" }: { className?: string }) {
 
       <div className="relative grid gap-8 lg:grid-cols-[0.85fr_2fr_auto] lg:items-start xl:grid-cols-[0.75fr_2.25fr_auto]">
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-blue-200 bg-blue-100 text-blue-600 shadow-sm dark:border-blue-400/20 dark:bg-blue-500/10 dark:text-blue-300">
-              <ShieldCheck className="h-6 w-6" />
-            </div>
-            <div>
-              <p className="text-xl font-extrabold tracking-tight">VaxiTrust</p>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
-                {text.brandSubtitle}
-              </p>
-            </div>
-          </div>
+          <VaxiTrustLogo
+            className="h-12 w-12"
+            iconClassName="h-7 w-7"
+            showWordmark
+            subtitle={text.brandSubtitle}
+            subtitleClassName="text-xs"
+            wordmarkClassName="text-2xl"
+          />
           <p className="max-w-md text-sm leading-6 text-zinc-600 dark:text-zinc-300">{text.intro}</p>
         </div>
 

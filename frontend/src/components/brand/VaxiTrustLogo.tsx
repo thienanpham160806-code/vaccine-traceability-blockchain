@@ -1,15 +1,21 @@
 type VaxiTrustLogoProps = {
   className?: string;
   iconClassName?: string;
+  subtitle?: string;
+  subtitleClassName?: string;
   wordmarkClassName?: string;
   showWordmark?: boolean;
+  showSubtitle?: boolean;
 };
 
 export function VaxiTrustLogo({
   className = "h-12 w-12",
   iconClassName = "h-7 w-7",
+  subtitle = "TRUY XUẤT VACCINE",
+  subtitleClassName = "text-[11px]",
   wordmarkClassName = "text-2xl",
   showWordmark = false,
+  showSubtitle = true,
 }: VaxiTrustLogoProps) {
   const icon = (
     <div
@@ -49,8 +55,15 @@ export function VaxiTrustLogo({
   return (
     <div className="flex items-center gap-4">
       {icon}
-      <span className={`font-extrabold leading-none tracking-normal text-zinc-950 dark:text-zinc-50 ${wordmarkClassName}`}>
-        VaxiTrust
+      <span className="flex min-w-0 flex-col">
+        <span className={`font-extrabold leading-none tracking-normal text-zinc-950 dark:text-zinc-50 ${wordmarkClassName}`}>
+          VaxiTrust
+        </span>
+        {showSubtitle ? (
+          <span className={`mt-1 font-bold uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300 ${subtitleClassName}`}>
+            {subtitle}
+          </span>
+        ) : null}
       </span>
     </div>
   );

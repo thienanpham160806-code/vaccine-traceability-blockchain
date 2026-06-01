@@ -127,7 +127,9 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           className="h-12 w-12"
           iconClassName="h-7 w-7"
           showWordmark
-          wordmarkClassName="text-2xl text-white"
+          subtitle={language === "en" ? "VACCINE TRACEABILITY" : "TRUY XUẤT VACCINE"}
+          subtitleClassName="text-[10px]"
+          wordmarkClassName="text-2xl"
         />
       </Link>
 

@@ -215,6 +215,8 @@ export default function LoginPage() {
             className="h-12 w-12"
             iconClassName="h-7 w-7"
             showWordmark
+            subtitle={language === "en" ? "VACCINE TRACEABILITY" : "TRUY XUẤT VACCINE"}
+            subtitleClassName="text-[10px]"
             wordmarkClassName="text-2xl"
           />
         </div>
@@ -332,7 +334,7 @@ export default function LoginPage() {
           ) : null}
         </section>
       </main>
-      <ContactFooter className="mx-auto mb-8 w-[calc(100%-2rem)] max-w-6xl" />
+      <ContactFooter className="mt-8 w-full rounded-none border-x-0 border-b-0" />
     </div>
   );
 }
