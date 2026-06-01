@@ -113,6 +113,67 @@ const themeOptions = [
   { value: "system", icon: Monitor, labelKey: "system" },
 ] as const;
 
+function VerifyTechBackdrop() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+      <style jsx>{`
+        @keyframes verifyOrbit {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes verifyFloat {
+          0%, 100% { transform: translate3d(0, 0, 0) rotate(var(--rotate)); opacity: 0.18; }
+          50% { transform: translate3d(var(--x), var(--y), 0) rotate(calc(var(--rotate) + 9deg)); opacity: 0.34; }
+        }
+        @keyframes verifyScan {
+          0% { transform: translateX(-20%); opacity: 0; }
+          20%, 75% { opacity: 0.45; }
+          100% { transform: translateX(120%); opacity: 0; }
+        }
+        .verify-orbit { animation: verifyOrbit 26s linear infinite; }
+        .verify-float { animation: verifyFloat 10s ease-in-out infinite; }
+        .verify-scan { animation: verifyScan 8s ease-in-out infinite; }
+      `}</style>
+
+      <div className="absolute left-1/2 top-24 h-[28rem] w-[28rem] -translate-x-1/2 rounded-full border border-blue-300/20 bg-[radial-gradient(circle,rgba(59,130,246,0.10),transparent_62%)] blur-[1px] dark:border-blue-400/10 dark:bg-[radial-gradient(circle,rgba(56,189,248,0.10),transparent_62%)]" />
+      <div className="verify-orbit absolute left-1/2 top-28 h-72 w-72 -translate-x-1/2 rounded-full border border-dashed border-blue-400/20 dark:border-cyan-300/15">
+        <span className="absolute -right-1 top-1/2 h-2.5 w-2.5 rounded-full bg-blue-500 shadow-[0_0_18px_rgba(59,130,246,0.8)]" />
+      </div>
+      <div className="verify-orbit absolute left-[12%] top-[36%] h-44 w-44 rounded-full border border-dashed border-emerald-300/20 dark:border-emerald-300/15" style={{ animationDuration: "34s", animationDirection: "reverse" }} />
+
+      <div className="verify-scan absolute left-0 top-[30%] h-px w-2/3 bg-gradient-to-r from-transparent via-blue-500/40 to-transparent dark:via-cyan-300/35" />
+      <div className="absolute right-[8%] top-[14%] h-48 w-64 rounded-[2rem] border border-blue-200/20 bg-white/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] backdrop-blur-[1px] dark:border-cyan-300/10 dark:bg-white/[0.03]">
+        <div className="absolute left-6 top-7 h-px w-24 bg-blue-400/25" />
+        <div className="absolute left-6 top-14 h-px w-36 bg-emerald-400/20" />
+        <div className="absolute left-6 top-[5.25rem] h-px w-28 bg-blue-400/20" />
+        <div className="absolute bottom-7 right-7 h-10 w-10 rounded-full border border-blue-400/20" />
+      </div>
+
+      <div
+        className="verify-float absolute bottom-[18%] left-[8%] h-28 w-12 rounded-full border border-emerald-200/40 bg-emerald-100/35 shadow-[inset_8px_8px_18px_rgba(255,255,255,0.38),0_18px_45px_rgba(16,185,129,0.15)] dark:border-emerald-300/15 dark:bg-emerald-300/10"
+        style={{ "--rotate": "18deg", "--x": "18px", "--y": "-14px" } as React.CSSProperties}
+      >
+        <div className="absolute left-1/2 top-3 h-5 w-8 -translate-x-1/2 rounded-md bg-white/45 dark:bg-white/15" />
+        <div className="absolute left-1/2 top-12 h-11 w-6 -translate-x-1/2 rounded-full bg-cyan-300/45 dark:bg-cyan-300/25" />
+      </div>
+
+      <div
+        className="verify-float absolute right-[10%] top-[56%] h-28 w-7 rounded-full bg-blue-300/18 shadow-[0_0_28px_rgba(59,130,246,0.28)]"
+        style={{ "--rotate": "-24deg", "--x": "-18px", "--y": "10px", animationDelay: "1.2s" } as React.CSSProperties}
+      >
+        <div className="absolute -bottom-7 left-1/2 h-9 w-1 -translate-x-1/2 rounded-full bg-blue-300/30" />
+        <div className="absolute -top-3 left-1/2 h-4 w-12 -translate-x-1/2 rounded-full border border-blue-300/20" />
+      </div>
+
+      <div className="absolute bottom-8 right-8 grid grid-cols-5 gap-2 opacity-20 dark:opacity-15">
+        {Array.from({ length: 20 }).map((_, index) => (
+          <span key={index} className="h-1.5 w-1.5 rounded-full bg-blue-500 dark:bg-cyan-300" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function VerifyControls() {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
@@ -176,7 +237,8 @@ function VerifyShell({ children }: { children: React.ReactNode }) {
 
   return (
     <main className="relative flex min-h-screen flex-col overflow-x-hidden bg-[radial-gradient(circle_at_20%_18%,#dbeafe_0,#f8fafc_34%,#f8fafc_100%)] px-5 py-5 text-zinc-950 dark:bg-[radial-gradient(circle_at_20%_18%,rgba(56,189,248,0.1)_0,rgba(15,23,42,0.88)_32%,#09090b_100%)] dark:text-white">
-      <div className="mx-auto flex min-h-[calc(100dvh-11rem)] w-full max-w-5xl flex-1 flex-col">
+      <VerifyTechBackdrop />
+      <div className="relative z-10 mx-auto flex min-h-[calc(100dvh-11rem)] w-full max-w-5xl flex-1 flex-col">
         <header className="flex flex-wrap items-center justify-between gap-3">
           <VaxiTrustLogo
             className="h-12 w-12"
@@ -191,7 +253,7 @@ function VerifyShell({ children }: { children: React.ReactNode }) {
         {children}
       </div>
 
-      <ContactFooter animatedBackdrop className="-mx-5 mt-8 rounded-none border-x-0 border-b-0 px-5 sm:px-8" />
+      <ContactFooter animatedBackdrop className="relative z-10 -mx-5 mt-8 rounded-none border-x-0 border-b-0 px-5 sm:px-8" />
     </main>
   );
 }

@@ -25,7 +25,14 @@ type PageMeta = {
 
 const pageTitles: Record<string, PageMeta> = {
   "/dashboard": { title: "Tổng quan", sub: "Bảng điều khiển hệ thống" },
-  "/dashboard/products/batches": { title: "Lô hàng", sub: "Đăng ký và theo dõi lô vaccine" },
+  "/dashboard/products/batches": {
+    title: "Lô hàng",
+    sub: "Đăng ký và theo dõi lô vaccine",
+    breadcrumbs: [
+      { title: "Sản phẩm", href: "/dashboard/products" },
+      { title: "Lô hàng" },
+    ],
+  },
   "/dashboard/products": { title: "Sản phẩm", sub: "Danh sách serial đã đăng ký" },
   "/dashboard/transfers": { title: "Lệnh chuyển", sub: "Quản lý yêu cầu chuyển giao" },
   "/dashboard/transfers/create": { title: "Tạo lệnh chuyển", sub: "Tạo yêu cầu bàn giao" },
@@ -67,6 +74,7 @@ function getPageMeta(pathname: string): PageMeta {
       title: "Chi tiết lô",
       sub: "Serial, QR và lịch sử",
       breadcrumbs: [
+        { title: "Sản phẩm", href: "/dashboard/products" },
         { title: "Lô hàng", href: "/dashboard/products/batches" },
         { title: "Chi tiết lô" },
       ],
