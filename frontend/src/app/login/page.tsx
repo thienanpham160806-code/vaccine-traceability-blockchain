@@ -9,6 +9,7 @@ import { demoActors as fallbackActors, loginDemo, setSession } from "@/lib/auth"
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import { translateRole } from "@/lib/i18n";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
+import { ContactFooter } from "@/components/layout/ContactFooter";
 
 const roleIcon: Record<string, React.ElementType> = {
   MANUFACTURER: Building2,
@@ -331,6 +332,7 @@ export default function LoginPage() {
           ) : null}
         </section>
       </main>
+      <ContactFooter className="mx-auto mb-8 w-[calc(100%-2rem)] max-w-6xl" />
     </div>
   );
 }

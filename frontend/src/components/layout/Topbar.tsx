@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, ChevronRight, LogOut, Menu, Wallet } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
@@ -12,7 +12,18 @@ import { getTransferStatusLabel } from "@/lib/status";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import type { DashboardActivity } from "@/lib/types";
 
-const pageTitles: Record<string, { title: string; sub: string }> = {
+type BreadcrumbItem = {
+  title: string;
+  href?: string;
+};
+
+type PageMeta = {
+  title: string;
+  sub: string;
+  breadcrumbs?: BreadcrumbItem[];
+};
+
+const pageTitles: Record<string, PageMeta> = {
   "/dashboard": { title: "Tổng quan", sub: "Bảng điều khiển hệ thống" },
   "/dashboard/batches": { title: "Lô hàng", sub: "Đăng ký và theo dõi lô vaccine" },
   "/dashboard/products": { title: "Sản phẩm", sub: "Danh sách serial đã đăng ký" },
@@ -22,12 +33,73 @@ const pageTitles: Record<string, { title: string; sub: string }> = {
   "/dashboard/recall": { title: "Thu hồi", sub: "Quản lý thu hồi lô vaccine" },
 };
 
-function getPageMeta(pathname: string) {
-  if (pageTitles[pathname]) return pageTitles[pathname];
-  if (pathname.startsWith("/dashboard/batches/")) return { title: "Chi tiết lô", sub: "Serial, QR và lịch sử" };
-  if (pathname.startsWith("/dashboard/transfers/")) return { title: "Chi tiết lệnh chuyển", sub: "Bản ghi chuyển giao trên Blockchain" };
-  if (pathname.startsWith("/dashboard/verify/")) return { title: "Xác minh", sub: "Tính xác thực và lịch sử sản phẩm" };
-  return { title: "Dashboard", sub: "VaxiTrust" };
+function withDefaultBreadcrumb(meta: PageMeta): PageMeta {
+  return {
+    ...meta,
+    breadcrumbs: meta.breadcrumbs ?? [{ title: meta.title }],
+  };
+}
+
+function getPageMeta(pathname: string): PageMeta {
+  if (pageTitles[pathname]) return withDefaultBreadcrumb(pageTitles[pathname]);
+  if (pathname === "/dashboard/products/register") {
+    return {
+      title: "Đăng ký sản phẩm",
+      sub: "Tạo serial sản phẩm mới",
+      breadcrumbs: [
+        { title: "Sản phẩm", href: "/dashboard/products" },
+        { title: "Đăng ký sản phẩm" },
+      ],
+    };
+  }
+  if (pathname === "/dashboard/products/bulk") {
+    return {
+      title: "Đăng ký hàng loạt",
+      sub: "Tạo nhiều serial sản phẩm",
+      breadcrumbs: [
+        { title: "Sản phẩm", href: "/dashboard/products" },
+        { title: "Đăng ký hàng loạt" },
+      ],
+    };
+  }
+  if (pathname.startsWith("/dashboard/batches/")) {
+    return {
+      title: "Chi tiết lô",
+      sub: "Serial, QR và lịch sử",
+      breadcrumbs: [
+        { title: "Lô hàng", href: "/dashboard/batches" },
+        { title: "Chi tiết lô" },
+      ],
+    };
+  }
+  if (pathname.startsWith("/dashboard/products/")) {
+    return {
+      title: "Chi tiết sản phẩm",
+      sub: "Nguồn gốc, chủ sở hữu và lịch sử",
+      breadcrumbs: [
+        { title: "Sản phẩm", href: "/dashboard/products" },
+        { title: "Chi tiết sản phẩm" },
+      ],
+    };
+  }
+  if (pathname.startsWith("/dashboard/transfers/")) {
+    return {
+      title: "Chi tiết lệnh chuyển",
+      sub: "Bản ghi chuyển giao trên Blockchain",
+      breadcrumbs: [
+        { title: "Lệnh chuyển", href: "/dashboard/transfers" },
+        { title: "Chi tiết lệnh chuyển" },
+      ],
+    };
+  }
+  if (pathname.startsWith("/dashboard/verify/")) {
+    return {
+      title: "Xác minh",
+      sub: "Tính xác thực và lịch sử sản phẩm",
+      breadcrumbs: [{ title: "Xác minh" }],
+    };
+  }
+  return withDefaultBreadcrumb({ title: "Dashboard", sub: "VaxiTrust" });
 }
 
 const roleColor: Record<string, string> = {
@@ -152,8 +224,18 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
             <Link href="/dashboard" className="hover:text-blue-600 dark:hover:text-blue-300">
               VaxiTrust
             </Link>
-            <ChevronRight className="h-3 w-3" />
-            <span className="truncate text-zinc-600 dark:text-zinc-300">{t(meta.title)}</span>
+            {(meta.breadcrumbs ?? [{ title: meta.title }]).map((breadcrumb, index) => (
+              <Fragment key={`${breadcrumb.title}-${index}`}>
+                <ChevronRight className="h-3 w-3" />
+                {breadcrumb.href ? (
+                  <Link href={breadcrumb.href} className="truncate hover:text-blue-600 dark:hover:text-blue-300">
+                    {t(breadcrumb.title)}
+                  </Link>
+                ) : (
+                  <span className="truncate text-zinc-600 dark:text-zinc-300">{t(breadcrumb.title)}</span>
+                )}
+              </Fragment>
+            ))}
           </div>
           <h2 className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{t(meta.sub)}</h2>
         </div>

@@ -6,6 +6,7 @@ import { AlertTriangle, CheckCircle2, HelpCircle, ShieldCheck } from "lucide-rea
 import { api, endpoints } from "@/lib/api";
 import { getProductStatusLabel, getTransferStatusLabel } from "@/lib/status";
 import type { VerifyResult } from "@/lib/types";
+import { ContactFooter } from "@/components/layout/ContactFooter";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 interface PageProps {
@@ -409,6 +410,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
           {text.backHome}
         </a>
       </div>
+      <ContactFooter className="mx-auto mt-12 max-w-5xl" />
     </main>
   );
 }

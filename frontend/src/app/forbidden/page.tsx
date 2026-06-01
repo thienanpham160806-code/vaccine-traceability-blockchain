@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { ContactFooter } from "@/components/layout/ContactFooter";
 import { useTranslation } from "@/providers/LanguageProvider";
 
 export default function ForbiddenPage() {
   const t = useTranslation();
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-50 px-6">
+    <main className="flex min-h-screen flex-col items-center justify-center gap-8 bg-gray-50 px-6 py-10 dark:bg-zinc-950">
       <section className="w-full max-w-md rounded-xl border bg-white p-8 text-center shadow-sm">
         <p className="text-sm font-semibold uppercase tracking-widest text-red-600">403</p>
         <h1 className="mt-2 text-3xl font-bold text-gray-900">{t("Không có quyền truy cập")}</h1>
@@ -21,6 +22,7 @@ export default function ForbiddenPage() {
           {t("Quay về dashboard")}
         </Link>
       </section>
+      <ContactFooter className="w-full max-w-5xl" />
     </main>
   );
 }

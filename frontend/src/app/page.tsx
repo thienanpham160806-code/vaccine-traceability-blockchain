@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { ArrowRight, Camera, Keyboard, ShieldCheck } from "lucide-react";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
+import { ContactFooter } from "@/components/layout/ContactFooter";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 type ScanMode = "manual" | "camera";
@@ -206,6 +207,7 @@ export default function HomePage() {
 
         <p className="font-mono text-[10px] text-zinc-600">{text.footer}</p>
       </div>
+      <ContactFooter className="mt-12 w-full max-w-5xl" />
     </main>
   );
 }

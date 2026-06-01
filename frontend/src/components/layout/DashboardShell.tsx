@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { Boxes, Home, ListChecks, MoreHorizontal, Truck } from "lucide-react";
 import { getStoredUser } from "@/lib/auth";
 import { useTranslation } from "@/providers/LanguageProvider";
+import { ContactFooter } from "./ContactFooter";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
@@ -93,6 +94,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
         <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
           {children}
+          <ContactFooter className="mt-10" />
         </main>
       </div>
 

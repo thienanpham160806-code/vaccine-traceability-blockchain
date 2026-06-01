@@ -62,6 +62,16 @@ async function resolveProductBySerial(serialId: string): Promise<{ product: Prod
   };
 }
 
+async function readFirebaseValue(path: string, fallback: any = null) {
+  try {
+    const snapshot = await db.ref(path).once('value');
+    return snapshot.val() ?? fallback;
+  } catch (error) {
+    Logger.warn(`Could not read Firebase path ${path}`, error);
+    return fallback;
+  }
+}
+
 function getErrorMessage(error: any, fallback: string): string {
   return error?.shortMessage || error?.reason || error?.message || fallback;
 }
@@ -262,31 +272,23 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
     const normalizedSerialId = product.serialId || serialId;
     const batchKey = product.batchHash || product.batchId;
 
-    const [
-      batchSnapshot,
-      transfersSnapshot,
-      riskFlagsSnapshot,
-      recallsSnapshot,
-    ] = await Promise.all([
-      batchKey ? db.ref(`batches/${batchKey}`).once('value') : Promise.resolve(null),
-      db.ref('transfers').once('value'),
-      db.ref('risk-flags').once('value'),
-      db.ref('recalls').once('value'),
+    const [batch, allTransfers, allRiskFlags, allRecalls] = await Promise.all([
+      batchKey ? readFirebaseValue(`batches/${batchKey}`, null) : Promise.resolve(null),
+      readFirebaseValue('transfers', {}),
+      readFirebaseValue('risk-flags', {}),
+      readFirebaseValue('recalls', {}),
     ]);
 
-    const allTransfers = transfersSnapshot.val() || {};
     const timeline = Object.values(allTransfers).filter((transfer: any) => {
       return transfer.serialId === normalizedSerialId || transfer.serialId === serialHash || transfer.serialHash === serialHash;
     });
 
-    const allRiskFlags = riskFlagsSnapshot.val() || {};
     const riskFlags = Object.values(allRiskFlags).filter((flag: any) => {
       return flag.serialId === normalizedSerialId || flag.serialId === serialHash || flag.serialHash === serialHash;
     });
 
-    const allRecalls = recallsSnapshot.val() || {};
     const recall = Object.values(allRecalls).find((item: any) => {
-      return item.batchHash === product.batchHash || item.id === product.batchHash;
+      return item.batchHash === product.batchHash || item.batchId === product.batchId || item.id === product.batchHash || item.id === product.batchId;
     }) || null;
 
     let blockchain: {
@@ -328,7 +330,7 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
       success: true,
       data: {
         product,
-        batch: batchSnapshot?.val() || null,
+        batch,
         timeline,
         riskFlags,
         recall,
