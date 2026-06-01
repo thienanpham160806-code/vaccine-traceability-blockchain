@@ -117,7 +117,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
   });
 
   return (
-    <aside className={`${mobile ? "flex h-full w-72" : "hidden min-h-screen w-64 lg:flex"} flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950`}>
+    <aside className={`${mobile ? "flex h-full w-72" : "hidden h-screen w-64 shrink-0 lg:flex"} min-h-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950`}>
       <Link
         href="/dashboard"
         onClick={onNavigate}
@@ -147,7 +147,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
         </div>
       )}
 
-      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 pt-4">
+      <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pt-4">
         {visibleMenuItems.map((item) => {
           const Icon = item.icon;
           const active = isActive(item.href);

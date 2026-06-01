@@ -163,8 +163,8 @@ export const endpoints = {
   syncWalletProductRegistration: "/products/sync-wallet-register",
   bulkRegisterProducts: "/products/bulk",
   getProducts: "/products",
-  getProductDetail: (serialId: string) => `/products/${serialId}/detail`,
-  updateProduct: (serialId: string) => `/products/${serialId}`,
+  getProductDetail: (serialId: string) => `/products/${encodeURIComponent(serialId)}/detail`,
+  updateProduct: (serialId: string) => `/products/${encodeURIComponent(serialId)}`,
 
   getTransfers: "/transfers",
   getTransfer: (transferId: string) => `/transfers/${transferId}`,

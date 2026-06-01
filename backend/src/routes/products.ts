@@ -24,6 +24,44 @@ function toBytes32(value: string): string {
   return CryptoUtils.isValidHash(value) ? value : CryptoUtils.keccak256(value);
 }
 
+async function resolveProductBySerial(serialId: string): Promise<{ product: Product; serialHash: string } | null> {
+  const decodedSerialId = decodeURIComponent(serialId).trim();
+  const computedHash = toBytes32(decodedSerialId);
+
+  let snapshot = await db.ref(`products/${computedHash}`).once('value');
+  if (snapshot.exists()) {
+    const product = snapshot.val() as Product;
+    return { product, serialHash: (product as any).serialHash || computedHash };
+  }
+
+  snapshot = await db.ref(`products/${decodedSerialId}`).once('value');
+  if (snapshot.exists()) {
+    const product = snapshot.val() as Product;
+    return { product, serialHash: (product as any).serialHash || computedHash };
+  }
+
+  const indexSnapshot = await db.ref(`serial-index/${decodedSerialId}`).once('value');
+  const indexedHash = indexSnapshot.val();
+  if (indexedHash) {
+    snapshot = await db.ref(`products/${indexedHash}`).once('value');
+    if (snapshot.exists()) {
+      const product = snapshot.val() as Product;
+      return { product, serialHash: (product as any).serialHash || indexedHash };
+    }
+  }
+
+  const productsSnapshot = await db.ref('products').once('value');
+  const products = Object.values(productsSnapshot.val() || {}) as Product[];
+  const product = products.find((item: any) => item?.serialId === decodedSerialId || item?.serialHash === decodedSerialId);
+
+  if (!product) return null;
+
+  return {
+    product,
+    serialHash: (product as any).serialHash || toBytes32(product.serialId || decodedSerialId),
+  };
+}
+
 function getErrorMessage(error: any, fallback: string): string {
   return error?.shortMessage || error?.reason || error?.message || fallback;
 }
@@ -208,14 +246,9 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
 
     Logger.info(`Fetching product detail: ${serialId}`);
 
-    const serialHash = toBytes32(serialId);
-    let productSnapshot = await db.ref(`products/${serialHash}`).once('value');
+    const resolvedProduct = await resolveProductBySerial(serialId);
 
-    if (!productSnapshot.exists()) {
-      productSnapshot = await db.ref(`products/${serialId}`).once('value');
-    }
-
-    if (!productSnapshot.exists()) {
+    if (!resolvedProduct) {
       return res.status(404).json({
         success: false,
         error: {
@@ -225,7 +258,8 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
       });
     }
 
-    const product = productSnapshot.val() as Product;
+    const { product, serialHash } = resolvedProduct;
+    const normalizedSerialId = product.serialId || serialId;
     const batchKey = product.batchHash || product.batchId;
 
     const [
@@ -242,12 +276,12 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
 
     const allTransfers = transfersSnapshot.val() || {};
     const timeline = Object.values(allTransfers).filter((transfer: any) => {
-      return transfer.serialId === serialId || transfer.serialId === serialHash;
+      return transfer.serialId === normalizedSerialId || transfer.serialId === serialHash || transfer.serialHash === serialHash;
     });
 
     const allRiskFlags = riskFlagsSnapshot.val() || {};
     const riskFlags = Object.values(allRiskFlags).filter((flag: any) => {
-      return flag.serialId === serialId || flag.serialId === serialHash;
+      return flag.serialId === normalizedSerialId || flag.serialId === serialHash || flag.serialHash === serialHash;
     });
 
     const allRecalls = recallsSnapshot.val() || {};
