@@ -37,7 +37,31 @@ const pageTitles: Record<string, PageMeta> = {
   "/dashboard/transfers": { title: "Lệnh chuyển", sub: "Quản lý yêu cầu chuyển giao" },
   "/dashboard/transfers/create": { title: "Tạo lệnh chuyển", sub: "Tạo yêu cầu bàn giao" },
   "/dashboard/risk-dispute": { title: "Rủi ro & tranh chấp", sub: "Theo dõi cảnh báo và khiếu nại" },
+  "/dashboard/risk-flags": {
+    title: "Cảnh báo rủi ro",
+    sub: "Theo dõi tín hiệu bất thường",
+    breadcrumbs: [
+      { title: "Rủi ro & tranh chấp", href: "/dashboard/risk-dispute" },
+      { title: "Cảnh báo rủi ro" },
+    ],
+  },
+  "/dashboard/disputes": {
+    title: "Khiếu nại",
+    sub: "Xử lý tranh chấp sản phẩm",
+    breadcrumbs: [
+      { title: "Rủi ro & tranh chấp", href: "/dashboard/risk-dispute" },
+      { title: "Khiếu nại" },
+    ],
+  },
   "/dashboard/recall": { title: "Thu hồi", sub: "Quản lý thu hồi lô vaccine" },
+  "/dashboard/scan-transfer": {
+    title: "Quét chuyển giao",
+    sub: "Điều hướng đến luồng quét lệnh chuyển",
+    breadcrumbs: [
+      { title: "Lệnh chuyển", href: "/dashboard/transfers" },
+      { title: "Quét chuyển giao" },
+    ],
+  },
 };
 
 function withDefaultBreadcrumb(meta: PageMeta): PageMeta {
@@ -66,6 +90,16 @@ function getPageMeta(pathname: string): PageMeta {
       breadcrumbs: [
         { title: "Sản phẩm", href: "/dashboard/products" },
         { title: "Đăng ký hàng loạt" },
+      ],
+    };
+  }
+  if (pathname === "/dashboard/products/import-approvals") {
+    return {
+      title: "Duyệt chứng từ nhập khẩu",
+      sub: "Tải CSV, duyệt regulator root và đồng bộ smart contract",
+      breadcrumbs: [
+        { title: "Sản phẩm", href: "/dashboard/products" },
+        { title: "Duyệt chứng từ nhập khẩu" },
       ],
     };
   }
