@@ -73,31 +73,33 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-white dark:bg-zinc-950">
-      <Sidebar />
+    <div className="min-h-screen bg-white dark:bg-zinc-950">
+      <div className="flex min-h-screen">
+        <Sidebar />
 
-      {mobileMenuOpen && (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <button
-            aria-label={t("Đóng menu")}
-            className="absolute inset-0 bg-zinc-950/60"
-            onClick={() => setMobileMenuOpen(false)}
-          />
-          <div className="relative h-full">
-            <Sidebar mobile onNavigate={() => setMobileMenuOpen(false)} />
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 lg:hidden">
+            <button
+              aria-label={t("Đóng menu")}
+              className="absolute inset-0 bg-zinc-950/60"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            <div className="relative h-full">
+              <Sidebar mobile onNavigate={() => setMobileMenuOpen(false)} />
+            </div>
           </div>
+        )}
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Topbar onMenuClick={() => setMobileMenuOpen(true)} />
+
+          <main className="flex-1 p-4 sm:p-6">
+            {children}
+          </main>
         </div>
-      )}
-
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <Topbar onMenuClick={() => setMobileMenuOpen(true)} />
-
-        <main className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-          {children}
-          <ContactFooter className="mt-10 lg:-ml-[calc(16rem+1.5rem)] lg:w-[calc(100%+16rem+1.5rem)]" />
-        </main>
       </div>
 
+      <ContactFooter className="mx-4 mb-20 sm:mx-6 lg:mx-0 lg:mb-0 lg:rounded-none lg:border-x-0 lg:border-b-0" />
       <BottomNav />
     </div>
   );
