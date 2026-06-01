@@ -126,7 +126,7 @@ export default function TransfersPage() {
           <p className="text-sm text-zinc-500">{t("Theo dõi yêu cầu chuyển giao, xác nhận và từ chối bàn giao.")}</p>
         </div>
         <Link
-          href="/dashboard/scan-transfer"
+          href="/dashboard/transfers/create"
           className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700"
         >
           <Plus className="h-4 w-4" />

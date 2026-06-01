@@ -26,7 +26,20 @@ async function main() {
 
   console.log("SupplyChainAccessControl:", accessControlAddress);
 
-  console.log("\n2. Deploying ProductRegistry...");
+  console.log("\n2. Deploying DemoImportZKPVerifier...");
+
+  const ImportVerifierFactory = await ethers.getContractFactory(
+    "DemoImportZKPVerifier"
+  );
+
+  const importVerifier = await ImportVerifierFactory.deploy();
+  await importVerifier.waitForDeployment();
+
+  const importVerifierAddress = await importVerifier.getAddress();
+
+  console.log("DemoImportZKPVerifier:", importVerifierAddress);
+
+  console.log("\n3. Deploying ProductRegistry...");
 
   const ProductRegistryFactory = await ethers.getContractFactory(
     "ProductRegistry"
@@ -42,7 +55,7 @@ async function main() {
 
   console.log("ProductRegistry:", productRegistryAddress);
 
-  console.log("\n3. Deploying TransferLedger...");
+  console.log("\n4. Deploying TransferLedger...");
 
   const TransferLedgerFactory = await ethers.getContractFactory(
     "TransferLedger"
@@ -59,7 +72,7 @@ async function main() {
 
   console.log("TransferLedger:", transferLedgerAddress);
 
-  console.log("\n4. Linking TransferLedger to ProductRegistry...");
+  console.log("\n5. Linking TransferLedger and ImportVerifier to ProductRegistry...");
 
   const setLedgerTx = await productRegistry.setTransferLedger(
     transferLedgerAddress
@@ -69,7 +82,15 @@ async function main() {
 
   console.log("ProductRegistry linked with TransferLedger");
 
-  console.log("\n5. Configuring MVP routes...");
+  const setImportVerifierTx = await productRegistry.setImportVerifier(
+    importVerifierAddress
+  );
+
+  await setImportVerifierTx.wait();
+
+  console.log("ProductRegistry linked with DemoImportZKPVerifier");
+
+  console.log("\n6. Configuring MVP routes...");
 
   const configureRoutesTx = await accessControl.configureMvpRoutes();
   await configureRoutesTx.wait();
@@ -79,7 +100,7 @@ async function main() {
   let localDemoRolesConfigured = false;
 
   if (network.name === "localhost" || network.name === "hardhat") {
-    console.log("\n6. Granting local demo roles...");
+    console.log("\n7. Granting local demo roles...");
 
     const signers = await ethers.getSigners();
     const roleAssignments = [
@@ -133,11 +154,13 @@ async function main() {
     deployedAt: new Date().toISOString(),
     contracts: {
       supplyChainAccessControl: accessControlAddress,
+      importVerifier: importVerifierAddress,
       productRegistry: productRegistryAddress,
       transferLedger: transferLedgerAddress,
     },
     setup: {
       transferLedgerLinked: true,
+      importVerifierLinked: true,
       mvpRoutesConfigured: true,
       localDemoRolesConfigured,
     },
@@ -158,6 +181,7 @@ async function main() {
 
   console.log("\nSummary:");
   console.log("SupplyChainAccessControl:", accessControlAddress);
+  console.log("ImportVerifier:", importVerifierAddress);
   console.log("ProductRegistry:", productRegistryAddress);
   console.log("TransferLedger:", transferLedgerAddress);
 }

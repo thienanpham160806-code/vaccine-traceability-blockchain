@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "./interfaces/IImportZKPVerifier.sol";
+
 interface ISupplyChainAccessControl {
     function hasRole(bytes32 role, address account) external view returns (bool);
 }
@@ -20,6 +22,8 @@ contract ProductRegistry {
         bytes32 batchHash;
         bytes32 metadataHash;
         bytes32 importDocHash;
+        uint256 importDocCommitment;
+        uint256 approvedImportRoot;
         address origin;
         address currentOwner;
         Status status;
@@ -44,6 +48,8 @@ contract ProductRegistry {
     uint8 public constant RISK_CRITICAL = 4;
 
     ISupplyChainAccessControl public accessControl;
+    IImportZKPVerifier public importVerifier;
+    uint256 public approvedImportRoot;
     address public transferLedger;
 
     mapping(bytes32 => Product) private products;
@@ -72,6 +78,8 @@ contract ProductRegistry {
     );
 
     event TransferLedgerUpdated(address indexed oldLedger, address indexed newLedger);
+    event ImportVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
+    event ApprovedImportRootUpdated(uint256 indexed oldRoot, uint256 indexed newRoot);
 
     event ProductMarkedInTransit(
         bytes32 indexed serialID,
@@ -133,6 +141,24 @@ contract ProductRegistry {
         emit TransferLedgerUpdated(oldLedger, newTransferLedger);
     }
 
+    function setImportVerifier(address newImportVerifier) external onlyAdmin {
+        require(newImportVerifier != address(0), "Invalid import verifier");
+
+        address oldVerifier = address(importVerifier);
+        importVerifier = IImportZKPVerifier(newImportVerifier);
+
+        emit ImportVerifierUpdated(oldVerifier, newImportVerifier);
+    }
+
+    function setApprovedImportRoot(uint256 newApprovedImportRoot) external onlyAdmin {
+        require(newApprovedImportRoot != 0, "Invalid import root");
+
+        uint256 oldRoot = approvedImportRoot;
+        approvedImportRoot = newApprovedImportRoot;
+
+        emit ApprovedImportRootUpdated(oldRoot, newApprovedImportRoot);
+    }
+
     function registerProduct(
         bytes32 serialID,
         bytes32 batchHash,
@@ -160,6 +186,8 @@ contract ProductRegistry {
             batchHash: batchHash,
             metadataHash: metadataHash,
             importDocHash: importDocHash,
+            importDocCommitment: 0,
+            approvedImportRoot: 0,
             origin: msg.sender,
             currentOwner: msg.sender,
             status: Status.VERIFIED,
@@ -180,6 +208,67 @@ contract ProductRegistry {
             msg.sender,
             isImporter,
             proofVerified,
+            Status.VERIFIED
+        );
+    }
+
+    function registerImportedProductZK(
+        bytes32 serialID,
+        bytes32 batchHash,
+        bytes32 metadataHash,
+        uint[2] calldata a,
+        uint[2][2] calldata b,
+        uint[2] calldata c,
+        uint[5] calldata input
+    ) external onlyManufacturerOrImporter {
+        require(serialID != bytes32(0), "Invalid serial");
+        require(batchHash != bytes32(0), "Invalid batch");
+        require(metadataHash != bytes32(0), "Invalid metadata");
+        require(!products[serialID].exists, "Duplicate serial");
+        require(!recalledBatches[batchHash], "Batch recalled");
+        require(address(importVerifier) != address(0), "Missing import verifier");
+        require(approvedImportRoot != 0, "Missing import root");
+        require(accessControl.hasRole(IMPORTER_ROLE, msg.sender), "Not importer");
+
+        uint256 importDocCommitment = input[0];
+        uint256 batchHashField = input[1];
+        uint256 vaccineExpiryDate = input[2];
+        uint256 currentDate = input[3];
+        uint256 proofApprovedRoot = input[4];
+
+        require(importDocCommitment != 0, "Invalid import doc commitment");
+        require(batchHashField == uint256(batchHash), "Batch mismatch");
+        require(vaccineExpiryDate >= currentDate, "Vaccine expired");
+        require(proofApprovedRoot == approvedImportRoot, "Import root mismatch");
+        require(importVerifier.verifyProof(a, b, c, input), "Invalid import ZKP");
+
+        products[serialID] = Product({
+            serialID: serialID,
+            batchHash: batchHash,
+            metadataHash: metadataHash,
+            importDocHash: bytes32(importDocCommitment),
+            importDocCommitment: importDocCommitment,
+            approvedImportRoot: proofApprovedRoot,
+            origin: msg.sender,
+            currentOwner: msg.sender,
+            status: Status.VERIFIED,
+            previousStatus: Status.REGISTERED,
+            isImported: true,
+            zkpVerified: true,
+            riskLevel: RISK_NONE,
+            flagReason: bytes32(0),
+            registeredAt: block.timestamp,
+            exists: true
+        });
+
+        batchToSerials[batchHash].push(serialID);
+
+        emit ProductRegistered(
+            serialID,
+            batchHash,
+            msg.sender,
+            true,
+            true,
             Status.VERIFIED
         );
     }

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { QRCodeSVG } from "qrcode.react";
 import Link from "next/link";
 import { useTranslation } from "@/providers/LanguageProvider";
@@ -54,7 +54,7 @@ export function QrResultCard({
           <Link className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white" href={`/dashboard/verify/${serialId}`}>
             {t("Xác minh")}
           </Link>
-          <Link className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white" href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(serialId)}`}>
+          <Link className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white" href={`/dashboard/transfers/create?serialId=${encodeURIComponent(serialId)}`}>
             {t("Chuyển giao")}
           </Link>
         </div>
@@ -62,3 +62,4 @@ export function QrResultCard({
     </div>
   );
 }
+

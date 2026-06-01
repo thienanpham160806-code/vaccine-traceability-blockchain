@@ -23,6 +23,8 @@ export const config = {
   productRegistryAddress: process.env.PRODUCT_REGISTRY_ADDRESS || '',
   transferLedgerAddress: process.env.TRANSFER_LEDGER_ADDRESS || '',
   accessControlAddress: process.env.ACCESS_CONTROL_ADDRESS || '',
+  importZkpWasmPath: process.env.IMPORT_ZKP_WASM_PATH || '../smart-contract/zkp-artifacts/import-registration/import_registration_js/import_registration.wasm',
+  importZkpZkeyPath: process.env.IMPORT_ZKP_ZKEY_PATH || '../smart-contract/zkp-artifacts/import-registration/import_registration_final.zkey',
 
   // IPFS / Pinata
   pinataJwt: process.env.PINATA_JWT || '',

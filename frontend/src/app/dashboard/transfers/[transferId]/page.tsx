@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
@@ -263,10 +263,11 @@ export default function TransferDetailPage({ params }: PageProps) {
         <Link href="/dashboard/transfers" className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
           <ArrowLeft className="h-3.5 w-3.5" /> Tất cả lệnh
         </Link>
-        <Link href="/dashboard/scan-transfer" className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
+        <Link href="/dashboard/transfers/create" className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
           <ArrowRight className="h-3.5 w-3.5" /> Tạo lệnh chuyển
         </Link>
       </div>
     </div>
   );
 }
+

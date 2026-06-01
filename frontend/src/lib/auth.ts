@@ -26,6 +26,11 @@ export const demoActors = [
     label: "Pharmacy",
     address: "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
   },
+  {
+    role: "RECALL_AUTHORITY",
+    label: "Recall authority",
+    address: "0xb682C00dC4B9cA0855645d65A51064FBF7029101",
+  },
 ];
 
 export type DemoUser = {

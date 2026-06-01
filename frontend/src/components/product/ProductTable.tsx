@@ -11,28 +11,18 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { getProductStatusLabel } from "@/lib/status";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
-const statusOptions = [
-  "ALL",
-  "VERIFIED",
-  "PENDING_DELIVERY",
-  "DELIVERED",
-  "FLAGGED",
-  "RECALLED",
-];
-
-const sortOptions = [
-  { value: "createdAt:desc", label: "Mới nhất" },
-  { value: "createdAt:asc", label: "Cũ nhất" },
-  { value: "expiryDate:asc", label: "Gần hết hạn" },
-  { value: "productName:asc", label: "Tên A-Z" },
-  { value: "status:asc", label: "Trạng thái" },
-];
+const statusOptions = ["ALL", "REGISTERED", "VERIFIED", "IN_TRANSIT", "PENDING_DELIVERY", "DELIVERED", "FLAGGED", "RECALLED"];
+const originOptions = ["ALL", "MANUFACTURED", "IMPORTED"];
+const sortableColumns = ["batchId", "productName", "manufacturerName", "status", "expiryDate", "createdAt"];
 
 export function ProductTable() {
   const t = useTranslation();
   const { language } = useLanguage();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [manufacturerFilter, setManufacturerFilter] = useState("");
+  const [batchFilter, setBatchFilter] = useState("");
+  const [originFilter, setOriginFilter] = useState("ALL");
   const [sort, setSort] = useState("createdAt:desc");
   const [page, setPage] = useState(1);
   const [products, setProducts] = useState<Product[]>([]);
@@ -46,10 +36,12 @@ export function ProductTable() {
     const timeoutId = window.setTimeout(() => {
       setIsLoading(true);
       setError(null);
-
       getProducts({
         search: search.trim() || undefined,
         status: statusFilter === "ALL" ? undefined : statusFilter,
+        manufacturer: manufacturerFilter.trim() || undefined,
+        batch: batchFilter.trim() || undefined,
+        origin: originFilter === "ALL" ? undefined : (originFilter as "MANUFACTURED" | "IMPORTED"),
         sort,
         page,
         pageSize,
@@ -69,39 +61,52 @@ export function ProductTable() {
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [page, pageSize, reloadKey, search, sort, statusFilter, t]);
+  }, [batchFilter, manufacturerFilter, originFilter, page, pageSize, reloadKey, search, sort, statusFilter, t]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  const updateSearch = (value: string) => {
-    setSearch(value);
+  const resetPage = (fn: () => void) => {
+    fn();
     setPage(1);
   };
 
-  const updateStatus = (value: string) => {
-    setStatusFilter(value);
+  const toggleColumnSort = (field: string) => {
+    if (!sortableColumns.includes(field)) return;
+    const [currentField, currentDirection] = sort.split(":");
+    setSort(`${field}:${currentField === field && currentDirection === "asc" ? "desc" : "asc"}`);
     setPage(1);
   };
 
-  const updateSort = (value: string) => {
-    setSort(value);
-    setPage(1);
+  const sortMark = (field: string) => {
+    const [currentField, currentDirection] = sort.split(":");
+    return currentField === field ? (currentDirection === "asc" ? " ↑" : " ↓") : "";
   };
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70 dark:shadow-none md:grid-cols-[1fr_180px_180px]">
+      <div className="grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70 dark:shadow-none md:grid-cols-2 xl:grid-cols-[1.2fr_170px_170px_170px_170px]">
         <input
-          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
           value={search}
-          onChange={(event) => updateSearch(event.target.value)}
-          placeholder={t("Tìm serial, lô hàng, sản phẩm, nhà sản xuất")}
+          onChange={(event) => resetPage(() => setSearch(event.target.value))}
+          placeholder={t("Tìm serial, lô, sản phẩm")}
         />
-
+        <input
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+          value={batchFilter}
+          onChange={(event) => resetPage(() => setBatchFilter(event.target.value))}
+          placeholder={t("Lọc theo lô")}
+        />
+        <input
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+          value={manufacturerFilter}
+          onChange={(event) => resetPage(() => setManufacturerFilter(event.target.value))}
+          placeholder={t("Lọc nhà sản xuất")}
+        />
         <select
-          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
           value={statusFilter}
-          onChange={(event) => updateStatus(event.target.value)}
+          onChange={(event) => resetPage(() => setStatusFilter(event.target.value))}
         >
           {statusOptions.map((status) => (
             <option key={status} value={status}>
@@ -109,15 +114,14 @@ export function ProductTable() {
             </option>
           ))}
         </select>
-
         <select
-          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
-          value={sort}
-          onChange={(event) => updateSort(event.target.value)}
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+          value={originFilter}
+          onChange={(event) => resetPage(() => setOriginFilter(event.target.value))}
         >
-          {sortOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {t(option.label)}
+          {originOptions.map((origin) => (
+            <option key={origin} value={origin}>
+              {origin === "ALL" ? t("Tất cả nguồn gốc") : origin === "IMPORTED" ? t("Nhập khẩu") : t("Sản xuất trong nước")}
             </option>
           ))}
         </select>
@@ -130,17 +134,16 @@ export function ProductTable() {
             <ErrorState message={error} onAction={() => setReloadKey((current) => current + 1)} />
           </div>
         ) : null}
-
         {!isLoading && !error ? (
           <div className="max-h-[520px] overflow-auto lg:max-h-[calc(100dvh-25rem)]">
             <table className="w-full min-w-[920px] text-left text-sm">
               <thead className="sticky top-0 z-10 border-b border-zinc-200 bg-zinc-50 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
                 <tr>
                   <th className="px-5 py-4">Serial ID</th>
-                  <th className="px-5 py-4">{t("Mã lô")}</th>
-                  <th className="px-5 py-4">{t("Sản phẩm")}</th>
-                  <th className="px-5 py-4">{t("Nhà sản xuất")}</th>
-                  <th className="px-5 py-4">{t("Trạng thái")}</th>
+                  <th className="px-5 py-4"><button type="button" onClick={() => toggleColumnSort("batchId")}>{t("Mã lô")}{sortMark("batchId")}</button></th>
+                  <th className="px-5 py-4"><button type="button" onClick={() => toggleColumnSort("productName")}>{t("Sản phẩm")}{sortMark("productName")}</button></th>
+                  <th className="px-5 py-4"><button type="button" onClick={() => toggleColumnSort("manufacturerName")}>{t("Nhà sản xuất")}{sortMark("manufacturerName")}</button></th>
+                  <th className="px-5 py-4"><button type="button" onClick={() => toggleColumnSort("status")}>{t("Trạng thái")}{sortMark("status")}</button></th>
                   <th className="px-5 py-4">{t("Thao tác")}</th>
                 </tr>
               </thead>
@@ -151,19 +154,11 @@ export function ProductTable() {
                     <td className="px-5 py-4 text-zinc-500 dark:text-zinc-300">{product.batchId}</td>
                     <td className="px-5 py-4 font-medium text-zinc-900 dark:text-zinc-100">{product.productName}</td>
                     <td className="px-5 py-4 text-zinc-500 dark:text-zinc-300">{product.manufacturerName}</td>
-                    <td className="px-5 py-4">
-                      <ProductStatusBadge status={product.status} />
-                    </td>
+                    <td className="px-5 py-4"><ProductStatusBadge status={product.status} /></td>
                     <td className="flex flex-wrap gap-3 px-5 py-4">
-                      <Link href={`/dashboard/products/${encodeURIComponent(product.serialId)}`} className="font-medium text-blue-600 hover:underline">
-                        {t("Chi tiết")}
-                      </Link>
-                      <Link href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(product.serialId)}`} className="font-medium text-emerald-600 hover:underline">
-                        {t("Chuyển giao")}
-                      </Link>
-                      <Link href={`/consumer/verify/${encodeURIComponent(product.serialId)}`} className="font-medium text-zinc-600 hover:underline dark:text-zinc-300">
-                        {t("Công khai")}
-                      </Link>
+                      <Link href={`/dashboard/products/${encodeURIComponent(product.serialId)}`} className="font-medium text-blue-600 hover:underline">{t("Chi tiết")}</Link>
+                      <Link href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`} className="font-medium text-emerald-600 hover:underline">{t("Chuyển giao")}</Link>
+                      <Link href={`/consumer/verify/${encodeURIComponent(product.serialId)}`} className="font-medium text-zinc-600 hover:underline dark:text-zinc-300">{t("Công khai")}</Link>
                     </td>
                   </tr>
                 ))}
@@ -171,35 +166,15 @@ export function ProductTable() {
             </table>
           </div>
         ) : null}
-
-        {!isLoading && !error && products.length === 0 ? (
-          <p className="p-4 text-sm text-gray-500 dark:text-zinc-400">{t("Không tìm thấy sản phẩm.")}</p>
-        ) : null}
+        {!isLoading && !error && products.length === 0 ? <p className="p-4 text-sm text-gray-500 dark:text-zinc-400">{t("Không tìm thấy sản phẩm.")}</p> : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-        <p className="text-gray-500 dark:text-zinc-400">
-          {t("Đang hiển thị")} {products.length} / {total} {t("Sản phẩm").toLowerCase()}
-        </p>
-
+        <p className="text-gray-500 dark:text-zinc-400">{t("Đang hiển thị")} {products.length} / {total} {t("sản phẩm")}</p>
         <div className="flex items-center gap-2">
-          <button
-            className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
-            disabled={page <= 1 || isLoading}
-            onClick={() => setPage((current) => Math.max(1, current - 1))}
-          >
-            {t("Trước")}
-          </button>
-          <span className="min-w-24 text-center text-gray-600 dark:text-zinc-400">
-            {t("Trang")} {page} / {totalPages}
-          </span>
-          <button
-            className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
-            disabled={page >= totalPages || isLoading}
-            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
-          >
-            {t("Sau")}
-          </button>
+          <button className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200" disabled={page <= 1 || isLoading} onClick={() => setPage((current) => Math.max(1, current - 1))}>{t("Trước")}</button>
+          <span className="min-w-24 text-center text-gray-600 dark:text-zinc-400">{t("Trang")} {page} / {totalPages}</span>
+          <button className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200" disabled={page >= totalPages || isLoading} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>{t("Sau")}</button>
         </div>
       </div>
     </div>

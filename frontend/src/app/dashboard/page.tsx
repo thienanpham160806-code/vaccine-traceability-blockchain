@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -42,8 +42,8 @@ function roleActions(role?: string) {
 
   if (role === "MANUFACTURER" || role === "IMPORTER" || role === "ADMIN") {
     return [
-      { label: "Đăng ký lô", href: "/dashboard/batches", icon: PackagePlus, tone: "primary" },
-      { label: "Tạo lệnh chuyển", href: "/dashboard/scan-transfer", icon: Truck, tone: "white" },
+      { label: "Đăng ký lô", href: "/dashboard/products/batches", icon: PackagePlus, tone: "primary" },
+      { label: "Tạo lệnh chuyển", href: "/dashboard/transfers/create", icon: Truck, tone: "white" },
       ...base.slice(0, 1),
     ];
   }
@@ -51,7 +51,7 @@ function roleActions(role?: string) {
   if (role === "DISTRIBUTOR") {
     return [
       { label: "Lệnh chờ xác nhận", href: "/dashboard/transfers?status=PENDING", icon: Clock, tone: "primary" },
-      { label: "Tạo lệnh chuyển", href: "/dashboard/scan-transfer", icon: Truck, tone: "white" },
+      { label: "Tạo lệnh chuyển", href: "/dashboard/transfers/create", icon: Truck, tone: "white" },
       ...base.slice(0, 1),
     ];
   }
@@ -262,3 +262,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

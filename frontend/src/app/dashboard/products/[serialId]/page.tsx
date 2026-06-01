@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
@@ -7,9 +7,11 @@ import { toast } from "sonner";
 import { getProductDetail, updateProduct } from "@/lib/api";
 import type { ProductDetailResponse } from "@/lib/types";
 import { ProductStatusBadge, RiskLevelBadge } from "@/components/product/ProductStatusBadge";
+import { TransferTimeline } from "@/components/trace/TransferTimeline";
 import { DetailSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { getZodFieldErrors, productMetadataSchema } from "@/lib/validation";
+import { useLanguage } from "@/providers/LanguageProvider";
 
 interface PageProps {
   params: Promise<{
@@ -48,6 +50,7 @@ function getIpfsUrl(cid?: string) {
 
 export default function ProductDetailPage({ params }: PageProps) {
   const { serialId } = use(params);
+  const { language } = useLanguage();
   const decodedSerialId = decodeURIComponent(serialId);
   const [detail, setDetail] = useState<ProductDetailResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -196,7 +199,7 @@ export default function ProductDetailPage({ params }: PageProps) {
 
         <div className="flex flex-wrap gap-2">
           <Link
-            href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(product.serialId)}`}
+            href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`}
             className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
           >
             Chuyển giao
@@ -472,22 +475,13 @@ export default function ProductDetailPage({ params }: PageProps) {
 
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold">Lịch sử chuyển giao</h2>
-        <div className="mt-4 space-y-3">
-          {timeline.map((item: any, index) => (
-            <div key={item.id || item.blockchainTx || index} className="rounded-lg border border-zinc-200 p-4 text-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="font-semibold">{item.status || "CHUYỂN GIAO"}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(item.confirmedAt || item.createdAt)}</p>
-              </div>
-              <p className="mt-2 break-all text-muted-foreground">
-                {shortHash(item.fromAddress || item.sender)} to {shortHash(item.toAddress || item.receiver)}
-              </p>
-              {item.blockchainTx ? (
-                <p className="mt-1 break-all font-mono text-xs text-muted-foreground">{item.blockchainTx}</p>
-              ) : null}
-            </div>
-          ))}
-          {timeline.length === 0 ? <p className="text-sm text-muted-foreground">Chưa có lịch sử chuyển giao.</p> : null}
+        <div className="mt-4">
+          <TransferTimeline
+            events={timeline}
+            currentOwner={product.currentOwner}
+            language={language}
+            emptyText={language === "en" ? "No transfer history yet." : "Chưa có lịch sử chuyển giao."}
+          />
         </div>
       </section>
 
@@ -506,3 +500,4 @@ export default function ProductDetailPage({ params }: PageProps) {
     </div>
   );
 }
+

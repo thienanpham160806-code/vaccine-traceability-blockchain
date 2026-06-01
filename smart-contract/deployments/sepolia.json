@@ -1,19 +1,17 @@
 {
   "network": "sepolia",
   "deployer": "0xcd8E5cb88a3338970DfbfA914A98bC4a8dC0eeB6",
-  "deployedAt": "2026-05-23T12:50:00.715Z",
+  "deployedAt": "2026-06-01T10:07:13.447Z",
   "contracts": {
-    "supplyChainAccessControl": "0x5cC66170F57DE15963eC24c1bf5A998645923947",
-    "productRegistry": "0x1FBe3e5e622789738B083927698648835298f542",
-    "transferLedger": "0x61f996C3707dF292e0fC026d64Bb4E8BBC243F3E"
+    "supplyChainAccessControl": "0xfC3e6c7Ae9Fc30A4FF171Bd874Fc5DF3A1B8475e",
+    "importVerifier": "0xF3198dCd4def6e2ECBB0511D0cE78f048793eEb8",
+    "productRegistry": "0x98300bC1A46cBA45F28A6075A18934B0d160ef32",
+    "transferLedger": "0x6473f5830641b052e26383e6c1210c0989D87202"
   },
   "setup": {
     "transferLedgerLinked": true,
-    "mvpRoutesConfigured": true
-  },
-  "verification": {
-    "supplyChainAccessControl": true,
-    "productRegistry": true,
-    "transferLedger": true
+    "importVerifierLinked": true,
+    "mvpRoutesConfigured": true,
+    "localDemoRolesConfigured": false
   }
 }

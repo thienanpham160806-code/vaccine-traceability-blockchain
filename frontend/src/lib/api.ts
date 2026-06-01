@@ -56,6 +56,10 @@ export type RegisterProductResponse = {
   metadataHash: string;
   serialHash: string;
   ipfsCid?: string;
+  importDocumentIpfsCid?: string;
+  importDocCommitment?: string;
+  approvedImportRoot?: string;
+  importProofMode?: string;
   qrContent?: string;
   qrImage?: string;
   txHash?: string;
@@ -286,6 +290,8 @@ export async function getProducts(params?: {
   search?: string;
   status?: string;
   manufacturer?: string;
+  batch?: string;
+  origin?: "MANUFACTURED" | "IMPORTED";
   sort?: string;
   page?: number;
   pageSize?: number;
@@ -338,6 +344,15 @@ export async function registerProduct(payload: {
   expiryDate: string;
   origin?: "MANUFACTURED" | "IMPORTED";
   quantity?: number;
+  importDocument?: {
+    docId: string;
+    importerLicense: string;
+    manufacturerId: string;
+    batchNo: string;
+    documentExpiryDate: string;
+    salt: string;
+    regulatorCertificateId: string;
+  };
 }) {
   const res = await api.post<ApiResponse<RegisterProductResponse>>(endpoints.registerProduct, payload);
   return requireApiData(res.data.data, "Register product response did not include data.");
@@ -372,9 +387,55 @@ export async function bulkRegisterProducts(products: Array<{
   quantity?: number;
   importDocHash?: string;
   zkpProof?: string;
+  importDocument?: {
+    docId: string;
+    importerLicense: string;
+    manufacturerId: string;
+    batchNo: string;
+    documentExpiryDate: string;
+    salt: string;
+    regulatorCertificateId: string;
+  };
 }>) {
   const res = await api.post<ApiResponse<BulkRegisterResponse>>(endpoints.bulkRegisterProducts, { products });
   return requireApiData(res.data.data, "Bulk register response did not include data.");
+}
+
+export async function approveImportDocuments(payload: {
+  approvedBy?: string;
+  documents: Array<{
+    docId: string;
+    importerLicense: string;
+    manufacturerId: string;
+    batchNo: string;
+    documentExpiryDate: string;
+    salt: string;
+    regulatorCertificateId: string;
+  }>;
+}) {
+  const res = await api.post<ApiResponse<{
+    approvedImportRoot: string;
+    totalDocuments: number;
+    commitments: string[];
+    ipfsCid?: string;
+    txHash?: string | null;
+  }>>("/import-zkp/approvals", payload);
+  return requireApiData(res.data.data, "Import approval response did not include data.");
+}
+
+export async function getImportApprovals() {
+  const res = await api.get<ApiResponse<{
+    approvedImportRoot: string;
+    onChainRoot?: string | null;
+    totalDocuments: number;
+    documents: Array<{
+      commitment: string;
+      regulatorCertificateId: string;
+      approvedBy?: string;
+      approvedAt?: number;
+    }>;
+  }>>("/import-zkp/approvals");
+  return requireApiData(res.data.data, "Import approvals response did not include data.");
 }
 
 // ============= Transfers =============

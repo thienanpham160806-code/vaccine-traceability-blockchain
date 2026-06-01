@@ -4,9 +4,10 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCircle2, HelpCircle, ShieldCheck } from "lucide-react";
 import { api, endpoints } from "@/lib/api";
-import { getProductStatusLabel, getTransferStatusLabel } from "@/lib/status";
+import { getProductStatusLabel } from "@/lib/status";
 import type { VerifyResult } from "@/lib/types";
 import { ContactFooter } from "@/components/layout/ContactFooter";
+import { TransferTimeline } from "@/components/trace/TransferTimeline";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 interface PageProps {
@@ -84,12 +85,6 @@ const copy = {
   },
 } as const;
 
-function formatDate(value: unknown, language: "en" | "vi") {
-  if (!value) return "";
-  if (typeof value === "number") return new Date(value).toLocaleString(language === "en" ? "en-US" : "vi-VN");
-  return String(value);
-}
-
 function LanguageSwitch() {
   const { language, setLanguage } = useLanguage();
 
@@ -111,36 +106,6 @@ function LanguageSwitch() {
   );
 }
 
-function TimelineItem({
-  label,
-  value,
-  sub,
-  txHash,
-  first,
-  last,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  txHash?: string;
-  first?: boolean;
-  last?: boolean;
-}) {
-  return (
-    <div className="flex gap-4">
-      <div className="flex flex-col items-center">
-        <div className={`h-3 w-3 rounded-full border-2 border-emerald-400 bg-zinc-950 ${first ? "mt-0" : ""}`} />
-        {!last ? <div className="mt-1 w-0.5 flex-1 bg-zinc-800" /> : null}
-      </div>
-      <div className="min-w-0 pb-5">
-        <p className="text-xs uppercase tracking-wide text-zinc-500">{label}</p>
-        <p className="text-sm font-semibold text-white">{value}</p>
-        {sub ? <p className="mt-0.5 text-xs text-zinc-500">{sub}</p> : null}
-        {txHash ? <p className="mt-0.5 max-w-[220px] truncate font-mono text-xs text-zinc-600">{txHash}</p> : null}
-      </div>
-    </div>
-  );
-}
 
 function StatusBadge({
   status,
@@ -389,21 +354,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
             <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-300">{text.timeline}</h2>
           </div>
 
-          {timeline && timeline.length > 0 ? (
-            timeline.map((event: any, idx: number) => (
-              <TimelineItem
-                key={event.id || idx}
-                label={getTransferStatusLabel(event.status, language)}
-                value={`${event.fromRole ?? event.from ?? text.unknown} -> ${event.toRole ?? event.to ?? text.unknown}`}
-                sub={formatDate(event.createdAt || event.timestamp, language)}
-                txHash={event.blockchainTx ?? event.txHash}
-                first={idx === 0}
-                last={idx === timeline.length - 1}
-              />
-            ))
-          ) : (
-            <p className="text-sm text-zinc-500">{text.noTimeline}</p>
-          )}
+          <TransferTimeline events={timeline || []} currentOwner={product?.currentOwner} language={language} emptyText={text.noTimeline} />
         </div>
 
         <a href="/" className="block text-center text-sm text-zinc-500 transition hover:text-zinc-300">

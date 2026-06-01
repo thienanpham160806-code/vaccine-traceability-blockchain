@@ -1,11 +1,10 @@
 import type { AppLanguage } from "@/lib/i18n";
-import { translate } from "@/lib/i18n";
 
-export const productStatusLabel: Record<string, string> = {
+const productStatusVi: Record<string, string> = {
   REGISTERED: "Đã đăng ký",
-  VERIFIED: "Đã xác thực",
+  VERIFIED: "Đã xác minh",
   IN_TRANSIT: "Đang vận chuyển",
-  PENDING_DELIVERY: "Đang vận chuyển",
+  PENDING_DELIVERY: "Chờ giao",
   DELIVERED: "Đã giao",
   FLAGGED: "Bị cảnh báo",
   RECALLED: "Đã thu hồi",
@@ -13,7 +12,19 @@ export const productStatusLabel: Record<string, string> = {
   UNKNOWN: "Không rõ",
 };
 
-export const transferStatusLabel: Record<string, string> = {
+const productStatusEn: Record<string, string> = {
+  REGISTERED: "Registered",
+  VERIFIED: "Verified",
+  IN_TRANSIT: "In transit",
+  PENDING_DELIVERY: "Pending delivery",
+  DELIVERED: "Delivered",
+  FLAGGED: "Flagged",
+  RECALLED: "Recalled",
+  INVALID: "Invalid",
+  UNKNOWN: "Unknown",
+};
+
+const transferStatusVi: Record<string, string> = {
   PENDING: "Chờ xác nhận",
   CONFIRMED: "Đã xác nhận",
   REJECTED: "Đã từ chối",
@@ -21,14 +32,22 @@ export const transferStatusLabel: Record<string, string> = {
   UNKNOWN: "Không rõ",
 };
 
+const transferStatusEn: Record<string, string> = {
+  PENDING: "Pending",
+  CONFIRMED: "Confirmed",
+  REJECTED: "Rejected",
+  RETURNED: "Returned",
+  UNKNOWN: "Unknown",
+};
+
 export const statusChipClass: Record<string, string> = {
-  REGISTERED: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700",
+  REGISTERED: "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-950/60 dark:text-slate-200 dark:border-slate-800",
   VERIFIED: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800",
   IN_TRANSIT: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-800",
-  PENDING_DELIVERY: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-800",
-  DELIVERED: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-200 dark:border-sky-800",
-  FLAGGED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
-  RECALLED: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700",
+  PENDING_DELIVERY: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800",
+  DELIVERED: "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/60 dark:text-cyan-200 dark:border-cyan-800",
+  FLAGGED: "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/60 dark:text-orange-200 dark:border-orange-800",
+  RECALLED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
   INVALID: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
   PENDING: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800",
   CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800",
@@ -37,13 +56,13 @@ export const statusChipClass: Record<string, string> = {
 };
 
 export function getProductStatusLabel(status?: string, language: AppLanguage = "vi") {
-  const label = productStatusLabel[status || "UNKNOWN"] || status || productStatusLabel.UNKNOWN;
-  return translate(label, language);
+  const labels = language === "en" ? productStatusEn : productStatusVi;
+  return labels[status || "UNKNOWN"] || status || labels.UNKNOWN;
 }
 
 export function getTransferStatusLabel(status?: string, language: AppLanguage = "vi") {
-  const label = transferStatusLabel[status || "UNKNOWN"] || status || transferStatusLabel.UNKNOWN;
-  return translate(label, language);
+  const labels = language === "en" ? transferStatusEn : transferStatusVi;
+  return labels[status || "UNKNOWN"] || status || labels.UNKNOWN;
 }
 
 export function getStatusChipClass(status?: string) {

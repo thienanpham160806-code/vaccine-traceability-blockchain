@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -25,10 +25,10 @@ type PageMeta = {
 
 const pageTitles: Record<string, PageMeta> = {
   "/dashboard": { title: "Tổng quan", sub: "Bảng điều khiển hệ thống" },
-  "/dashboard/batches": { title: "Lô hàng", sub: "Đăng ký và theo dõi lô vaccine" },
+  "/dashboard/products/batches": { title: "Lô hàng", sub: "Đăng ký và theo dõi lô vaccine" },
   "/dashboard/products": { title: "Sản phẩm", sub: "Danh sách serial đã đăng ký" },
   "/dashboard/transfers": { title: "Lệnh chuyển", sub: "Quản lý yêu cầu chuyển giao" },
-  "/dashboard/scan-transfer": { title: "Tạo lệnh chuyển", sub: "Tạo yêu cầu bàn giao" },
+  "/dashboard/transfers/create": { title: "Tạo lệnh chuyển", sub: "Tạo yêu cầu bàn giao" },
   "/dashboard/risk-dispute": { title: "Rủi ro & tranh chấp", sub: "Theo dõi cảnh báo và khiếu nại" },
   "/dashboard/recall": { title: "Thu hồi", sub: "Quản lý thu hồi lô vaccine" },
 };
@@ -62,12 +62,12 @@ function getPageMeta(pathname: string): PageMeta {
       ],
     };
   }
-  if (pathname.startsWith("/dashboard/batches/")) {
+  if (pathname.startsWith("/dashboard/products/batches/")) {
     return {
       title: "Chi tiết lô",
       sub: "Serial, QR và lịch sử",
       breadcrumbs: [
-        { title: "Lô hàng", href: "/dashboard/batches" },
+        { title: "Lô hàng", href: "/dashboard/products/batches" },
         { title: "Chi tiết lô" },
       ],
     };
@@ -351,3 +351,4 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     </header>
   );
 }
+

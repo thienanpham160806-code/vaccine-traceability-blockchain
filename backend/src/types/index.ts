@@ -39,6 +39,10 @@ export interface Product {
   isImported: boolean;
   zkpVerified: boolean;
   blockchainTx?: string;
+  importDocumentIpfsCid?: string;
+  importDocCommitment?: string;
+  approvedImportRoot?: string;
+  importProofMode?: string;
 
   metadataHash?: string;
   ipfsCid?: string;
@@ -62,6 +66,9 @@ export interface Batch {
   expiryDate: string;
   origin: 'MANUFACTURED' | 'IMPORTED';
   ipfsCid?: string; // IPFS CID of batch snapshot
+  importDocumentIpfsCid?: string;
+  importDocCommitment?: string;
+  approvedImportRoot?: string;
   recalledAt?: number;
   createdAt: number;
   updatedAt: number;
