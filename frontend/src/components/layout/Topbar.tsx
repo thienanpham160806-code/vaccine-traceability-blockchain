@@ -142,20 +142,20 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
       <div className="flex min-w-0 items-center gap-3">
         <button
           onClick={onMenuClick}
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 lg:hidden"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900 lg:hidden"
           aria-label={t("Mở menu")}
         >
           <Menu className="h-4 w-4" />
         </button>
         <div className="min-w-0">
-          <div className="flex items-center gap-1 text-[11px] text-zinc-400">
-            <Link href="/dashboard" className="hover:text-blue-600">
+          <div className="flex items-center gap-1 text-[11px] text-zinc-400 dark:text-zinc-500">
+            <Link href="/dashboard" className="hover:text-blue-600 dark:hover:text-blue-300">
               VaxiTrust
             </Link>
             <ChevronRight className="h-3 w-3" />
-            <span className="truncate text-zinc-600">{t(meta.title)}</span>
+            <span className="truncate text-zinc-600 dark:text-zinc-300">{t(meta.title)}</span>
           </div>
-          <h2 className="truncate text-sm font-semibold text-zinc-800">{t(meta.sub)}</h2>
+          <h2 className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{t(meta.sub)}</h2>
         </div>
       </div>
 
@@ -166,7 +166,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           onMouseLeave={() => setNotificationsOpen(false)}
         >
           <button
-            className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50"
+            className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900"
             onClick={() => setNotificationsOpen((current) => !current)}
             title={unreadCount > 0 ? `${unreadCount} ${t("thông báo chưa xem")}` : t("Không có thông báo mới")}
             type="button"
@@ -180,11 +180,11 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
           </button>
 
           {notificationsOpen ? (
-            <div className="absolute right-0 top-12 z-50 w-[340px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3">
+            <div className="absolute right-0 top-12 z-50 w-[340px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+              <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
                 <div>
-                  <p className="text-sm font-bold text-zinc-900">{t("Thông báo")}</p>
-                  <p className="text-xs text-zinc-500">{unreadCount} {t("chưa xem cho")} {translateRole(user?.role || "", language) || t("role hiện tại")}</p>
+                  <p className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t("Thông báo")}</p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{unreadCount} {t("chưa xem cho")} {translateRole(user?.role || "", language) || t("role hiện tại")}</p>
                 </div>
                 {unreadCount > 0 ? (
                   <button
@@ -203,22 +203,22 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                     const unread = !readNotificationIdSet.has(activity.id);
                     return (
                       <Link
-                        className="flex gap-3 border-b border-zinc-100 px-4 py-3 transition last:border-b-0 hover:bg-zinc-50"
+                        className="flex gap-3 border-b border-zinc-100 px-4 py-3 transition last:border-b-0 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-900"
                         href={activity.href}
                         key={activity.id}
                         onClick={() => markNotificationRead(activity.id)}
                       >
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-3">
-                            <p className={`truncate text-sm ${unread ? "font-bold text-zinc-950" : "font-medium text-zinc-700"}`}>
+                            <p className={`truncate text-sm ${unread ? "font-bold text-zinc-950 dark:text-zinc-50" : "font-medium text-zinc-700 dark:text-zinc-300"}`}>
                               {getNotificationTitle(activity, language, t)}
                             </p>
                             <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${unread ? "bg-red-500" : "bg-blue-500"}`} />
                           </div>
-                          <p className={`mt-1 line-clamp-2 text-xs ${unread ? "font-semibold text-zinc-700" : "text-zinc-500"}`}>
+                          <p className={`mt-1 line-clamp-2 text-xs ${unread ? "font-semibold text-zinc-700 dark:text-zinc-200" : "text-zinc-500 dark:text-zinc-400"}`}>
                             {activity.title}
                           </p>
-                          <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-zinc-400">
+                          <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-zinc-400 dark:text-zinc-500">
                             <span className="truncate">{activity.subtitle}</span>
                             <span className="shrink-0">{formatNotificationTime(activity.timestamp, language)}</span>
                           </div>
@@ -227,7 +227,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
                     );
                   })
                 ) : (
-                  <p className="px-4 py-8 text-center text-sm text-zinc-500">{t("Chưa có thông báo cho role này.")}</p>
+                  <p className="px-4 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{t("Chưa có thông báo cho role này.")}</p>
                 )}
               </div>
             </div>
@@ -249,7 +249,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         ) : (
           <button
             onClick={() => router.push("/login")}
-            className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold text-zinc-600 hover:bg-zinc-50"
+            className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 px-3 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
           >
             <Wallet className="h-3.5 w-3.5" />
             {t("Đăng nhập")}
@@ -259,7 +259,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
         {user && (
           <button
             onClick={logout}
-            className="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500"
+            className="flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-400 hover:border-red-200 hover:bg-red-50 hover:text-red-500 dark:border-zinc-800 dark:hover:border-red-900 dark:hover:bg-red-950/40 dark:hover:text-red-300"
             title={t("Đăng xuất")}
           >
             <LogOut className="h-4 w-4" />

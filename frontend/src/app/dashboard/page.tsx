@@ -108,22 +108,22 @@ function ActivityRow({ item, language }: { item: DashboardActivity; language: "e
   return (
     <Link
       href={item.href || "/dashboard"}
-      className="group flex min-h-[72px] items-center gap-3 px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-sky-500/10 sm:px-6"
+      className="group flex min-h-[72px] items-center gap-3 px-4 py-3 transition hover:bg-zinc-50 dark:hover:bg-blue-950/30 sm:px-6"
     >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-500 dark:bg-zinc-900 dark:text-blue-200">
         <Icon className="h-4 w-4" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100 group-hover:dark:text-black">{item.title || item.type}</p>
-        <p className="truncate font-mono text-[11px] text-zinc-400 dark:text-zinc-400 group-hover:dark:text-black">{item.subtitle || (language === "en" ? "No details" : "Không có chi tiết")}</p>
+        <p className="truncate text-sm font-semibold text-zinc-800 dark:text-zinc-100">{item.title || item.type}</p>
+        <p className="truncate font-mono text-[11px] text-zinc-400 dark:text-zinc-400">{item.subtitle || (language === "en" ? "No details" : "Không có chi tiết")}</p>
       </div>
       <div className="hidden text-right sm:block">
         {item.status ? (
-          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusChipClass(item.status)} group-hover:dark:text-black`}>
+          <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${getStatusChipClass(item.status)}`}>
             {statusText}
           </span>
         ) : null}
-        <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-400 group-hover:dark:text-black">{formatTime(item.timestamp, language)}</p>
+        <p className="mt-1 text-[11px] text-zinc-400 dark:text-zinc-400">{formatTime(item.timestamp, language)}</p>
       </div>
       <ArrowRight className="h-4 w-4 shrink-0 text-zinc-300 dark:text-zinc-400" />
     </Link>

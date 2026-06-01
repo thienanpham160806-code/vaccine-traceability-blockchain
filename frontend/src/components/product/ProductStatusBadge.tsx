@@ -5,15 +5,15 @@ import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 export function ProductStatusBadge({ status }: { status: ProductStatus }) {
   const { language } = useLanguage();
   const colors: Record<string, string> = {
-    VERIFIED: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    DELIVERED: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    PENDING_DELIVERY: "border-blue-200 bg-blue-50 text-blue-700",
-    IN_TRANSIT: "border-blue-200 bg-blue-50 text-blue-700",
-    FLAGGED: "border-red-200 bg-red-50 text-red-700",
-    RECALLED: "border-zinc-200 bg-zinc-100 text-zinc-700",
-    INVALID: "border-red-200 bg-red-50 text-red-700",
+    VERIFIED: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
+    DELIVERED: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
+    PENDING_DELIVERY: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-200",
+    IN_TRANSIT: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-200",
+    FLAGGED: "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200",
+    RECALLED: "border-zinc-200 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200",
+    INVALID: "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200",
   };
-  const colorClass = colors[status] || "border-blue-200 bg-blue-50 text-blue-700";
+  const colorClass = colors[status] || "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/60 dark:text-blue-200";
 
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
@@ -25,12 +25,12 @@ export function ProductStatusBadge({ status }: { status: ProductStatus }) {
 export function RiskLevelBadge({ riskLevel }: { riskLevel: RiskLevel }) {
   const t = useTranslation();
   const colors: Record<string, string> = {
-    SAFE: "border-emerald-200 bg-emerald-50 text-emerald-700",
-    ALERT: "border-amber-200 bg-amber-50 text-amber-700",
-    HIGH: "border-red-200 bg-red-50 text-red-700",
-    CRITICAL: "border-red-200 bg-red-50 text-red-800",
+    SAFE: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200",
+    ALERT: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200",
+    HIGH: "border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200",
+    CRITICAL: "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200",
   };
-  const colorClass = colors[riskLevel] || "border-zinc-200 bg-zinc-100 text-zinc-700";
+  const colorClass = colors[riskLevel] || "border-zinc-200 bg-zinc-100 text-zinc-700 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-200";
   const labels: Record<RiskLevel, string> = {
     SAFE: "An toàn",
     ALERT: "Cảnh báo",

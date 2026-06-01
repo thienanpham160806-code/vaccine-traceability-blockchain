@@ -90,16 +90,16 @@ export function ProductTable() {
 
   return (
     <div className="space-y-4">
-      <div className="grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm md:grid-cols-[1fr_180px_180px]">
+      <div className="grid gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/70 dark:shadow-none md:grid-cols-[1fr_180px_180px]">
         <input
-          className="rounded-md border border-zinc-200 px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-500 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
           value={search}
           onChange={(event) => updateSearch(event.target.value)}
           placeholder={t("Tìm serial, lô hàng, sản phẩm, nhà sản xuất")}
         />
 
         <select
-          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
           value={statusFilter}
           onChange={(event) => updateStatus(event.target.value)}
         >
@@ -111,7 +111,7 @@ export function ProductTable() {
         </select>
 
         <select
-          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+          className="rounded-md border border-zinc-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:border-blue-400 dark:focus:ring-blue-500/20"
           value={sort}
           onChange={(event) => updateSort(event.target.value)}
         >
@@ -123,7 +123,7 @@ export function ProductTable() {
         </select>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
         {isLoading ? <TableSkeleton columns={6} rows={pageSize} /> : null}
         {!isLoading && error ? (
           <div className="p-4">
@@ -134,7 +134,7 @@ export function ProductTable() {
         {!isLoading && !error ? (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[920px] text-left text-sm">
-              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-bold uppercase tracking-wide text-zinc-500">
+              <thead className="border-b border-zinc-200 bg-zinc-50 text-xs font-bold uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
                 <tr>
                   <th className="px-5 py-4">Serial ID</th>
                   <th className="px-5 py-4">{t("Mã lô")}</th>
@@ -144,13 +144,13 @@ export function ProductTable() {
                   <th className="px-5 py-4">{t("Thao tác")}</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-100">
+              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
                 {products.map((product) => (
-                  <tr key={product.serialId} className="transition hover:bg-zinc-50">
-                    <td className="px-5 py-4 font-mono text-xs font-bold text-zinc-900">{product.serialId}</td>
-                    <td className="px-5 py-4 text-zinc-500">{product.batchId}</td>
-                    <td className="px-5 py-4 font-medium text-zinc-900">{product.productName}</td>
-                    <td className="px-5 py-4 text-zinc-500">{product.manufacturerName}</td>
+                  <tr key={product.serialId} className="transition hover:bg-zinc-50 dark:hover:bg-zinc-900/80">
+                    <td className="px-5 py-4 font-mono text-xs font-bold text-zinc-900 dark:text-zinc-100">{product.serialId}</td>
+                    <td className="px-5 py-4 text-zinc-500 dark:text-zinc-300">{product.batchId}</td>
+                    <td className="px-5 py-4 font-medium text-zinc-900 dark:text-zinc-100">{product.productName}</td>
+                    <td className="px-5 py-4 text-zinc-500 dark:text-zinc-300">{product.manufacturerName}</td>
                     <td className="px-5 py-4">
                       <ProductStatusBadge status={product.status} />
                     </td>
@@ -161,7 +161,7 @@ export function ProductTable() {
                       <Link href={`/dashboard/scan-transfer?serialId=${encodeURIComponent(product.serialId)}`} className="font-medium text-emerald-600 hover:underline">
                         {t("Chuyển giao")}
                       </Link>
-                      <Link href={`/consumer/verify/${product.serialId}`} className="font-medium text-zinc-600 hover:underline">
+                      <Link href={`/consumer/verify/${encodeURIComponent(product.serialId)}`} className="font-medium text-zinc-600 hover:underline dark:text-zinc-300">
                         {t("Công khai")}
                       </Link>
                     </td>
@@ -173,28 +173,28 @@ export function ProductTable() {
         ) : null}
 
         {!isLoading && !error && products.length === 0 ? (
-          <p className="p-4 text-sm text-gray-500">{t("Không tìm thấy sản phẩm.")}</p>
+          <p className="p-4 text-sm text-gray-500 dark:text-zinc-400">{t("Không tìm thấy sản phẩm.")}</p>
         ) : null}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
-        <p className="text-gray-500">
+        <p className="text-gray-500 dark:text-zinc-400">
           {t("Đang hiển thị")} {products.length} / {total} {t("Sản phẩm").toLowerCase()}
         </p>
 
         <div className="flex items-center gap-2">
           <button
-            className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
             disabled={page <= 1 || isLoading}
             onClick={() => setPage((current) => Math.max(1, current - 1))}
           >
             {t("Trước")}
           </button>
-          <span className="min-w-24 text-center text-gray-600">
+          <span className="min-w-24 text-center text-gray-600 dark:text-zinc-400">
             {t("Trang")} {page} / {totalPages}
           </span>
           <button
-            className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-zinc-200 bg-white px-3 py-2 font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"
             disabled={page >= totalPages || isLoading}
             onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
           >

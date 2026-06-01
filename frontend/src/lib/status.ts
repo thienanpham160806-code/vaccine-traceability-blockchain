@@ -22,18 +22,18 @@ export const transferStatusLabel: Record<string, string> = {
 };
 
 export const statusChipClass: Record<string, string> = {
-  REGISTERED: "bg-zinc-100 text-zinc-700 border-zinc-200",
-  VERIFIED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  IN_TRANSIT: "bg-blue-50 text-blue-700 border-blue-200",
-  PENDING_DELIVERY: "bg-blue-50 text-blue-700 border-blue-200",
-  DELIVERED: "bg-sky-50 text-sky-700 border-sky-200",
-  FLAGGED: "bg-red-50 text-red-700 border-red-200",
-  RECALLED: "bg-zinc-100 text-zinc-700 border-zinc-200",
-  INVALID: "bg-red-50 text-red-700 border-red-200",
-  PENDING: "bg-amber-50 text-amber-700 border-amber-200",
-  CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  REJECTED: "bg-red-50 text-red-700 border-red-200",
-  RETURNED: "bg-zinc-100 text-zinc-700 border-zinc-200",
+  REGISTERED: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700",
+  VERIFIED: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800",
+  IN_TRANSIT: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-800",
+  PENDING_DELIVERY: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-800",
+  DELIVERED: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/60 dark:text-sky-200 dark:border-sky-800",
+  FLAGGED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
+  RECALLED: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700",
+  INVALID: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
+  PENDING: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800",
+  CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800",
+  REJECTED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
+  RETURNED: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700",
 };
 
 export function getProductStatusLabel(status?: string, language: AppLanguage = "vi") {
@@ -47,5 +47,5 @@ export function getTransferStatusLabel(status?: string, language: AppLanguage = 
 }
 
 export function getStatusChipClass(status?: string) {
-  return statusChipClass[status || "UNKNOWN"] || "bg-zinc-100 text-zinc-600 border-zinc-200";
+  return statusChipClass[status || "UNKNOWN"] || "bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700";
 }
