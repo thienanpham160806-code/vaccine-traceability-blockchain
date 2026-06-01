@@ -38,7 +38,7 @@ export function VaxiTrustLogo({
         />
         <path
           className="fill-white dark:fill-zinc-950"
-          d="M32 45.5 19.9 33.8c-2.9-2.8-3.1-7.5-.4-10.5 2.8-3.1 7.6-3.2 10.5-.3l2 2 2-2c2.9-2.9 7.7-2.8 10.5.3 2.7 3 2.5 7.7-.4 10.5L32 45.5Z"
+          d="M28.7 41.8 18.8 31.9l4.5-4.5 5.4 5.4 12.8-12.9 4.6 4.5-17.4 17.4Z"
         />
         <defs>
           <linearGradient gradientUnits="userSpaceOnUse" id="shieldGlow" x1="32" x2="32" y1="8" y2="56">
