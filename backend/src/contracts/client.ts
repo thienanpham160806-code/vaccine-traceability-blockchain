@@ -42,7 +42,7 @@ try {
     'function confirmTransfer(bytes32 serialID, bytes32 receiverLocationHash) external',
     'function rejectTransfer(bytes32 serialID, bytes32 reason) external',
     'function getTransferHistory(bytes32 serialID) external view returns (tuple(bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, uint256)[])',
-    'function getPendingTransfer(bytes32 serialID) external view returns (tuple(bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, bool))',
+    'function pendingTransfers(bytes32) external view returns (bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, bool)',
     'event TransferRequested(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 fromLocationHash, bytes32 toLocationHash, uint256 requestedAt)',
     'event TransferConfirmed(bytes32 indexed serialID, address indexed sender, address indexed receiver, uint256 confirmedAt)',
     'event TransferRejected(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 reason)',
@@ -508,7 +508,7 @@ export class ContractClient {
   async getPendingTransferReceiver(serialId: string): Promise<string | null> {
     if (!this.transferLedger) return null;
     try {
-      const pending = await this.transferLedger.getPendingTransfer(serialId);
+      const pending = await this.transferLedger.pendingTransfers(serialId);
       // tuple index 8 is the `exists` boolean
       if (!pending[8]) return null;
       return String(pending[2]); // index 2 is receiver address
