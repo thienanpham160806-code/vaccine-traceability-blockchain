@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { use, useEffect, useState } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePublicClient, useWriteContract } from "wagmi";
@@ -69,11 +69,7 @@ export default function TransferDetailPage({ params }: PageProps) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  const [user, setUser] = useState<DemoUser | null>(null);
-
-  useEffect(() => {
-    setUser(getStoredUser());
-  }, []);
+  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
 
   const { data: transfer, isLoading } = useQuery<TransferRecord | undefined>({
     queryKey: ["transfer", decoded],
@@ -103,7 +99,7 @@ export default function TransferDetailPage({ params }: PageProps) {
       setActionSuccess(`Đã xác nhận. TX: ${result.txHash}`);
       qc.invalidateQueries({ queryKey: ["transfer", decoded] });
       qc.invalidateQueries({ queryKey: ["transfers"] });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setActionError(getApiErrorMessage(err, "Xác nhận thất bại."));
     } finally {
       setBusy(false);
@@ -135,7 +131,7 @@ export default function TransferDetailPage({ params }: PageProps) {
       setRejectReason("");
       qc.invalidateQueries({ queryKey: ["transfer", decoded] });
       qc.invalidateQueries({ queryKey: ["transfers"] });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setActionError(getApiErrorMessage(err, "Từ chối thất bại."));
     } finally {
       setBusy(false);
@@ -263,7 +259,10 @@ export default function TransferDetailPage({ params }: PageProps) {
         <Link href="/dashboard/transfers" className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
           <ArrowLeft className="h-3.5 w-3.5" /> Tất cả lệnh
         </Link>
-        <Link href="/dashboard/transfers/create" className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
+        <Link
+          href={`/dashboard/transfers/create?serialId=${encodeURIComponent(transfer.serialId)}`}
+          className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+        >
           <ArrowRight className="h-3.5 w-3.5" /> Tạo lệnh chuyển
         </Link>
       </div>

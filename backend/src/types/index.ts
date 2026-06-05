@@ -22,7 +22,18 @@ export interface User {
 }
 
 // ============= Product & Batch =============
-export type ProductStatus = 'REGISTERED' | 'VERIFIED' | 'IN_TRANSIT' | 'PENDING_DELIVERY' | 'DELIVERED' | 'FLAGGED' | 'RECALLED';
+export type ProductStatus =
+  | 'REGISTERED'
+  | 'VERIFIED'
+  | 'IN_TRANSIT'
+  | 'PENDING_DELIVERY'
+  | 'DELIVERED'
+  | 'DELIVERED_TO_DISTRIBUTOR'
+  | 'DELIVERED_TO_CLINIC'
+  | 'DELIVERED_TO_PHARMACY'
+  | 'ADMINISTERED'
+  | 'FLAGGED'
+  | 'RECALLED';
 export type RiskLevel = 'SAFE' | 'ALERT' | 'HIGH' | 'CRITICAL';
 
 export interface Product {

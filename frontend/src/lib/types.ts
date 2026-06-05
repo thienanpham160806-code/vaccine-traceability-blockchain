@@ -16,6 +16,10 @@ export type ProductStatus =
   | "IN_TRANSIT"
   | "PENDING_DELIVERY"
   | "DELIVERED"
+  | "DELIVERED_TO_DISTRIBUTOR"
+  | "DELIVERED_TO_CLINIC"
+  | "DELIVERED_TO_PHARMACY"
+  | "ADMINISTERED"
   | "FLAGGED"
   | "RECALLED"
   | "INVALID";
@@ -88,9 +92,14 @@ export type TransferEvent = {
   from: string;
   to: string;
   location: string;
-  status: "REGISTERED" | "VERIFIED" | "IN_TRANSIT" | "PENDING_DELIVERY" | "DELIVERED" | "FLAGGED" | "RECALLED";
+  status: "REGISTERED" | "VERIFIED" | "IN_TRANSIT" | "PENDING_DELIVERY" | "DELIVERED" | "DELIVERED_TO_DISTRIBUTOR" | "DELIVERED_TO_CLINIC" | "DELIVERED_TO_PHARMACY" | "ADMINISTERED" | "FLAGGED" | "RECALLED";
   timestamp: string;
   txHash?: string;
+  blockchainTx?: string;
+  fromAddress?: string;
+  toAddress?: string;
+  sender?: string;
+  receiver?: string;
 };
 
 export type DashboardStats = {
@@ -145,6 +154,9 @@ export type VerifyResult = {
 export type RiskFlag = {
   id?: string;
   serialId?: string;
+  serialHash?: string;
+  batchId?: string;
+  batchHash?: string;
   reason?: string;
   flagReason?: string;
   level?: string | number;
@@ -161,9 +173,13 @@ export type RecallRecord = {
   id?: string;
   batchHash?: string;
   reason?: string;
+  reasonHash?: string;
   serials?: string[];
+  serialsAffected?: number;
   txHash?: string;
+  blockchainTx?: string;
   createdAt?: number;
+  updatedAt?: number;
   recalledAt?: number;
 };
 

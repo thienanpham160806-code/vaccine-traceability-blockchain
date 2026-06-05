@@ -49,7 +49,10 @@ function BottomNav() {
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const t = useTranslation();
-  const [isReady, setIsReady] = useState(false);
+  const [isReady] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return Boolean(getStoredUser() && window.localStorage.getItem("demoToken"));
+  });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -61,7 +64,6 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    setIsReady(true);
   }, [router]);
 
   if (!isReady) {

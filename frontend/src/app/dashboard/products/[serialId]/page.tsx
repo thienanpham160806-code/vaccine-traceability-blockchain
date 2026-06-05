@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { getProductDetail, updateProduct } from "@/lib/api";
+import { getApiErrorMessage, getProductDetail, reregisterProduct, updateProduct } from "@/lib/api";
 import type { ProductDetailResponse } from "@/lib/types";
 import { ProductStatusBadge, RiskLevelBadge } from "@/components/product/ProductStatusBadge";
 import { TransferTimeline } from "@/components/trace/TransferTimeline";
@@ -26,12 +26,6 @@ function formatDate(value?: string | number) {
   if (Number.isNaN(date.getTime())) return String(value);
 
   return date.toLocaleDateString();
-}
-
-function shortHash(value?: string) {
-  if (!value) return "N/A";
-  if (value.length <= 18) return value;
-  return `${value.slice(0, 10)}...${value.slice(-6)}`;
 }
 
 function getTransactionUrl(txHash?: string) {
@@ -57,6 +51,7 @@ export default function ProductDetailPage({ params }: PageProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isReregistering, setIsReregistering] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [editForm, setEditForm] = useState({
@@ -67,10 +62,12 @@ export default function ProductDetailPage({ params }: PageProps) {
   });
 
   useEffect(() => {
-    setIsLoading(true);
-    setError(null);
-
-    getProductDetail(decodedSerialId)
+    Promise.resolve()
+      .then(() => {
+        setIsLoading(true);
+        setError(null);
+        return getProductDetail(decodedSerialId);
+      })
       .then((data) => {
         setDetail(data || null);
 
@@ -84,7 +81,7 @@ export default function ProductDetailPage({ params }: PageProps) {
         }
       })
       .catch((err) => {
-        const message = err?.response?.data?.error?.message || "Không tải được chi tiết sản phẩm.";
+        const message = getApiErrorMessage(err, "Không tải được chi tiết sản phẩm.");
         setError(message);
         toast.error(message);
       })
@@ -110,6 +107,27 @@ export default function ProductDetailPage({ params }: PageProps) {
     setIsEditing(false);
     setMessage(null);
     setFieldErrors({});
+  };
+
+  const handleReregister = async () => {
+    if (!detail || isReregistering) return;
+    setIsReregistering(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await reregisterProduct(detail.product.serialId);
+      setMessage(`Đã đăng ký lại on-chain thành công. TX: ${result.txHash}`);
+      toast.success("Đăng ký lại on-chain thành công.");
+      setDetail((current) =>
+        current ? { ...current, product: { ...current.product, blockchainTx: result.txHash } } : current
+      );
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err, "Không thể đăng ký lại on-chain.");
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsReregistering(false);
+    }
   };
 
   const saveMetadata = async () => {
@@ -161,8 +179,8 @@ export default function ProductDetailPage({ params }: PageProps) {
       setMessage("Đã cập nhật metadata sản phẩm.");
       setFieldErrors({});
       toast.success("Đã cập nhật metadata sản phẩm.");
-    } catch (err: any) {
-      const message = err?.response?.data?.error?.message || "Không thể cập nhật metadata sản phẩm.";
+    } catch (err: unknown) {
+      const message = getApiErrorMessage(err, "Không thể cập nhật metadata sản phẩm.");
       setError(message);
       toast.error(message);
     } finally {
@@ -198,6 +216,16 @@ export default function ProductDetailPage({ params }: PageProps) {
         </div>
 
         <div className="flex flex-wrap gap-2">
+          {!blockchain.available && (
+            <button
+              type="button"
+              disabled={isReregistering}
+              onClick={handleReregister}
+              className="rounded-md bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+            >
+              {isReregistering ? "Đang xử lý..." : "Đăng ký lại on-chain"}
+            </button>
+          )}
           <Link
             href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`}
             className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
@@ -488,7 +516,7 @@ export default function ProductDetailPage({ params }: PageProps) {
       <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold">Lịch sử rủi ro</h2>
         <div className="mt-4 space-y-3">
-          {riskFlags.map((flag: any, index) => (
+          {riskFlags.map((flag, index) => (
             <div key={flag.id || flag.serialId || index} className="rounded-lg border border-zinc-200 p-4 text-sm">
               <p className="font-semibold">{flag.reason || flag.flagReason || "Cảnh báo rủi ro"}</p>
               <p className="text-muted-foreground">Mức {String(flag.level || flag.riskLevel || "N/A")}</p>

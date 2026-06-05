@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
-import { verifyProduct } from "@/lib/api";
+import { getApiErrorMessage, verifyProduct } from "@/lib/api";
 import type { VerifyResult } from "@/lib/types";
 
 interface PageProps {
@@ -18,7 +18,7 @@ export default function VerifyPage({ params }: PageProps) {
   useEffect(() => {
     verifyProduct(serialId)
       .then((data) => setResult(data || null))
-      .catch((err) => setError(err?.response?.data?.error?.message || "Failed to verify product."));
+      .catch((err: unknown) => setError(getApiErrorMessage(err, "Failed to verify product.")));
   }, [serialId]);
 
   if (error) return <p className="text-sm font-semibold text-red-600">{error}</p>;
@@ -46,7 +46,7 @@ export default function VerifyPage({ params }: PageProps) {
       <div className="rounded-xl border bg-white p-6 shadow-sm">
         <h2 className="text-xl font-bold">Timeline</h2>
         <div className="mt-4 space-y-3">
-          {result.timeline.map((item: any) => (
+          {result.timeline.map((item) => (
             <div key={item.id || item.blockchainTx} className="rounded-lg border p-3 text-sm">
               <p className="font-semibold">{item.status}</p>
               <p className="text-muted-foreground">{item.fromAddress || item.sender} to {item.toAddress || item.receiver}</p>

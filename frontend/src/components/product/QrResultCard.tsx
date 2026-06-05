@@ -7,7 +7,6 @@ export function QrResultCard({
   serialId,
   txHash,
   ipfsCid,
-  qrImage,
 }: {
   serialId: string;
   txHash?: string;

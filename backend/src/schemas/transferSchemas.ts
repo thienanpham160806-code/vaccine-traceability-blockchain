@@ -38,6 +38,7 @@ export const transferScanSchema = z
     batchId: z.string().trim().max(128, 'batchId is too long').optional(),
     fromLocationHash: optionalLocationHash,
     toLocationHash: optionalLocationHash,
+    fromLocation: z.string().trim().max(200, 'fromLocation is too long').optional(),
   })
   .refine((value) => allowedTransferRoutes[value.fromRole].includes(value.toRole), {
     path: ['toRole'],

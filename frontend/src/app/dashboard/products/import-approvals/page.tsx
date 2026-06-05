@@ -9,6 +9,22 @@ import { useTranslation } from "@/providers/LanguageProvider";
 
 const headers = ["docId", "importerLicense", "manufacturerId", "batchNo", "documentExpiryDate", "salt", "regulatorCertificateId"];
 
+type ImportApprovalsState = {
+  approvedImportRoot?: string;
+  approvedRoot?: string;
+  onChainRoot?: string | null;
+  totalDocuments?: number;
+  commitments?: string[];
+  ipfsCid?: string;
+  txHash?: string | null;
+  documents?: Array<{
+    commitment: string;
+    regulatorCertificateId: string;
+    approvedBy?: string;
+    approvedAt?: number;
+  }>;
+};
+
 function sampleCsv() {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   return [
@@ -75,7 +91,7 @@ export default function ImportApprovalsPage() {
   const [csvText, setCsvText] = useState(sampleCsv);
   const [fileName, setFileName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [state, setState] = useState<any>(null);
+  const [state, setState] = useState<ImportApprovalsState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const user = typeof window === "undefined" ? null : getStoredUser();
   const canApprove = user?.role === "RECALL_AUTHORITY" || user?.role === "ADMIN";

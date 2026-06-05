@@ -82,10 +82,11 @@ export const transferScanFormSchema = z
     serialId: z.string().trim().min(3, "Serial ID phải có ít nhất 3 ký tự.").max(128).regex(idPattern, idMessage),
     fromRole: initiatorRoleSchema,
     toRole: receiverRoleSchema,
+    fromLocation: z.string().trim().max(200).optional(),
   })
   .refine((value) => allowedTransferRoutes[value.fromRole].includes(value.toRole), {
     path: ["toRole"],
-    message: "Vai trò nhận phải khác vai trò gửi.",
+    message: "Vai trò gửi không được phép chuyển đến vai trò nhận này.",
   });
 
 export const transferConfirmFormSchema = z.object({

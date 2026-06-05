@@ -3,7 +3,34 @@
 import { AlertTriangle, ArrowRight, CheckCircle2, Clock, MapPin, XCircle } from "lucide-react";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
+import type { TransferEvent, TransferRecord } from "@/lib/types";
 import type { AppLanguage } from "@/lib/i18n";
+
+type TimelineEvent = (TransferEvent | TransferRecord) & {
+  from?: string;
+  to?: string;
+  fromRole?: string;
+  toRole?: string;
+  fromAddress?: string;
+  toAddress?: string;
+  fromLocation?: string;
+  fromLocationName?: string;
+  fromLocationHash?: string;
+  toLocation?: string;
+  toLocationName?: string;
+  toLocationHash?: string;
+  sender?: string;
+  receiver?: string;
+  blockchainTx?: string;
+  txHash?: string;
+  dispute?: string;
+  riskReason?: string;
+  confirmedAt?: number;
+  rejectedAt?: number;
+  updatedAt?: number;
+  createdAt?: number;
+  timestamp?: string | number;
+};
 
 function formatTime(value: unknown, language: AppLanguage) {
   const date = typeof value === "number" ? new Date(value) : value ? new Date(String(value)) : null;
@@ -29,7 +56,7 @@ export function TransferTimeline({
   language,
   emptyText,
 }: {
-  events: any[];
+  events: TimelineEvent[];
   currentOwner?: string;
   language: AppLanguage;
   emptyText: string;

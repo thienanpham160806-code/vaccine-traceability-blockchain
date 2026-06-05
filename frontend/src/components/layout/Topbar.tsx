@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, ChevronRight, LogOut, Menu, Wallet } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
@@ -195,18 +195,13 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const pathname = usePathname();
   const { language } = useLanguage();
   const t = useTranslation();
-  const [user, setUser] = useState<DemoUser | null>(null);
-  const [readNotificationIds, setReadNotificationIds] = useState<string[]>([]);
+  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    return loadReadNotificationIds(getNotificationStorageKey(getStoredUser()));
+  });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const meta = getPageMeta(pathname);
-
-  useEffect(() => {
-    const storedUser = getStoredUser();
-    setUser(storedUser);
-
-    const storageKey = getNotificationStorageKey(storedUser);
-    setReadNotificationIds(loadReadNotificationIds(storageKey));
-  }, []);
 
   const { data: activities = [] } = useQuery({
     queryKey: ["topbar-notifications", user?.role, user?.address],

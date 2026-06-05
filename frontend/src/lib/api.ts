@@ -196,14 +196,11 @@ export const endpoints = {
 export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
   const error = err as ApiErrorLike;
   if (error?.code === "ECONNABORTED") {
-    return `Yeu cau den backend qua thoi gian. Hay kiem tra backend va RPC: ${apiBaseUrl}.`;
+    return `Yêu cầu đến backend quá thời gian. Hãy kiểm tra backend và RPC: ${apiBaseUrl}.`;
   }
   if (!error?.response) {
-    return `Khong ket noi duoc backend. Hay kiem tra cau hinh NEXT_PUBLIC_API_URL: ${apiBaseUrl}.`;
+    return `Không kết nối được backend. Hãy kiểm tra cấu hình NEXT_PUBLIC_API_URL: ${apiBaseUrl}.`;
   }
-  if (error?.code === "ECONNABORTED") return "Yêu cầu đến backend quá thời gian. Hãy kiểm tra backend và RPC.";
-  if (!error?.response) return "Không kết nối được backend. Hãy kiểm tra http://localhost:5000.";
-
   const code = error.response.data?.error?.code;
   const message = error.response.data?.error?.message;
   const details = error.response.data?.error?.details;
@@ -456,6 +453,7 @@ export async function scanTransfer(payload: {
   toRole: string;
   receiverAddress?: string;
   batchId?: string;
+  fromLocation?: string;
 }) {
   const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.scanTransfer, payload);
   return requireApiData(res.data.data, "Scan transfer response did not include data.");
@@ -562,4 +560,11 @@ export async function addDisputeEvidence(
 export async function verifyProduct(serialId: string) {
   const res = await api.get<ApiResponse<VerifyResult>>(endpoints.verify(serialId));
   return requireApiData(res.data.data, "Verify response did not include data.");
+}
+
+export async function reregisterProduct(serialId: string) {
+  const res = await api.post<ApiResponse<{ txHash: string; serialHash: string; serialId: string }>>(
+    `/products/${encodeURIComponent(serialId)}/reregister`
+  );
+  return requireApiData(res.data.data, "Re-register response did not include data.");
 }

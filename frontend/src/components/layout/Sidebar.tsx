@@ -39,8 +39,8 @@ const themeOptions = [
 ] as const;
 
 const languageOptions = [
-  { value: "en", label: "EN", flag: "https://flagcdn.com/gb.svg" },
-  { value: "vi", label: "VI", flag: "https://flagcdn.com/vn.svg" },
+  { value: "en", label: "EN" },
+  { value: "vi", label: "VI" },
 ] as const;
 
 const roleColor: Record<string, string> = {
@@ -188,7 +188,8 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
                     onClick={() => setLanguage(option.value)}
                     className={`flex h-11 items-center justify-center rounded-lg border px-2 text-sm font-semibold ${language === option.value ? "border-blue-500 bg-blue-600/15 text-blue-700 dark:text-blue-100" : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"}`}
                   >
-                    {language === option.value ? <img src={option.flag} alt={option.label} className="w-6 rounded-[2px] object-cover shadow-sm" /> : option.label}
+                    {language === option.value ? <Check className="mr-1 h-3.5 w-3.5" /> : null}
+                    {option.label}
                   </button>
                 ))}
               </div>

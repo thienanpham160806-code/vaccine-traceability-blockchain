@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
@@ -19,7 +20,7 @@ import { getProductStatusLabel } from "@/lib/status";
 import type { VerifyResult } from "@/lib/types";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { ContactFooter } from "@/components/layout/ContactFooter";
-import { TransferTimeline } from "@/components/trace/TransferTimeline";
+import { SupplyChainDiagram } from "@/components/trace/SupplyChainDiagram";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 interface PageProps {
@@ -303,10 +304,12 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
 
   useEffect(() => {
     if (!serialId) return;
-    setViewState("loading");
 
-    api
-      .get(endpoints.consumerVerify(decodedLookup))
+    Promise.resolve()
+      .then(() => {
+        setViewState("loading");
+        return api.get(endpoints.consumerVerify(decodedLookup));
+      })
       .then((res) => {
         const result: VerifyResult = res.data.data;
         if (!result?.product) {
@@ -378,9 +381,9 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
               </div>
             </div>
 
-            <a href="/" className="inline-flex text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
+            <Link href="/" className="inline-flex text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
               {text.backHome}
-            </a>
+            </Link>
           </div>
         </section>
       </VerifyShell>
@@ -439,9 +442,9 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
               >
                 {text.viewAnyway}
               </button>
-              <a href="/" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              <Link href="/" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
                 {text.backHome}
-              </a>
+              </Link>
             </div>
           </div>
         </section>
@@ -507,12 +510,12 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
             <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">{text.timeline}</h2>
           </div>
 
-          <TransferTimeline events={timeline || []} currentOwner={product?.currentOwner} language={language} emptyText={text.noTimeline} />
+          <SupplyChainDiagram events={timeline || []} currentOwner={product?.currentOwner} language={language} emptyText={text.noTimeline} />
         </div>
 
-        <a href="/" className="block text-center text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
+        <Link href="/" className="block text-center text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
           {text.backHome}
-        </a>
+        </Link>
       </section>
     </VerifyShell>
   );
