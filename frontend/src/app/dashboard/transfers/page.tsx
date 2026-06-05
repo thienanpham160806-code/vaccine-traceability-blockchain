@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowRight, Clock, ExternalLink, Plus, Search, Truck, XCircle } from "lucide-react";
@@ -13,6 +13,17 @@ import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const statusOptions: Array<TransferStatus | "ALL"> = ["ALL", "PENDING", "CONFIRMED", "REJECTED", "RETURNED"];
 
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setDebounced(value), delay);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, [value, delay]);
+  return debounced;
+}
+
 function formatTime(timestamp: number | undefined, language: "en" | "vi") {
   return timestamp ? new Date(timestamp).toLocaleString(language === "en" ? "en-US" : "vi-VN") : language === "en" ? "Unknown" : "Không rõ";
 }
@@ -22,7 +33,7 @@ function shortAddress(address: string | undefined, language: "en" | "vi") {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
-function TransferCard({
+const TransferCard = memo(function TransferCard({
   transfer,
   user,
   language,
@@ -78,32 +89,34 @@ function TransferCard({
       </div>
     </Link>
   );
-}
+});
 
 export default function TransfersPage() {
   const t = useTranslation();
   const { language } = useLanguage();
-  const [user, setUser] = useState<DemoUser | null>(null);
+  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<TransferStatus | "ALL">("ALL");
-
-  useEffect(() => {
-    setUser(getStoredUser());
+  const debouncedSearch = useDebounce(search, 250);
+  const [status, setStatus] = useState<TransferStatus | "ALL">(() => {
+    if (typeof window === "undefined") return "ALL";
     const params = new URLSearchParams(window.location.search);
     const initialStatus = params.get("status") as TransferStatus | null;
     if (initialStatus && statusOptions.includes(initialStatus)) {
-      setStatus(initialStatus);
+      return initialStatus;
     }
-  }, []);
+    return "ALL";
+  });
 
   const { data: transfers = [], isLoading } = useQuery<TransferRecord[]>({
     queryKey: ["transfers"],
     queryFn: getTransfers,
-    refetchInterval: 8000,
+    staleTime: 20_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: false,
   });
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = debouncedSearch.trim().toLowerCase();
     return transfers.filter((transfer) => {
       const matchesStatus = status === "ALL" || transfer.status === status;
       const matchesSearch =
@@ -114,7 +127,7 @@ export default function TransfersPage() {
         transfer.toRole?.toLowerCase().includes(q);
       return matchesStatus && matchesSearch;
     });
-  }, [search, status, transfers]);
+  }, [debouncedSearch, status, transfers]);
 
   const pendingCount = transfers.filter((transfer) => transfer.status === "PENDING").length;
 

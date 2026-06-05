@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, RefreshCw, ShieldAlert } from "lucide-react";
 import { createDispute, getApiErrorMessage, getDisputes, getRiskFlags } from "@/lib/api";
+import type { DisputeRecord } from "@/lib/api";
+import type { RiskFlag } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const riskChip: Record<string, string> = {
@@ -49,13 +51,15 @@ export default function RiskDisputePage() {
   const t = useTranslation();
   const { language } = useLanguage();
 
-  const { data: riskFlags = [], isLoading: flagsLoading } = useQuery<any[]>({
+  const { data: riskFlags = [], isLoading: flagsLoading } = useQuery<RiskFlag[]>({
     queryKey: ["risk-flags"],
     queryFn: getRiskFlags,
-    refetchInterval: 15000,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
   });
 
-  const { data: disputes = [], isLoading: disputesLoading } = useQuery<any[]>({
+  const { data: disputes = [], isLoading: disputesLoading } = useQuery<DisputeRecord[]>({
     queryKey: ["disputes"],
     queryFn: getDisputes,
   });
@@ -84,7 +88,7 @@ export default function RiskDisputePage() {
       setSerialId("");
       setReason("");
       qc.invalidateQueries({ queryKey: ["disputes"] });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(getApiErrorMessage(err, t("Tạo khiếu nại thất bại.")));
     } finally {
       setIsBusy(false);
@@ -233,28 +237,32 @@ export default function RiskDisputePage() {
             </div>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2">
-              {disputes.map((dispute) => (
-                <div
-                  key={dispute.id}
-                  className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-xs font-semibold text-zinc-700">{dispute.id}</p>
-                    <span
-                      className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
-                        disputeChip[dispute.status] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
-                      }`}
-                    >
-                      {t(disputeStatusLabel[dispute.status] || dispute.status || "Đang mở")}
-                    </span>
+              {disputes.map((dispute) => {
+                const status = dispute.status || "OPEN";
+
+                return (
+                  <div
+                    key={dispute.id}
+                    className="space-y-2 rounded-xl border border-zinc-200 bg-zinc-50 p-4"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="truncate text-xs font-semibold text-zinc-700">{dispute.id}</p>
+                      <span
+                        className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${
+                          disputeChip[status] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
+                        }`}
+                      >
+                        {t(disputeStatusLabel[status] || status)}
+                      </span>
+                    </div>
+                    <p className="break-all font-mono text-xs text-zinc-500">{dispute.relatedSerialId}</p>
+                    <p className="text-xs text-zinc-600">{dispute.reason}</p>
+                    {dispute.createdAt && (
+                      <p className="text-[10px] text-zinc-400">{formatTime(dispute.createdAt)}</p>
+                    )}
                   </div>
-                  <p className="break-all font-mono text-xs text-zinc-500">{dispute.relatedSerialId}</p>
-                  <p className="text-xs text-zinc-600">{dispute.reason}</p>
-                  {dispute.createdAt && (
-                    <p className="text-[10px] text-zinc-400">{formatTime(dispute.createdAt)}</p>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

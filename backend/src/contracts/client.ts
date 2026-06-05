@@ -503,6 +503,21 @@ export class ContractClient {
   }
 
   /**
+   * Returns the on-chain pending transfer receiver address, or null if none exists.
+   */
+  async getPendingTransferReceiver(serialId: string): Promise<string | null> {
+    if (!this.transferLedger) return null;
+    try {
+      const pending = await this.transferLedger.getPendingTransfer(serialId);
+      // tuple index 8 is the `exists` boolean
+      if (!pending[8]) return null;
+      return String(pending[2]); // index 2 is receiver address
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Reject transfer on blockchain (receiver cancels pending transfer)
    */
   async rejectTransfer(

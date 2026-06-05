@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -74,7 +74,7 @@ function roleActions(role?: string) {
   return base;
 }
 
-function StatCard({
+const StatCard = memo(function StatCard({
   label,
   value,
   icon: Icon,
@@ -99,9 +99,9 @@ function StatCard({
       <p className="mt-0.5 text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</p>
     </div>
   );
-}
+});
 
-function ActivityRow({ item, language }: { item: DashboardActivity; language: "en" | "vi" }) {
+const ActivityRow = memo(function ActivityRow({ item, language }: { item: DashboardActivity; language: "en" | "vi" }) {
   const Icon = activityIcon[item.type] ?? Activity;
   const statusText = item.type === "TRANSFER" ? getTransferStatusLabel(item.status, language) : getProductStatusLabel(item.status, language);
 
@@ -128,16 +128,12 @@ function ActivityRow({ item, language }: { item: DashboardActivity; language: "e
       <ArrowRight className="h-4 w-4 shrink-0 text-zinc-300 dark:text-zinc-400" />
     </Link>
   );
-}
+});
 
 export default function DashboardPage() {
-  const [user, setUser] = useState<DemoUser | null>(null);
+  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const t = useTranslation();
   const { language } = useLanguage();
-
-  useEffect(() => {
-    setUser(getStoredUser());
-  }, []);
 
   const { data: health } = useQuery({
     queryKey: ["health"],

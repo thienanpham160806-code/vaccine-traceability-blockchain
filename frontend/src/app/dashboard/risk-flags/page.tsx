@@ -36,7 +36,9 @@ export default function RiskFlagsPage() {
   const { data: riskFlags = [], isLoading } = useQuery<RiskFlag[]>({
     queryKey: ["risk-flags"],
     queryFn: getRiskFlags,
-    refetchInterval: 15000,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    refetchOnWindowFocus: false,
   });
 
   const openFlags = riskFlags.filter((flag) => flag.status !== "RESOLVED");

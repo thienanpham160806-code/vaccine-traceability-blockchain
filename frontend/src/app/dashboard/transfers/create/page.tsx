@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
@@ -30,11 +30,34 @@ const statusChip: Record<string, string> = {
 };
 
 const fromRoleOptions = [...transferInitiatorRoles];
+type TransferInitiatorRole = (typeof transferInitiatorRoles)[number];
+type TransferReceiverRole = (typeof transferReceiverRoles)[number];
 
 const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
 const safeIdPattern = /^[A-Za-z0-9._:-]{3,128}$/;
 const safeIdMessage = "Chỉ dùng chữ, số, dấu chấm, gạch dưới, dấu hai chấm hoặc gạch ngang.";
+
+function isInitiatorRole(value: string): value is TransferInitiatorRole {
+  return (transferInitiatorRoles as readonly string[]).includes(value);
+}
+
+function isReceiverRole(value: string): value is TransferReceiverRole {
+  return (transferReceiverRoles as readonly string[]).includes(value);
+}
+
+function getInitialTransferForm() {
+  if (typeof window === "undefined") {
+    return { serialId: "", fromRole: "MANUFACTURER" as TransferInitiatorRole };
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const user = getStoredUser();
+  return {
+    serialId: params.get("serialId") || "",
+    fromRole: user?.role && isInitiatorRole(user.role) ? user.role : ("MANUFACTURER" as TransferInitiatorRole),
+  };
+}
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -49,11 +72,22 @@ function TransferList() {
   const tLabel = useTranslation();
   const { language } = useLanguage();
   const qc = useQueryClient();
-  const { data: transfers = [], isLoading } = useQuery<TransferRecord[]>({
+  const { data: allTransfers = [], isLoading } = useQuery<TransferRecord[]>({
     queryKey: ["transfers"],
     queryFn: getTransfers,
-    refetchInterval: 8000,
+    staleTime: 20_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: false,
   });
+
+  const FULL_ACCESS_ROLES = ["ADMIN", "AUDITOR", "RECALL_AUTHORITY"];
+  const storedUser = getStoredUser();
+  const transfers =
+    storedUser?.role && !FULL_ACCESS_ROLES.includes(storedUser.role)
+      ? allTransfers.filter(
+          (t) => t.fromRole === storedUser.role || t.toRole === storedUser.role
+        )
+      : allTransfers;
 
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
@@ -73,7 +107,7 @@ function TransferList() {
 
       await confirmTransfer(parsed.data.serialId);
       qc.invalidateQueries({ queryKey: ["transfers"] });
-    } catch (err: any) {
+  } catch (err: unknown) {
       setError(getApiErrorMessage(err, tLabel("Xác nhận thất bại.")));
     } finally {
       setBusy(false);
@@ -96,7 +130,7 @@ function TransferList() {
       setRejectingId(null);
       setRejectReason("");
       qc.invalidateQueries({ queryKey: ["transfers"] });
-    } catch (err: any) {
+  } catch (err: unknown) {
       setError(getApiErrorMessage(err, tLabel("Từ chối thất bại.")));
     } finally {
       setBusy(false);
@@ -219,13 +253,16 @@ function TransferList() {
 
 export default function ScanTransferPage() {
   const t = useTranslation();
+  const { language } = useLanguage();
   const qc = useQueryClient();
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
-  const [serialId, setSerialId] = useState("");
-  const [fromRole, setFromRole] = useState("MANUFACTURER");
-  const [toRole, setToRole] = useState("DISTRIBUTOR");
+  const initialTransferForm = useMemo(() => getInitialTransferForm(), []);
+  const [serialId, setSerialId] = useState(initialTransferForm.serialId);
+  const [fromRole, setFromRole] = useState<TransferInitiatorRole>(initialTransferForm.fromRole);
+  const [toRole, setToRole] = useState<TransferReceiverRole>("DISTRIBUTOR");
+  const [fromLocation, setFromLocation] = useState("");
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [transferId, setTransferId] = useState<string | null>(null);
@@ -233,19 +270,8 @@ export default function ScanTransferPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isBusy, setIsBusy] = useState(false);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const s = params.get("serialId");
-    if (s) setSerialId(s);
-  }, []);
-
-  const toRoleOptions = allowedTransferRoutes[fromRole as keyof typeof allowedTransferRoutes] || [...transferReceiverRoles];
-
-  useEffect(() => {
-    if (!toRoleOptions.includes(toRole as any)) {
-      setToRole(toRoleOptions[0] || "DISTRIBUTOR");
-    }
-  }, [fromRole, toRole, toRoleOptions]);
+  const toRoleOptions = useMemo(() => allowedTransferRoutes[fromRole] || [...transferReceiverRoles], [fromRole]);
+  const effectiveToRole = toRoleOptions.includes(toRole) ? toRole : toRoleOptions[0] || "DISTRIBUTOR";
 
   const create = async () => {
     if (!serialId.trim() || isBusy) return;
@@ -255,10 +281,10 @@ export default function ScanTransferPage() {
     }
     setIsBusy(true);
     setError(null);
-    setStatusMsg(`${t("Đang tạo lệnh")} ${fromRole} -> ${toRole} on-chain...`);
+    setStatusMsg(`${t("Đang tạo lệnh")} ${fromRole} -> ${effectiveToRole} on-chain...`);
     setTxHash(null);
     try {
-      const parsed = transferScanFormSchema.safeParse({ serialId, fromRole, toRole });
+      const parsed = transferScanFormSchema.safeParse({ serialId, fromRole, toRole: effectiveToRole, fromLocation: fromLocation.trim() || undefined });
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
         setFieldErrors(errors);
@@ -296,13 +322,13 @@ export default function ScanTransferPage() {
           txHash,
         });
       } else {
-        data = await scanTransfer(parsed.data);
+        data = await scanTransfer({ ...parsed.data, fromLocation: parsed.data.fromLocation });
       }
       setTxHash(data.txHash ?? null);
       setTransferId(data.transfer?.id ?? null);
       setStatusMsg(t("Đã tạo lệnh. Xác nhận giao hàng ở danh sách bên phải."));
       qc.invalidateQueries({ queryKey: ["transfers"] });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(getApiErrorMessage(err, t("Tạo lệnh thất bại.")));
       setStatusMsg(null);
     } finally {
@@ -318,7 +344,7 @@ export default function ScanTransferPage() {
     }
     setIsBusy(true);
     setError(null);
-    setStatusMsg(`${t("Đang xác nhận giao hàng cho")} ${toRole}...`);
+    setStatusMsg(`${t("Đang xác nhận giao hàng cho")} ${effectiveToRole}...`);
     setTxHash(null);
     try {
       const parsed = transferConfirmFormSchema.safeParse({ serialId });
@@ -335,7 +361,7 @@ export default function ScanTransferPage() {
       setTransferId(data.transferId ?? transferId);
       setStatusMsg(t("Xác nhận thành công."));
       qc.invalidateQueries({ queryKey: ["transfers"] });
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(getApiErrorMessage(err, t("Xác nhận thất bại.")));
       setStatusMsg(null);
     } finally {
@@ -381,35 +407,44 @@ export default function ScanTransferPage() {
           </Field>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Từ">
+            <Field label={t("Từ")}>
               <select
                 className={inputCls}
                 value={fromRole}
                 onChange={(e) => {
                   setFieldErrors({});
-                  setFromRole(e.target.value);
+                  if (isInitiatorRole(e.target.value)) setFromRole(e.target.value);
                 }}
               >
                 {fromRoleOptions.map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                  <option key={r} value={r}>{translateRole(r, language)}</option>
                 ))}
               </select>
             </Field>
-            <Field label="Đến">
+            <Field label={t("Đến")}>
               <select
                 className={inputCls}
-                value={toRole}
+                value={effectiveToRole}
                 onChange={(e) => {
                   setFieldErrors({});
-                  setToRole(e.target.value);
+                  if (isReceiverRole(e.target.value)) setToRole(e.target.value);
                 }}
               >
                 {toRoleOptions.map((r) => (
-                  <option key={r} value={r}>{r}</option>
+                  <option key={r} value={r}>{translateRole(r, language)}</option>
                 ))}
               </select>
             </Field>
           </div>
+
+          <Field label={t("Vị trí (giả lập)")}>
+            <input
+              className={inputCls}
+              value={fromLocation}
+              onChange={(e) => setFromLocation(e.target.value)}
+              placeholder={t("Ví dụ: Hà Nội – Kho 1")}
+            />
+          </Field>
         </div>
 
         {/* Status */}

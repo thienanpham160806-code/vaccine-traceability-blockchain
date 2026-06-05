@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
+import { ethers } from 'ethers';
 import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { ipfsService } from '../services/ipfs';
@@ -8,7 +9,7 @@ import { CryptoUtils } from '../utils/crypto';
 import { QRCodeGenerator } from '../utils/qr';
 import { Logger } from '../utils/logger';
 import { Batch, Product } from '../types';
-import { verifyToken, AuthRequest } from '../middleware/auth';
+import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
 import {
   bulkProductsSchema,
@@ -20,47 +21,76 @@ import {
 
 const router = Router();
 const ZERO_BYTES32 = '0x0000000000000000000000000000000000000000000000000000000000000000';
+const productRegistryEvents = new ethers.Interface([
+  'event ProductRegistered(bytes32 indexed serialID, bytes32 indexed batchHash, address indexed owner, bool isImported, bool zkpVerified, uint8 status)',
+]);
 
 function toBytes32(value: string): string {
   return CryptoUtils.isValidHash(value) ? value : CryptoUtils.keccak256(value);
+}
+
+function httpError(statusCode: number, code: string, message: string): Error & { statusCode: number; code: string } {
+  const error = new Error(message) as Error & { statusCode: number; code: string };
+  error.statusCode = statusCode;
+  error.code = code;
+  return error;
+}
+
+function sameHex(left?: string, right?: string): boolean {
+  return String(left || '').toLowerCase() === String(right || '').toLowerCase();
+}
+
+function normalizeAddress(address?: string): string {
+  return String(address || '').toLowerCase();
+}
+
+function requireProductRegistryEvent(receipt: any, eventName: string) {
+  for (const log of receipt.logs || []) {
+    try {
+      const parsed = productRegistryEvents.parseLog(log);
+      if (parsed?.name === eventName) {
+        return parsed;
+      }
+    } catch {
+      // Ignore logs emitted by other contracts in the same transaction.
+    }
+  }
+
+  throw httpError(400, 'TX_EVENT_MISMATCH', `Transaction did not emit ${eventName}`);
 }
 
 async function resolveProductBySerial(serialId: string): Promise<{ product: Product; serialHash: string } | null> {
   const decodedSerialId = decodeURIComponent(serialId).trim();
   const computedHash = toBytes32(decodedSerialId);
 
-  let snapshot = await db.ref(`products/${computedHash}`).once('value');
-  if (snapshot.exists()) {
-    const product = snapshot.val() as Product;
+  // Parallel: try hash-keyed path + serial-index simultaneously
+  const [hashSnap, indexSnap] = await Promise.all([
+    db.ref(`products/${computedHash}`).once('value'),
+    db.ref(`serial-index/${decodedSerialId}`).once('value'),
+  ]);
+
+  if (hashSnap.exists()) {
+    const product = hashSnap.val() as Product;
     return { product, serialHash: (product as any).serialHash || computedHash };
   }
 
-  snapshot = await db.ref(`products/${decodedSerialId}`).once('value');
-  if (snapshot.exists()) {
-    const product = snapshot.val() as Product;
-    return { product, serialHash: (product as any).serialHash || computedHash };
-  }
-
-  const indexSnapshot = await db.ref(`serial-index/${decodedSerialId}`).once('value');
-  const indexedHash = indexSnapshot.val();
-  if (indexedHash) {
-    snapshot = await db.ref(`products/${indexedHash}`).once('value');
-    if (snapshot.exists()) {
-      const product = snapshot.val() as Product;
+  const indexedHash: string | null = indexSnap.val();
+  if (indexedHash && indexedHash !== computedHash) {
+    const idxProductSnap = await db.ref(`products/${indexedHash}`).once('value');
+    if (idxProductSnap.exists()) {
+      const product = idxProductSnap.val() as Product;
       return { product, serialHash: (product as any).serialHash || indexedHash };
     }
   }
 
-  const productsSnapshot = await db.ref('products').once('value');
-  const products = Object.values(productsSnapshot.val() || {}) as Product[];
-  const product = products.find((item: any) => item?.serialId === decodedSerialId || item?.serialHash === decodedSerialId);
+  // Last resort: try raw serialId as key (legacy data stored without hashing)
+  const rawSnap = await db.ref(`products/${decodedSerialId}`).once('value');
+  if (rawSnap.exists()) {
+    const product = rawSnap.val() as Product;
+    return { product, serialHash: (product as any).serialHash || computedHash };
+  }
 
-  if (!product) return null;
-
-  return {
-    product,
-    serialHash: (product as any).serialHash || toBytes32(product.serialId || decodedSerialId),
-  };
+  return null;
 }
 
 async function readFirebaseValue(path: string, fallback: any = null) {
@@ -304,24 +334,48 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
     const normalizedSerialId = product.serialId || serialId;
     const batchKey = product.batchHash || product.batchId;
 
-    const [batch, allTransfers, allRiskFlags, allRecalls] = await Promise.all([
+    // Query only matching records via index instead of full-collection scans
+    const [batch, transfersBySerial, transfersByHash, riskFlagsBySerial, riskFlagsByHash, recallByBatchHash, recallByBatchId] = await Promise.all([
       batchKey ? readFirebaseValue(`batches/${batchKey}`, null) : Promise.resolve(null),
-      readFirebaseValue('transfers', {}),
-      readFirebaseValue('risk-flags', {}),
-      readFirebaseValue('recalls', {}),
+      db.ref('transfers').orderByChild('serialId').equalTo(normalizedSerialId).once('value'),
+      normalizedSerialId !== serialHash
+        ? db.ref('transfers').orderByChild('serialHash').equalTo(serialHash).once('value')
+        : Promise.resolve(null),
+      db.ref('risk-flags').orderByChild('serialId').equalTo(normalizedSerialId).once('value'),
+      normalizedSerialId !== serialHash
+        ? db.ref('risk-flags').orderByChild('serialHash').equalTo(serialHash).once('value')
+        : Promise.resolve(null),
+      product.batchHash
+        ? db.ref('recalls').orderByChild('batchHash').equalTo(product.batchHash).once('value')
+        : Promise.resolve(null),
+      product.batchId && product.batchId !== product.batchHash
+        ? db.ref('recalls').orderByChild('batchId').equalTo(product.batchId).once('value')
+        : Promise.resolve(null),
     ]);
 
-    const timeline = Object.values(allTransfers).filter((transfer: any) => {
-      return transfer.serialId === normalizedSerialId || transfer.serialId === serialHash || transfer.serialHash === serialHash;
-    });
+    const timelineMap = new Map<string, any>();
+    for (const snap of [transfersBySerial, transfersByHash]) {
+      if (snap?.exists()) {
+        snap.forEach((child: any) => { timelineMap.set(child.key, child.val()); });
+      }
+    }
+    const timeline = Array.from(timelineMap.values());
 
-    const riskFlags = Object.values(allRiskFlags).filter((flag: any) => {
-      return flag.serialId === normalizedSerialId || flag.serialId === serialHash || flag.serialHash === serialHash;
-    });
+    const riskFlagMap = new Map<string, any>();
+    for (const snap of [riskFlagsBySerial, riskFlagsByHash]) {
+      if (snap?.exists()) {
+        snap.forEach((child: any) => { riskFlagMap.set(child.key, child.val()); });
+      }
+    }
+    const riskFlags = Array.from(riskFlagMap.values());
 
-    const recall = Object.values(allRecalls).find((item: any) => {
-      return item.batchHash === product.batchHash || item.batchId === product.batchId || item.id === product.batchHash || item.id === product.batchId;
-    }) || null;
+    let recall: any = null;
+    for (const snap of [recallByBatchHash, recallByBatchId]) {
+      if (snap?.exists()) {
+        snap.forEach((child: any) => { if (!recall) recall = child.val(); });
+        if (recall) break;
+      }
+    }
 
     let blockchain: {
       serialHash: string;
@@ -861,9 +915,29 @@ router.post('/sync-wallet-register', verifyToken, validateRequest({ body: regist
       });
     }
 
-    await requireSuccessfulTx(txHash, contractClient.productRegistry?.target as string);
-
     const serialHash = toBytes32(serialId);
+    const batchQR = batchId || QRCodeGenerator.generateBatchId();
+    const batchHash = rawBatchHash ? toBytes32(rawBatchHash) : toBytes32(batchQR);
+    const receipt = await requireSuccessfulTx(txHash, contractClient.productRegistry?.target as string);
+    const event = requireProductRegistryEvent(receipt, 'ProductRegistered');
+    const eventOwner = String(event.args.owner);
+
+    if (!sameHex(String(event.args.serialID), serialHash)) {
+      throw httpError(400, 'TX_SERIAL_MISMATCH', 'Transaction serial does not match request payload');
+    }
+
+    if (!sameHex(String(event.args.batchHash), batchHash)) {
+      throw httpError(400, 'TX_BATCH_MISMATCH', 'Transaction batch does not match request payload');
+    }
+
+    if (req.user?.role !== 'ADMIN' && normalizeAddress(eventOwner) !== normalizeAddress(req.user?.address)) {
+      throw httpError(403, 'TX_OWNER_MISMATCH', 'Transaction owner does not match the authenticated wallet');
+    }
+
+    if (receipt.from && !sameHex(String(receipt.from), eventOwner)) {
+      throw httpError(400, 'TX_SENDER_MISMATCH', 'Transaction sender does not match the ProductRegistered owner');
+    }
+
     const existsOnChain = await contractClient.productExists(serialHash);
     if (!existsOnChain) {
       return res.status(400).json({
@@ -880,8 +954,6 @@ router.post('/sync-wallet-register', verifyToken, validateRequest({ body: regist
       });
     }
 
-    const batchQR = batchId || QRCodeGenerator.generateBatchId();
-    const batchHash = rawBatchHash ? toBytes32(rawBatchHash) : toBytes32(batchQR);
     const metadataPayload = {
       serialId,
       serialHash,
@@ -1022,6 +1094,17 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
 
     Logger.info(`Bulk registering ${rawProducts.length} products`);
 
+    // Pre-batch all Firebase existence checks in parallel to avoid N sequential reads
+    const preCheckSerials = rawProducts
+      .map((p: any) => (typeof p?.serialId === 'string' ? p.serialId.trim() : null))
+      .filter(Boolean) as string[];
+    const existenceSnaps = await Promise.all(
+      preCheckSerials.map((sid) => db.ref(`products/${toBytes32(sid)}`).once('value'))
+    );
+    const existingSet = new Set<string>(
+      preCheckSerials.filter((_, i) => existenceSnaps[i].exists())
+    );
+
     const results = [];
     const seenSerials = new Set<string>();
 
@@ -1060,8 +1143,7 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
             : QRCodeGenerator.generateBatchId();
 
         const serialHash = toBytes32(serialId);
-        const existingProductSnapshot = await db.ref(`products/${serialHash}`).once('value');
-        if (existingProductSnapshot.exists()) {
+        if (existingSet.has(serialId)) {
           throw new Error(`Product with serial ID ${serialId} already exists`);
         }
 
@@ -1249,5 +1331,85 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
     });
   }
 });
+
+/**
+ * POST /products/:serialId/reregister
+ * Re-register a Firebase-only product on the current chain.
+ * Needed when products were originally registered on a local node or an old deployment
+ * but the backend now points to a new contract. Requires MANUFACTURER, IMPORTER, or ADMIN role.
+ */
+router.post(
+  '/:serialId/reregister',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'ADMIN']),
+  validateRequest({ params: productParamsSchema }),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { serialId } = req.params;
+      const decodedSerialId = decodeURIComponent(serialId).trim();
+      const serialHash = toBytes32(decodedSerialId);
+
+      let productKey = serialHash;
+      let snapshot = await db.ref(`products/${productKey}`).once('value');
+      if (!snapshot.exists()) {
+        productKey = decodedSerialId;
+        snapshot = await db.ref(`products/${productKey}`).once('value');
+      }
+
+      if (!snapshot.exists()) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PRODUCT_NOT_FOUND', message: `Product ${decodedSerialId} not found in Firebase` },
+        });
+      }
+
+      if (!contractClient.isInitialized()) {
+        return res.status(503).json({
+          success: false,
+          error: { code: 'CONTRACTS_NOT_READY', message: 'Smart contracts are not initialized' },
+        });
+      }
+
+      const existsOnChain = await contractClient.productExists(serialHash);
+      if (existsOnChain) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'ALREADY_ON_CHAIN', message: `Product ${decodedSerialId} is already registered on the current contract.` },
+        });
+      }
+
+      const product = snapshot.val() as Product;
+      const batchHash = product.batchHash || toBytes32(product.batchId || decodedSerialId);
+      const metadataHash = (product as any).metadataHash || toBytes32(JSON.stringify({ serialId: decodedSerialId }));
+      const signerRole = product.isImported ? 'IMPORTER' : 'MANUFACTURER';
+
+      Logger.info(`Re-registering product ${decodedSerialId} on-chain (role: ${signerRole})`);
+      const txHash = await contractClient.registerProduct(
+        serialHash,
+        batchHash,
+        metadataHash,
+        ZERO_BYTES32,
+        '0x',
+        signerRole
+      );
+
+      const now = Date.now();
+      await db.ref(`products/${productKey}`).update({ blockchainTx: txHash, updatedAt: now });
+
+      Logger.success(`Re-registered ${decodedSerialId} → tx ${txHash}`);
+
+      res.json({
+        success: true,
+        data: { txHash, serialHash, serialId: decodedSerialId },
+      });
+    } catch (error) {
+      Logger.error('Re-register product error', error);
+      res.status(500).json({
+        success: false,
+        error: { code: 'REREGISTER_ERROR', message: getErrorMessage(error, 'Failed to re-register product on-chain') },
+      });
+    }
+  }
+);
 
 export default router;
