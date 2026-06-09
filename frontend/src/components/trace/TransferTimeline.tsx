@@ -50,6 +50,10 @@ function getIcon(status?: string) {
   return Clock;
 }
 
+function getRejectionReason(event: any) {
+  return event?.rejectedReason || event?.rejectionReason || event?.rejectReason || event?.reason || "";
+}
+
 export function TransferTimeline({
   events,
   currentOwner,
@@ -75,6 +79,8 @@ export function TransferTimeline({
         const fromLocation = event.fromLocation || event.fromLocationName || shortValue(event.fromLocationHash);
         const toLocation = event.toLocation || event.toLocationName || shortValue(event.toLocationHash);
         const time = formatTime(event.confirmedAt || event.rejectedAt || event.updatedAt || event.createdAt || event.timestamp, language);
+        const rejectionReason = getRejectionReason(event);
+        const isRejected = event.status === "REJECTED" || event.status === "RETURNED";
 
         return (
           <div key={event.id || event.blockchainTx || event.txHash || index} className="grid grid-cols-[32px_1fr] gap-3">
@@ -118,6 +124,12 @@ export function TransferTimeline({
                 <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500" title={time}>
                   {time}
                 </p>
+                {isRejected && rejectionReason ? (
+                  <div className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                    <p className="font-bold">{language === "en" ? "Rejection reason" : "Lý do từ chối"}</p>
+                    <p className="mt-1 whitespace-pre-wrap break-words">{rejectionReason}</p>
+                  </div>
+                ) : null}
                 {currentOwner && isLast ? (
                   <p className="mt-2 text-xs font-semibold text-blue-700 dark:text-blue-300">
                     {language === "en" ? "Current node" : "Node hiện tại"}: {shortValue(currentOwner)}

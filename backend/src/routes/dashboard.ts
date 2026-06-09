@@ -66,6 +66,11 @@ function recentTransferActivity(key: string, transfer: any): DashboardActivity {
   const serialId = transfer?.serialId || key;
   const fromRole = transfer?.fromRole || 'UNKNOWN';
   const toRole = transfer?.toRole || 'UNKNOWN';
+  const rejectionReason = transfer?.rejectedReason || transfer?.rejectionReason;
+  const rejectedSubtitle =
+    (transfer?.status === 'REJECTED' || transfer?.status === 'RETURNED') && rejectionReason
+      ? `${serialId} · ${rejectionReason}`
+      : serialId;
   const audienceRoles =
     transfer?.status === 'PENDING'
       ? [toRole, ADMIN_ROLE]
@@ -75,7 +80,7 @@ function recentTransferActivity(key: string, transfer: any): DashboardActivity {
     id: `transfer-${key}`,
     type: 'TRANSFER',
     title: `${fromRole} -> ${toRole}`,
-    subtitle: serialId,
+    subtitle: rejectedSubtitle,
     status: transfer?.status || 'UNKNOWN',
     href: `/dashboard/transfers/${encodeURIComponent(transfer?.id || key)}`,
     timestamp: timestampOf(transfer),

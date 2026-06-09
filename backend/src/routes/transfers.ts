@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+﻿import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { ethers } from 'ethers';
 import jwt from 'jsonwebtoken';
@@ -74,6 +74,11 @@ function requireReceiptEvent(receipt: any, eventName: string) {
 
 function isAllowedTransferRoute(fromRole: string, toRole: string): boolean {
   return allowedTransferRoutes[fromRole]?.includes(toRole) || false;
+}
+
+function productRegistryStatusToProductStatus(status: number): TransferRecord['status'] | 'REGISTERED' | 'VERIFIED' | 'IN_TRANSIT' | 'DELIVERED' | 'FLAGGED' | 'RECALLED' {
+  const statuses = ['REGISTERED', 'VERIFIED', 'IN_TRANSIT', 'DELIVERED', 'FLAGGED', 'RECALLED'] as const;
+  return statuses[status] || 'VERIFIED';
 }
 
 async function resolvePendingTransfer(serialId: string, serialHash: string): Promise<[string, TransferRecord] | null> {
@@ -155,7 +160,7 @@ router.get('/', async (req: Request, res: Response) => {
           transfers = transfers.filter((t) => t.fromRole === role || t.toRole === role);
         }
       } catch {
-        // Invalid or expired token — fall through and return all records unchanged
+        // Invalid or expired token â€” fall through and return all records unchanged
       }
     }
 
@@ -233,7 +238,7 @@ router.post(
         success: false,
         error: {
           code: 'INVALID_SERIAL_ID',
-          message: 'Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.',
+          message: 'Serial chá»‰ Ä‘Æ°á»£c dÃ¹ng chá»¯, sá»‘, dáº¥u gáº¡ch ngang hoáº·c gáº¡ch dÆ°á»›i.',
         },
       });
     }
@@ -306,7 +311,7 @@ router.post(
           success: false,
           error: {
             code: 'PRODUCT_RECALLED',
-            message: `Serial ${serialId} thuộc lô đã bị thu hồi. Không thể tạo lệnh chuyển giao.`,
+            message: `Serial ${serialId} thuá»™c lÃ´ Ä‘Ã£ bá»‹ thu há»“i. KhÃ´ng thá»ƒ táº¡o lá»‡nh chuyá»ƒn giao.`,
           },
           timestamp: Date.now(),
         });
@@ -682,7 +687,7 @@ router.post(
 
 /**
  * POST /transfers/reject
- * Reject transfer — reverts product status on-chain via rejectTransfer()
+ * Reject transfer â€” reverts product status on-chain via rejectTransfer()
  */
 router.post(
   '/reject',
@@ -740,25 +745,46 @@ router.post(
       });
     }
 
-    // Verify backend signer matches on-chain pending.receiver before sending tx
-    if (contractClient.isInitialized()) {
-      const onChainReceiver = await contractClient.getPendingTransferReceiver(serialHash);
-      if (onChainReceiver !== null) {
-        const backendSignerAddress = contractClient.getRoleAddress(pendingTransfer.toRole).toLowerCase();
-        if (onChainReceiver.toLowerCase() !== backendSignerAddress) {
-          return res.status(409).json({
-            success: false,
-            error: {
-              code: 'SIGNER_MISMATCH',
-              message: `Transfer phải được từ chối từ ví gốc (${onChainReceiver.slice(0, 6)}...${onChainReceiver.slice(-4)}). Dùng "Từ chối qua ví" thay vì backend signing.`,
-            },
-          });
-        }
-      }
+    const onChainPending = await contractClient.getPendingTransfer(serialHash);
+    if (!onChainPending.exists) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'ON_CHAIN_PENDING_TRANSFER_NOT_FOUND',
+          message: `Firebase still has a pending transfer for ${serialId}, but the active TransferLedger contract does not. Recreate the transfer on the current contract or clear the stale Firebase transfer.`,
+        },
+      });
     }
 
-    // Call smart contract — receiver role signs the rejection
-    const txHash = await contractClient.rejectTransfer(serialHash, rejectionReason, pendingTransfer.toRole);
+    if (onChainPending.receiver.toLowerCase() !== pendingTransfer.toAddress.toLowerCase()) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'TRANSFER_RECEIVER_MISMATCH',
+          message: `Firebase receiver ${pendingTransfer.toAddress} does not match on-chain receiver ${onChainPending.receiver}. Refresh transfer data before rejecting.`,
+        },
+      });
+    }
+
+    const statusBefore = await contractClient.getProductStatus(serialHash);
+    if (Number(statusBefore) !== 2) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'PRODUCT_NOT_IN_TRANSIT_ON_CHAIN',
+          message: `Product ${serialId} is not IN_TRANSIT on the active ProductRegistry contract. Current on-chain status: ${productRegistryStatusToProductStatus(Number(statusBefore))}.`,
+        },
+      });
+    }
+
+    // Receiver address must sign the rejection.
+    const txHash = await contractClient.rejectTransfer(
+      serialHash,
+      rejectionReason,
+      pendingTransfer.toRole,
+      pendingTransfer.toAddress
+    );
+    const statusAfter = await contractClient.getProductStatus(serialHash);
     const now = Date.now();
 
     await Promise.all([
@@ -770,7 +796,7 @@ router.post(
         updatedAt: now,
       }),
       db.ref(`products/${serialHash}`).update({
-        status: 'VERIFIED',
+        status: productRegistryStatusToProductStatus(Number(statusAfter)),
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).remove(),
@@ -851,6 +877,7 @@ router.post(
       throw httpError(403, 'TX_SENDER_MISMATCH', 'Authenticated wallet cannot sync this receiver transaction');
     }
 
+    const statusAfter = await contractClient.getProductStatus(serialHash);
     const now = Date.now();
     await Promise.all([
       db.ref(`transfers/${transferId}`).update({
@@ -861,7 +888,7 @@ router.post(
         updatedAt: now,
       }),
       db.ref(`products/${serialHash}`).update({
-        status: 'VERIFIED',
+        status: productRegistryStatusToProductStatus(Number(statusAfter)),
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).remove(),

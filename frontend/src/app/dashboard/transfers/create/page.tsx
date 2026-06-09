@@ -1,15 +1,15 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
-import { confirmTransfer, getApiErrorMessage, getDemoActors, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferCreate } from "@/lib/api";
-import { getStoredUser } from "@/lib/auth";
+import { confirmTransfer, getApiErrorMessage, getDemoActors, getProducts, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferCreate } from "@/lib/api";
+import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
-import type { TransferRecord } from "@/lib/types";
+import type { Product, TransferRecord } from "@/lib/types";
 import {
   allowedTransferRoutes,
   getZodFieldErrors,
@@ -66,6 +66,48 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       {children}
     </div>
   );
+}
+
+const nonTransferableStatuses = new Set(["RECALLED", "FLAGGED", "IN_TRANSIT", "PENDING_DELIVERY", "INVALID"]);
+
+function normalizeAddress(address?: string) {
+  return String(address || "").trim().toLowerCase();
+}
+
+function canRoleInitiateTransfer(role?: string) {
+  return Boolean(role && transferInitiatorRoles.includes(role as any));
+}
+
+function isProductTransferable(product: Product, ownerAddress?: string) {
+  if (!product.serialId || nonTransferableStatuses.has(String(product.status))) return false;
+  return normalizeAddress(product.currentOwner) === normalizeAddress(ownerAddress);
+}
+
+function groupProductsByBatch(products: Product[]) {
+  const groups = new Map<string, {
+    batchId: string;
+    productName: string;
+    manufacturerName: string;
+    products: Product[];
+  }>();
+
+  products.forEach((product) => {
+    const batchId = product.batchId || product.batchHash || "UNKNOWN_BATCH";
+    const current = groups.get(batchId);
+    if (current) {
+      current.products.push(product);
+      return;
+    }
+
+    groups.set(batchId, {
+      batchId,
+      productName: product.productName || "Unknown product",
+      manufacturerName: product.manufacturerName || "Unknown manufacturer",
+      products: [product],
+    });
+  });
+
+  return Array.from(groups.values()).sort((a, b) => b.products.length - a.products.length);
 }
 
 function TransferList() {
@@ -189,6 +231,13 @@ function TransferList() {
             <p className="font-mono text-[10px] text-zinc-400 truncate">tx: {t.blockchainTx}</p>
           )}
 
+          {(t.status === "REJECTED" || t.status === "RETURNED") && t.rejectedReason ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+              <p className="font-bold">{tLabel("Lý do từ chối")}</p>
+              <p className="mt-1 whitespace-pre-wrap break-words">{t.rejectedReason}</p>
+            </div>
+          ) : null}
+
           {t.status === "PENDING" ? (
             rejectingId === t.id ? (
               <div className="flex gap-2 flex-wrap">
@@ -263,6 +312,7 @@ export default function ScanTransferPage() {
   const [fromRole, setFromRole] = useState<TransferInitiatorRole>(initialTransferForm.fromRole);
   const [toRole, setToRole] = useState<TransferReceiverRole>("DISTRIBUTOR");
   const [fromLocation, setFromLocation] = useState("");
+  const [user, setUser] = useState<DemoUser | null>(null);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [transferId, setTransferId] = useState<string | null>(null);
@@ -270,8 +320,62 @@ export default function ScanTransferPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isBusy, setIsBusy] = useState(false);
 
+  const { data: actors = [] } = useQuery({
+    queryKey: ["demo-actors"],
+    queryFn: getDemoActors,
+  });
+
+  const { data: products = [], isLoading: productsLoading } = useQuery({
+    queryKey: ["transferable-products"],
+    queryFn: async () => {
+      const allProducts: Product[] = [];
+      let page = 1;
+      let total = 0;
+
+      do {
+        const result = await getProducts({ page, pageSize: 100, sort: "updatedAt:desc" });
+        allProducts.push(...result.items);
+        total = result.total;
+        page += 1;
+      } while (allProducts.length < total && page <= 20);
+
+      return allProducts;
+    },
+  });
+
+  useEffect(() => {
+    const storedUser = getStoredUser();
+    setUser(storedUser);
+    if (storedUser?.role && isInitiatorRole(storedUser.role)) {
+      setFromRole(storedUser.role);
+    }
+
+  }, []);
+
+  const actorAddressByRole = useMemo(() => {
+    return new Map(actors.map((actor) => [actor.role, actor.address]));
+  }, [actors]);
+
+  const selectableFromRoles = useMemo<TransferInitiatorRole[]>(() => {
+    if (user?.role === "ADMIN") return fromRoleOptions;
+    return user?.role && isInitiatorRole(user.role) ? [user.role] : [];
+  }, [user]);
+
+  const ownerAddress = user?.role === "ADMIN" ? actorAddressByRole.get(fromRole) : user?.address;
+  const transferableProducts = useMemo(() => {
+    return products.filter((product) => isProductTransferable(product, ownerAddress));
+  }, [ownerAddress, products]);
+
+  const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts), [transferableProducts]);
+
   const toRoleOptions = useMemo(() => allowedTransferRoutes[fromRole] || [...transferReceiverRoles], [fromRole]);
   const effectiveToRole = toRoleOptions.includes(toRole) ? toRole : toRoleOptions[0] || "DISTRIBUTOR";
+
+  useEffect(() => {
+    if (selectableFromRoles.length > 0 && !selectableFromRoles.includes(fromRole as any)) {
+      setFromRole(selectableFromRoles[0]);
+    }
+  }, [fromRole, selectableFromRoles]);
 
   const create = async () => {
     if (!serialId.trim() || isBusy) return;
@@ -411,12 +515,13 @@ export default function ScanTransferPage() {
               <select
                 className={inputCls}
                 value={fromRole}
+                disabled={selectableFromRoles.length <= 1}
                 onChange={(e) => {
                   setFieldErrors({});
                   if (isInitiatorRole(e.target.value)) setFromRole(e.target.value);
                 }}
               >
-                {fromRoleOptions.map((r) => (
+                {(selectableFromRoles.length ? selectableFromRoles : fromRoleOptions).map((r) => (
                   <option key={r} value={r}>{translateRole(r, language)}</option>
                 ))}
               </select>
@@ -435,6 +540,79 @@ export default function ScanTransferPage() {
                 ))}
               </select>
             </Field>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t("Lô có thể chuyển")}</h3>
+                <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                  {canRoleInitiateTransfer(fromRole)
+                    ? `${t("Đang hiển thị hàng do")} ${translateRole(fromRole, language)} ${t("sở hữu và đủ điều kiện chuyển giao.")}`
+                    : t("Role hiện tại không có quyền tạo lệnh chuyển.")}
+                </p>
+              </div>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+                {transferableProducts.length} serial
+              </span>
+            </div>
+
+            {productsLoading ? (
+              <div className="mt-3 space-y-2">
+                {[1, 2].map((item) => (
+                  <div key={item} className="h-20 animate-pulse rounded-lg bg-white dark:bg-zinc-950" />
+                ))}
+              </div>
+            ) : batchGroups.length === 0 ? (
+              <div className="mt-3 rounded-lg border border-dashed border-zinc-300 bg-white px-3 py-6 text-center text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
+                {t("Không có lô hoặc serial nào thuộc sở hữu role này và sẵn sàng chuyển giao.")}
+              </div>
+            ) : (
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                {batchGroups.map((group) => (
+                  <div key={group.batchId} className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-zinc-900 dark:text-zinc-100">{group.productName}</p>
+                        <p className="mt-0.5 font-mono text-[11px] text-zinc-500 dark:text-zinc-400">{group.batchId}</p>
+                        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{group.manufacturerName}</p>
+                      </div>
+                      <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
+                        {group.products.length} serial
+                      </span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {group.products.slice(0, 8).map((product) => (
+                        <button
+                          key={product.serialId}
+                          type="button"
+                          onClick={() => {
+                            setSerialId(product.serialId);
+                            setFieldErrors({});
+                            setError(null);
+                          }}
+                          className={`rounded-md border px-2.5 py-1.5 font-mono text-[11px] font-bold transition ${
+                            serialId === product.serialId
+                              ? "border-blue-500 bg-blue-600 text-white"
+                              : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-blue-500/60 dark:hover:bg-blue-500/10"
+                          }`}
+                        >
+                          {product.serialId}
+                        </button>
+                      ))}
+                      {group.products.length > 8 ? (
+                        <span className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+                          +{group.products.length - 8}
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-3 text-[11px] text-zinc-400 dark:text-zinc-500">
+                      {t("Có thể chuyển đến")}: {toRoleOptions.map((role) => translateRole(role, language)).join(", ")}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <Field label={t("Vị trí (giả lập)")}>

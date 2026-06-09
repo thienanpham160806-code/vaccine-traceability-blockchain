@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
 export default function LegacyTransferScanPage() {
-  redirect("/dashboard/scan");
+  redirect("/dashboard/transfers/create");
 }

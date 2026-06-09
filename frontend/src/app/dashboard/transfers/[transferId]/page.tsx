@@ -179,6 +179,13 @@ export default function TransferDetailPage({ params }: PageProps) {
         </div>
       </div>
 
+      {(transfer.status === "REJECTED" || transfer.status === "RETURNED") && transfer.rejectedReason ? (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700 shadow-sm dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          <p className="font-bold">Lý do từ chối</p>
+          <p className="mt-1 whitespace-pre-wrap break-words">{transfer.rejectedReason}</p>
+        </div>
+      ) : null}
+
       <div className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="flex-1 rounded-lg border border-zinc-100 bg-zinc-50 p-3 text-center">
           <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">Từ</p>

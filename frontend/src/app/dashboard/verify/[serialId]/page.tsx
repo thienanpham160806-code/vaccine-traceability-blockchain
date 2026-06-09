@@ -60,6 +60,12 @@ export default function VerifyPage({ params }: PageProps) {
             <div key={item.id || item.blockchainTx} className="rounded-lg border p-3 text-sm">
               <p className="font-semibold">{item.status}</p>
               <p className="text-muted-foreground">{item.fromAddress || item.sender} to {item.toAddress || item.receiver}</p>
+              {(item.status === "REJECTED" || item.status === "RETURNED") && (item.rejectedReason || item.rejectionReason) ? (
+                <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  <p className="font-bold">Rejection reason</p>
+                  <p className="mt-1 whitespace-pre-wrap break-words">{item.rejectedReason || item.rejectionReason}</p>
+                </div>
+              ) : null}
               <p className="break-all text-xs text-muted-foreground">{item.blockchainTx}</p>
             </div>
           ))}

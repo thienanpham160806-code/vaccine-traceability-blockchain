@@ -92,7 +92,7 @@ export type TransferEvent = {
   from: string;
   to: string;
   location: string;
-  status: "REGISTERED" | "VERIFIED" | "IN_TRANSIT" | "PENDING_DELIVERY" | "DELIVERED" | "DELIVERED_TO_DISTRIBUTOR" | "DELIVERED_TO_CLINIC" | "DELIVERED_TO_PHARMACY" | "ADMINISTERED" | "FLAGGED" | "RECALLED";
+  status: "REGISTERED" | "VERIFIED" | "IN_TRANSIT" | "PENDING_DELIVERY" | "DELIVERED" | "DELIVERED_TO_DISTRIBUTOR" | "DELIVERED_TO_CLINIC" | "DELIVERED_TO_PHARMACY" | "ADMINISTERED" | "FLAGGED" | "RECALLED" | "PENDING" | "CONFIRMED" | "REJECTED" | "RETURNED";
   timestamp: string;
   txHash?: string;
   blockchainTx?: string;
@@ -100,6 +100,9 @@ export type TransferEvent = {
   toAddress?: string;
   sender?: string;
   receiver?: string;
+  rejectedReason?: string;
+  rejectionReason?: string;
+  rejectedAt?: number;
 };
 
 export type DashboardStats = {

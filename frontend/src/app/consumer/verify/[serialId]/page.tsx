@@ -59,6 +59,9 @@ const copy = {
     zkVerified: "Verified",
     zkNotVerified: "Not verified",
     recallWarning: "This batch has been recalled. Do not administer.",
+    rejectedTransferTitle: "Rejected handoff recorded",
+    rejectedTransferText: "A transfer in this vaccine's supply chain was rejected. Review the reason before use.",
+    rejectionReason: "Rejection reason",
     timeline: "Supply chain timeline",
     noTimeline: "No transfer timeline has been recorded yet.",
     unknown: "Unknown",
@@ -97,6 +100,9 @@ const copy = {
     zkVerified: "Đã xác minh",
     zkNotVerified: "Chưa xác minh",
     recallWarning: "Lô này đã bị thu hồi. Không sử dụng vaccine.",
+    rejectedTransferTitle: "Có chuyển giao bị từ chối",
+    rejectedTransferText: "Chuỗi cung ứng của vaccine này có một lần chuyển giao bị từ chối. Vui lòng xem lý do trước khi sử dụng.",
+    rejectionReason: "Lý do từ chối",
     timeline: "Lịch sử chuỗi cung ứng",
     noTimeline: "Chưa có lịch sử chuyển giao nào được ghi nhận.",
     unknown: "Không rõ",
@@ -471,6 +477,9 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
   if (!data) return null;
 
   const { product, batch, timeline, recallStatus, zkProofVerified } = data;
+  const rejectedTransfers = (timeline || []).filter((event: any) => {
+    return (event.status === "REJECTED" || event.status === "RETURNED") && (event.rejectedReason || event.rejectionReason);
+  });
 
   return (
     <VerifyShell>
@@ -516,6 +525,21 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
           {recallStatus ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
               {text.recallWarning}
+            </div>
+          ) : null}
+
+          {rejectedTransfers.length > 0 ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+              <p className="font-bold">{text.rejectedTransferTitle}</p>
+              <p className="mt-1 text-xs">{text.rejectedTransferText}</p>
+              <div className="mt-2 space-y-2">
+                {rejectedTransfers.map((event: any, index) => (
+                  <p key={event.id || event.txHash || index} className="rounded-md bg-white/70 px-2 py-1.5 text-xs dark:bg-zinc-950/40">
+                    <span className="font-semibold">{text.rejectionReason}: </span>
+                    <span className="whitespace-pre-wrap break-words">{event.rejectedReason || event.rejectionReason}</span>
+                  </p>
+                ))}
+              </div>
             </div>
           ) : null}
         </div>

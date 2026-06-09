@@ -1,4 +1,4 @@
-import axios from "axios";
+﻿import axios from "axios";
 import type {
   ApiResponse,
   Batch,
@@ -31,23 +31,23 @@ type ApiErrorLike = {
 
 const productionApiUrl = "https://vaccine-traceability-blockchain.onrender.com";
 
+function isLoopbackApiUrl(url: string) {
+  return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url);
+}
+
 function resolveApiBaseUrl() {
   const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (configuredUrl) {
-    if (typeof window !== "undefined") {
-      const hostname = window.location.hostname;
-      const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
-      const configuredIsLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(configuredUrl);
-      if (configuredIsLocalhost && !isLocalhost) return productionApiUrl;
-    }
-    return configuredUrl;
-  }
 
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+    if (configuredUrl && (isLocalhost || !isLoopbackApiUrl(configuredUrl))) {
+      return configuredUrl;
+    }
     return isLocalhost ? "http://localhost:5000" : productionApiUrl;
   }
+
+  if (configuredUrl) return configuredUrl;
 
   return process.env.NODE_ENV === "production" ? productionApiUrl : "http://localhost:5000";
 }
@@ -141,7 +141,7 @@ export type LoginResponse = {
 
 export const api = axios.create({
   baseURL: resolveApiBaseUrl(),
-  timeout: 20000,
+  timeout: 60000,
   headers: {
     "Content-Type": "application/json",
   },
@@ -209,10 +209,10 @@ export const endpoints = {
 export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
   if (axios.isAxiosError(err)) {
     if (err.code === "ECONNABORTED") {
-      return `Yêu cầu đến backend quá thời gian. Hãy kiểm tra backend và RPC: ${apiBaseUrl}.`;
+      return `YÃªu cáº§u Ä‘áº¿n backend quÃ¡ thá»i gian. HÃ£y kiá»ƒm tra backend vÃ  RPC: ${apiBaseUrl}.`;
     }
     if (!err.response) {
-      return `Không kết nối được backend. Hãy kiểm tra cấu hình NEXT_PUBLIC_API_URL: ${apiBaseUrl}.`;
+      return `KhÃ´ng káº¿t ná»‘i Ä‘Æ°á»£c backend. HÃ£y kiá»ƒm tra cáº¥u hÃ¬nh NEXT_PUBLIC_API_URL: ${apiBaseUrl}.`;
     }
   } else if (err instanceof Error && err.message) {
     return err.message;
@@ -220,27 +220,27 @@ export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
 
   const error = err as ApiErrorLike;
   if (error?.code === "ECONNABORTED") {
-    return `Yêu cầu đến backend quá thời gian. Hãy kiểm tra backend và RPC: ${apiBaseUrl}.`;
+    return `Backend phản hồi quá thời gian. Render có thể đang cold start, hãy thử lại sau vài giây. API hiện tại: ${apiBaseUrl}.`;
   }
   if (!error?.response) {
-    return error?.message || fallback;
+    return error?.message || `Không kết nối được backend. Hãy kiểm tra NEXT_PUBLIC_API_URL hoặc trạng thái Render: ${apiBaseUrl}.`;
   }
   const code = error.response.data?.error?.code;
   const message = error.response.data?.error?.message || error.message;
   const details = error.response.data?.error?.details;
   const messages: Record<string, string> = {
-    FORBIDDEN: "Bạn không có quyền thực hiện thao tác này.",
-    ROLE_MISMATCH: message || "Vai trò hiện tại không khớp với thao tác này.",
-    MISSING_TOKEN: "Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.",
-    INVALID_TOKEN: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
-    INVALID_ADDRESS: "Địa chỉ ví không hợp lệ.",
-    INVALID_SERIAL_ID: "Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
-    INVALID_BATCH_ID: "Mã lô chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
+    FORBIDDEN: "Báº¡n khÃ´ng cÃ³ quyá»n thá»±c hiá»‡n thao tÃ¡c nÃ y.",
+    ROLE_MISMATCH: message || "Vai trÃ² hiá»‡n táº¡i khÃ´ng khá»›p vá»›i thao tÃ¡c nÃ y.",
+    MISSING_TOKEN: "PhiÃªn Ä‘Äƒng nháº­p khÃ´ng há»£p lá»‡. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.",
+    INVALID_TOKEN: "PhiÃªn Ä‘Äƒng nháº­p Ä‘Ã£ háº¿t háº¡n. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.",
+    INVALID_ADDRESS: "Äá»‹a chá»‰ vÃ­ khÃ´ng há»£p lá»‡.",
+    INVALID_SERIAL_ID: "Serial chá»‰ Ä‘Æ°á»£c dÃ¹ng chá»¯, sá»‘, dáº¥u gáº¡ch ngang hoáº·c gáº¡ch dÆ°á»›i.",
+    INVALID_BATCH_ID: "MÃ£ lÃ´ chá»‰ Ä‘Æ°á»£c dÃ¹ng chá»¯, sá»‘, dáº¥u gáº¡ch ngang hoáº·c gáº¡ch dÆ°á»›i.",
   };
 
   if (code === "VALIDATION_ERROR" && Array.isArray(details) && details.length > 0) {
     return details
-      .map((detail) => `${detail.path || "field"}: ${detail.message || "không hợp lệ"}`)
+      .map((detail) => `${detail.path || "field"}: ${detail.message || "khÃ´ng há»£p lá»‡"}`)
       .join("; ");
   }
 

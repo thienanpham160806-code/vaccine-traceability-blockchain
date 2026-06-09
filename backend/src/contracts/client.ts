@@ -41,6 +41,7 @@ try {
     'function createTransferRequest(bytes32 serialID, address receiver, bytes32 fromLocationHash, bytes32 toLocationHash) external',
     'function confirmTransfer(bytes32 serialID, bytes32 receiverLocationHash) external',
     'function rejectTransfer(bytes32 serialID, bytes32 reason) external',
+    'function pendingTransfers(bytes32 serialID) external view returns (bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, bool)',
     'function getTransferHistory(bytes32 serialID) external view returns (tuple(bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, uint256)[])',
     'function pendingTransfers(bytes32) external view returns (bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, bool)',
     'event TransferRequested(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 fromLocationHash, bytes32 toLocationHash, uint256 requestedAt)',
@@ -207,6 +208,37 @@ export class ContractClient {
     }
 
     return new ethers.Wallet(privateKey, this.provider);
+  }
+
+  private getSignerForAddress(expectedAddress: string, fallbackRole?: string): ethers.Wallet {
+    const normalizedExpected = ethers.getAddress(expectedAddress);
+
+    if (fallbackRole) {
+      const roleSigner = this.getSigner(fallbackRole);
+      if (ethers.getAddress(roleSigner.address) === normalizedExpected) {
+        return roleSigner;
+      }
+    }
+
+    const privateKeys = [
+      ...Object.values(config.rolePrivateKeys),
+      config.backendPrivateKey,
+    ].filter(Boolean);
+
+    for (const privateKey of privateKeys) {
+      try {
+        const signer = new ethers.Wallet(privateKey, this.provider);
+        if (ethers.getAddress(signer.address) === normalizedExpected) {
+          return signer;
+        }
+      } catch {
+        // Ignore malformed keys here; env validation handles them elsewhere.
+      }
+    }
+
+    throw new Error(
+      `Backend does not have the private key for receiver ${normalizedExpected}. Reject this transfer with the receiver MetaMask wallet, or configure the matching role private key.`
+    );
   }
 
   /**
@@ -558,7 +590,8 @@ export class ContractClient {
   async rejectTransfer(
     serialId: string,
     reason: string,
-    signerRole: string = 'DISTRIBUTOR'
+    signerRole: string = 'DISTRIBUTOR',
+    expectedReceiver?: string
   ): Promise<string> {
     if (!this.transferLedger) {
       throw new Error('TransferLedger contract not initialized');
@@ -571,7 +604,10 @@ export class ContractClient {
         ? reason
         : ethers.keccak256(ethers.toUtf8Bytes(reason));
 
-      const ledger = this.transferLedger.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const signer = expectedReceiver
+        ? this.getSignerForAddress(expectedReceiver, signerRole)
+        : this.getSigner(signerRole);
+      const ledger = this.transferLedger.connect(signer) as ethers.Contract;
       const tx = await ledger.rejectTransfer(serialId, reasonBytes);
 
       const receipt = await tx.wait();
@@ -580,6 +616,40 @@ export class ContractClient {
       return receipt?.hash || tx.hash;
     } catch (error) {
       Logger.error('Failed to reject transfer', error);
+      throw error;
+    }
+  }
+
+  async getPendingTransfer(serialId: string): Promise<{
+    serialId: string;
+    sender: string;
+    receiver: string;
+    senderRole: string;
+    receiverRole: string;
+    fromLocationHash: string;
+    toLocationHash: string;
+    requestedAt: bigint;
+    exists: boolean;
+  }> {
+    if (!this.transferLedger) {
+      throw new Error('TransferLedger contract not initialized');
+    }
+
+    try {
+      const pending = await this.transferLedger.pendingTransfers(serialId);
+      return {
+        serialId: pending[0],
+        sender: pending[1],
+        receiver: pending[2],
+        senderRole: pending[3],
+        receiverRole: pending[4],
+        fromLocationHash: pending[5],
+        toLocationHash: pending[6],
+        requestedAt: pending[7],
+        exists: Boolean(pending[8]),
+      };
+    } catch (error) {
+      Logger.error('Failed to get pending transfer', error);
       throw error;
     }
   }

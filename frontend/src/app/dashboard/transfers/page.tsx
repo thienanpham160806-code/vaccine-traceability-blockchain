@@ -45,6 +45,8 @@ const TransferCard = memo(function TransferCard({
   t: (key: string) => string;
 }) {
   const canAct = transfer.status === "PENDING" && (user?.role === transfer.toRole || user?.role === "ADMIN");
+  const rejectionReason = transfer.rejectedReason;
+  const isRejected = transfer.status === "REJECTED" || transfer.status === "RETURNED";
 
   return (
     <Link
@@ -77,6 +79,13 @@ const TransferCard = memo(function TransferCard({
           <p className="mt-1 font-semibold text-zinc-700 dark:text-zinc-200">{formatTime(transfer.updatedAt || transfer.createdAt, language)}</p>
         </div>
       </div>
+
+      {isRejected && rejectionReason ? (
+        <div className="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+          <p className="font-bold">{t("Lý do từ chối")}</p>
+          <p className="mt-1 whitespace-pre-wrap break-words">{rejectionReason}</p>
+        </div>
+      ) : null}
 
       <div className="mt-4 flex items-center justify-between gap-3 border-t border-zinc-100 pt-3 dark:border-zinc-800">
         <span className={`inline-flex min-h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-semibold ${
