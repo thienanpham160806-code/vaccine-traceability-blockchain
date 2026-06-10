@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 
 const enableLocalChain = process.env.NEXT_PUBLIC_ENABLE_LOCAL_CHAIN === "true";
+const sepoliaRpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
 const connectors = [
   metaMask({
     dappMetadata: {
@@ -21,7 +22,7 @@ const wagmiConfig = enableLocalChain
       chains: [sepolia, hardhat],
       connectors,
       transports: {
-        [sepolia.id]: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL),
+        [sepolia.id]: http(sepoliaRpcUrl),
         [hardhat.id]: http("http://127.0.0.1:8545"),
       },
     })
@@ -29,7 +30,7 @@ const wagmiConfig = enableLocalChain
       chains: [sepolia],
       connectors,
       transports: {
-        [sepolia.id]: http(process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL),
+        [sepolia.id]: http(sepoliaRpcUrl),
       },
     });
 

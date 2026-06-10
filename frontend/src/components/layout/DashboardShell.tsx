@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Boxes, Home, ListChecks, MoreHorizontal, Truck } from "lucide-react";
+import { Boxes, Home, ListChecks, MoreHorizontal, QrCode } from "lucide-react";
 import { getStoredUser } from "@/lib/auth";
 import { useTranslation } from "@/providers/LanguageProvider";
 import { ContactFooter } from "./ContactFooter";
@@ -13,8 +13,8 @@ import { Topbar } from "./Topbar";
 const bottomItems = [
   { title: "Tổng quan", href: "/dashboard", icon: Home },
   { title: "Sản phẩm", href: "/dashboard/products", icon: Boxes },
+  { title: "Quét", href: "/dashboard/scan", icon: QrCode, featured: true },
   { title: "Lệnh", href: "/dashboard/transfers", icon: ListChecks },
-  { title: "Tạo lệnh", href: "/dashboard/transfers/create", icon: Truck },
   { title: "Thêm", href: "/dashboard/products/batches", icon: MoreHorizontal },
 ];
 
@@ -33,7 +33,9 @@ function BottomNav() {
               key={item.href}
               href={item.href}
               className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-semibold ${
-                active ? "text-blue-600" : "text-zinc-500"
+                item.featured
+                  ? "mx-1 my-1 bg-blue-600 text-white shadow-sm"
+                  : active ? "text-blue-600" : "text-zinc-500"
               }`}
             >
               <Icon className="h-4 w-4" />

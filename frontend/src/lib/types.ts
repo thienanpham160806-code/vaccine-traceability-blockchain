@@ -205,3 +205,27 @@ export type TransferRecord = {
   createdAt: number;
   updatedAt: number;
 };
+
+export type RoleRequestStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+export type RoleRequest = {
+  id: string;
+  address: string;
+  currentRole?: UserRole;
+  requestedRole: Exclude<UserRole, "ADMIN" | "PUBLIC">;
+  note?: string;
+  status: RoleRequestStatus;
+  txHash?: string;
+  approvedBy?: string;
+  rejectedBy?: string;
+  rejectionReason?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type WalletRoleInfo = {
+  address: string;
+  roles: UserRole[];
+  primaryRole: UserRole | null;
+  hasAdminRole: boolean;
+};

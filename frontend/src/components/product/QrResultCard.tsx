@@ -26,8 +26,8 @@ export function QrResultCard({
         <p className="text-sm text-muted-foreground">
           {t("Mã QR này trỏ tới trang xác minh công khai cho người dùng.")}
         </p>
-        <div className="flex justify-center rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-800">
-          <QRCodeSVG value={qrValue} size={180} />
+        <div className="qr-surface flex justify-center rounded-2xl border p-6">
+          <QRCodeSVG value={qrValue} size={180} level="H" includeMargin bgColor="#ffffff" fgColor="#000000" />
         </div>
         <div>
           <p className="text-sm font-semibold text-zinc-700">Serial ID</p>
@@ -50,7 +50,7 @@ export function QrResultCard({
           </div>
         ) : null}
         <div className="flex gap-2">
-          <Link className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white" href={`/dashboard/verify/${serialId}`}>
+          <Link className="rounded-md bg-blue-600 px-3 py-2 text-sm font-semibold text-white" href={`/consumer/verify/${encodeURIComponent(serialId)}`}>
             {t("Xác minh")}
           </Link>
           <Link className="rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white" href={`/dashboard/transfers/create?serialId=${encodeURIComponent(serialId)}`}>

@@ -30,6 +30,8 @@ const defaultDemoActors: Record<string, string> = {
   RECALL_AUTHORITY: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
 };
 const demoRoleOrder = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'RECALL_AUTHORITY'];
+const grantableRoles = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'AUDITOR', 'RECALL_AUTHORITY'] as const;
+type GrantableRole = (typeof grantableRoles)[number];
 
 function normalizeAddress(address: string): string {
   return ethers.getAddress(address);
@@ -37,6 +39,22 @@ function normalizeAddress(address: string): string {
 
 function userKey(address: string): string {
   return normalizeAddress(address).toLowerCase();
+}
+
+function isGrantableRole(role: string): role is GrantableRole {
+  return grantableRoles.includes(role.toUpperCase() as GrantableRole);
+}
+
+function requireOperationalAdmin(req: AuthRequest, res: Response): boolean {
+  const roles = req.user?.roles?.length ? req.user.roles : req.user?.role ? [req.user.role] : [];
+  if (!roles.some((role) => ['ADMIN', 'RECALL_AUTHORITY'].includes(role))) {
+    res.status(403).json({
+      success: false,
+      error: { code: 'FORBIDDEN', message: 'Admin or recall authority role is required.' },
+    });
+    return false;
+  }
+  return true;
 }
 
 function createToken(user: User): string {
@@ -308,6 +326,191 @@ router.post('/login-with-signature', async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       error: { code: 'SIGNATURE_LOGIN_FAILED', message: 'Failed to login with signature' },
+    });
+  }
+});
+
+/**
+ * GET /auth/roles/:address
+ * Read roles for a wallet from the active AccessControl contract.
+ */
+router.get('/roles/:address', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireOperationalAdmin(req, res)) return;
+
+    const normalizedAddress = normalizeAddress(req.params.address);
+    const chainRoles = await getOnChainUserRoles(normalizedAddress);
+    res.json({
+      success: true,
+      data: {
+        address: normalizedAddress,
+        roles: chainRoles.roles,
+        primaryRole: chainRoles.primaryRole,
+        hasAdminRole: chainRoles.roles.includes('ADMIN'),
+      },
+    });
+  } catch (error) {
+    Logger.error('Get wallet roles error', error);
+    res.status(400).json({
+      success: false,
+      error: { code: 'ROLE_LOOKUP_FAILED', message: 'Failed to read wallet roles.' },
+    });
+  }
+});
+
+/**
+ * POST /auth/role-requests
+ * Let a logged-in wallet request an operational role.
+ */
+router.post('/role-requests', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { requestedRole, note = '' } = req.body;
+    const normalizedRequestedRole = String(requestedRole || '').toUpperCase();
+    if (!req.user?.address) {
+      return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'User not authenticated' } });
+    }
+    if (!normalizedRequestedRole || !isGrantableRole(normalizedRequestedRole)) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ROLE', message: `requestedRole must be one of: ${grantableRoles.join(', ')}` },
+      });
+    }
+
+    const address = normalizeAddress(req.user.address);
+    const now = Date.now();
+    const existingSnapshot = await db.ref('role-requests').once('value');
+    const existing = Object.values(existingSnapshot.val() || {}) as any[];
+    const duplicate = existing.find((item) => {
+      return (
+        String(item.address || '').toLowerCase() === address.toLowerCase() &&
+        item.requestedRole === normalizedRequestedRole &&
+        item.status === 'PENDING'
+      );
+    });
+
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'ROLE_REQUEST_EXISTS', message: 'A pending request already exists for this wallet and role.' },
+      });
+    }
+
+    const requestRef = db.ref('role-requests').push();
+    const roleRequest = {
+      id: requestRef.key,
+      address,
+      currentRole: req.user.role || 'PUBLIC',
+      requestedRole: normalizedRequestedRole,
+      note: String(note || '').trim(),
+      status: 'PENDING',
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await requestRef.set(roleRequest);
+    res.json({ success: true, data: roleRequest });
+  } catch (error) {
+    Logger.error('Create role request error', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'ROLE_REQUEST_FAILED', message: 'Failed to create role request.' },
+    });
+  }
+});
+
+router.get('/role-requests', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireOperationalAdmin(req, res)) return;
+
+    const snapshot = await db.ref('role-requests').once('value');
+    const requests = Object.values(snapshot.val() || {}) as any[];
+    requests.sort((a, b) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
+    res.json({ success: true, data: requests });
+  } catch (error) {
+    Logger.error('List role requests error', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'ROLE_REQUEST_LIST_FAILED', message: 'Failed to list role requests.' },
+    });
+  }
+});
+
+router.post('/role-requests/:id/approve', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireOperationalAdmin(req, res)) return;
+
+    const requestRef = db.ref(`role-requests/${req.params.id}`);
+    const snapshot = await requestRef.once('value');
+    if (!snapshot.exists()) {
+      return res.status(404).json({ success: false, error: { code: 'ROLE_REQUEST_NOT_FOUND', message: 'Role request not found.' } });
+    }
+
+    const roleRequest = snapshot.val();
+    if (roleRequest.status !== 'PENDING') {
+      return res.status(409).json({ success: false, error: { code: 'ROLE_REQUEST_CLOSED', message: 'Role request is already closed.' } });
+    }
+    if (!isGrantableRole(roleRequest.requestedRole)) {
+      return res.status(400).json({ success: false, error: { code: 'INVALID_ROLE', message: 'Requested role is not grantable.' } });
+    }
+
+    const address = normalizeAddress(roleRequest.address);
+    const txHash = await contractClient.grantUserRole(address, roleRequest.requestedRole, true);
+    const chainRoles = await getOnChainUserRoles(address);
+    const now = Date.now();
+    const userRoles = chainRoles.roles.length ? chainRoles.roles : [roleRequest.requestedRole];
+    const userUpdate = {
+      role: chainRoles.primaryRole || roleRequest.requestedRole,
+      roles: userRoles,
+      updatedAt: now,
+    };
+    await db.ref(`users/${userKey(address)}`).update(userUpdate);
+
+    const updates = {
+      status: 'APPROVED',
+      approvedBy: req.user?.address,
+      txHash,
+      updatedAt: now,
+    };
+    await requestRef.update(updates);
+    res.json({ success: true, data: { ...roleRequest, ...updates, ...userUpdate } });
+  } catch (error: any) {
+    Logger.error('Approve role request error', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'ROLE_REQUEST_APPROVE_FAILED', message: error.message || 'Failed to approve role request.' },
+    });
+  }
+});
+
+router.post('/role-requests/:id/reject', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!requireOperationalAdmin(req, res)) return;
+
+    const requestRef = db.ref(`role-requests/${req.params.id}`);
+    const snapshot = await requestRef.once('value');
+    if (!snapshot.exists()) {
+      return res.status(404).json({ success: false, error: { code: 'ROLE_REQUEST_NOT_FOUND', message: 'Role request not found.' } });
+    }
+
+    const roleRequest = snapshot.val();
+    if (roleRequest.status !== 'PENDING') {
+      return res.status(409).json({ success: false, error: { code: 'ROLE_REQUEST_CLOSED', message: 'Role request is already closed.' } });
+    }
+
+    const now = Date.now();
+    const updates = {
+      status: 'REJECTED',
+      rejectedBy: req.user?.address,
+      rejectionReason: String(req.body?.reason || '').trim(),
+      updatedAt: now,
+    };
+    await requestRef.update(updates);
+    res.json({ success: true, data: { ...roleRequest, ...updates } });
+  } catch (error) {
+    Logger.error('Reject role request error', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'ROLE_REQUEST_REJECT_FAILED', message: 'Failed to reject role request.' },
     });
   }
 });

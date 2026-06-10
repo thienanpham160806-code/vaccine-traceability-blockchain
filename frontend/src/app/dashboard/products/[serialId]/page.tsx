@@ -233,7 +233,7 @@ export default function ProductDetailPage({ params }: PageProps) {
             Chuyển giao
           </Link>
           <Link
-            href={`/dashboard/verify/${encodeURIComponent(product.serialId)}`}
+            href={`/consumer/verify/${encodeURIComponent(product.serialId)}`}
             className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
           >
             Xác minh
@@ -412,8 +412,8 @@ export default function ProductDetailPage({ params }: PageProps) {
         <section className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm">
           <h2 className="text-xl font-bold">QR cho người dùng</h2>
           <p className="mt-1 text-sm text-muted-foreground">Link xác minh công khai cho serial này.</p>
-          <div className="mt-5 flex justify-center rounded-xl border border-zinc-200 bg-white p-5">
-            <QRCodeSVG value={publicUrl} size={180} />
+          <div className="qr-surface mt-5 flex justify-center rounded-xl border p-5">
+            <QRCodeSVG value={publicUrl} size={180} level="H" includeMargin bgColor="#ffffff" fgColor="#000000" />
           </div>
           <p className="mt-4 break-all font-mono text-xs text-muted-foreground">{publicUrl}</p>
           <Link

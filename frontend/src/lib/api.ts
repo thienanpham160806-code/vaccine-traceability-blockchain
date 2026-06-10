@@ -8,13 +8,16 @@ import type {
   ProductDetailResponse,
   ProductListResponse,
   RecallRecord,
+  RoleRequest,
   RiskFlag,
   TransferRecord,
   VerifyResult,
+  WalletRoleInfo,
 } from "./types";
 
 type ApiErrorLike = {
   code?: string;
+  message?: string;
   response?: {
     data?: {
       error?: {
@@ -30,7 +33,15 @@ const productionApiUrl = "https://vaccine-traceability-blockchain.onrender.com";
 
 function resolveApiBaseUrl() {
   const configuredUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (configuredUrl) return configuredUrl;
+  if (configuredUrl) {
+    if (typeof window !== "undefined") {
+      const hostname = window.location.hostname;
+      const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
+      const configuredIsLocalhost = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(configuredUrl);
+      if (configuredIsLocalhost && !isLocalhost) return productionApiUrl;
+    }
+    return configuredUrl;
+  }
 
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
@@ -155,6 +166,8 @@ export const endpoints = {
   demoActors: "/auth/demo-actors",
   authNonce: "/auth/nonce",
   loginWithSignature: "/auth/login-with-signature",
+  roleRequests: "/auth/role-requests",
+  walletRoles: (address: string) => `/auth/roles/${encodeURIComponent(address)}`,
 
   overview: "/dashboard/overview",
   recentActivity: "/dashboard/recent-activity",
@@ -194,15 +207,26 @@ export const endpoints = {
 };
 
 export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
+  if (axios.isAxiosError(err)) {
+    if (err.code === "ECONNABORTED") {
+      return `Yêu cầu đến backend quá thời gian. Hãy kiểm tra backend và RPC: ${apiBaseUrl}.`;
+    }
+    if (!err.response) {
+      return `Không kết nối được backend. Hãy kiểm tra cấu hình NEXT_PUBLIC_API_URL: ${apiBaseUrl}.`;
+    }
+  } else if (err instanceof Error && err.message) {
+    return err.message;
+  }
+
   const error = err as ApiErrorLike;
   if (error?.code === "ECONNABORTED") {
     return `Yêu cầu đến backend quá thời gian. Hãy kiểm tra backend và RPC: ${apiBaseUrl}.`;
   }
   if (!error?.response) {
-    return `Không kết nối được backend. Hãy kiểm tra cấu hình NEXT_PUBLIC_API_URL: ${apiBaseUrl}.`;
+    return error?.message || fallback;
   }
   const code = error.response.data?.error?.code;
-  const message = error.response.data?.error?.message;
+  const message = error.response.data?.error?.message || error.message;
   const details = error.response.data?.error?.details;
   const messages: Record<string, string> = {
     FORBIDDEN: "Bạn không có quyền thực hiện thao tác này.",
@@ -250,6 +274,31 @@ export async function requestAuthNonce(address: string) {
 export async function loginWithSignature(payload: { address: string; signature: string }) {
   const res = await api.post<ApiResponse<LoginResponse>>(endpoints.loginWithSignature, payload);
   return requireApiData(res.data.data, "Login response did not include data.");
+}
+
+export async function getWalletRoles(address: string) {
+  const res = await api.get<ApiResponse<WalletRoleInfo>>(endpoints.walletRoles(address));
+  return requireApiData(res.data.data, "Wallet roles response did not include data.");
+}
+
+export async function createRoleRequest(payload: { requestedRole: string; note?: string }) {
+  const res = await api.post<ApiResponse<RoleRequest>>(endpoints.roleRequests, payload);
+  return requireApiData(res.data.data, "Role request response did not include data.");
+}
+
+export async function getRoleRequests() {
+  const res = await api.get<ApiResponse<RoleRequest[]>>(endpoints.roleRequests);
+  return res.data.data || [];
+}
+
+export async function approveRoleRequest(id: string) {
+  const res = await api.post<ApiResponse<RoleRequest>>(`${endpoints.roleRequests}/${encodeURIComponent(id)}/approve`);
+  return requireApiData(res.data.data, "Role request approve response did not include data.");
+}
+
+export async function rejectRoleRequest(id: string, reason?: string) {
+  const res = await api.post<ApiResponse<RoleRequest>>(`${endpoints.roleRequests}/${encodeURIComponent(id)}/reject`, { reason });
+  return requireApiData(res.data.data, "Role request reject response did not include data.");
 }
 
 export async function getDashboardOverview() {

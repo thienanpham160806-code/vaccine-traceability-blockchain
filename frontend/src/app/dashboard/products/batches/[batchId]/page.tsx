@@ -57,8 +57,8 @@ function QRModal({ serialId, onClose }: { serialId: string; onClose: () => void 
           Serial QR
         </p>
         <p className="mb-4 font-mono text-xs text-zinc-700">{serialId}</p>
-        <div className="flex justify-center">
-          <QRCodeSVG ref={svgRef} value={serialId} size={192} level="H" includeMargin />
+        <div className="qr-surface flex justify-center rounded-xl border p-3">
+          <QRCodeSVG ref={svgRef} value={serialId} size={192} level="H" includeMargin bgColor="#ffffff" fgColor="#000000" />
         </div>
         <button
           onClick={downloadSVG}
@@ -255,7 +255,7 @@ export default function BatchDetailPage({ params }: PageProps) {
                             <QrCode className="h-3 w-3" /> QR
                           </button>
                           <Link
-                            href={`/dashboard/verify/${encodeURIComponent(serial.serialId)}`}
+                            href={`/consumer/verify/${encodeURIComponent(serial.serialId)}`}
                             className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2 py-1 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50"
                           >
                             <ExternalLink className="h-3 w-3" /> {t("Xác minh")}

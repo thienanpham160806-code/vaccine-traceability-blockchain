@@ -79,6 +79,7 @@ export class ContractClient {
   public transferLedger: ethers.Contract | null = null;
   public accessControl: ethers.Contract | null = null;
   private readonly roleNames = [
+    'ADMIN',
     'MANUFACTURER',
     'IMPORTER',
     'DISTRIBUTOR',
@@ -249,6 +250,7 @@ export class ContractClient {
   }
 
   bytes32ToRoleName(roleHash: string): string | null {
+    if (roleHash.toLowerCase() === ethers.ZeroHash.toLowerCase()) return 'ADMIN';
     const normalizedHash = roleHash.toLowerCase();
     return this.roleNames.find((role) => this.roleNameToBytes32(role).toLowerCase() === normalizedHash) || null;
   }
@@ -290,6 +292,39 @@ export class ContractClient {
     const signerAddress = this.getRoleAddress(signerRole);
     const roleHash = this.roleNameToBytes32(requiredRole);
     return this.accessControl.hasRole(roleHash, signerAddress);
+  }
+
+  async grantUserRole(account: string, role: string, setPrimary = true): Promise<string> {
+    if (!this.accessControl) {
+      throw new Error('AccessControl contract not initialized');
+    }
+
+    const normalizedRole = role.toUpperCase();
+    if (normalizedRole === 'ADMIN' || normalizedRole === 'PUBLIC') {
+      throw new Error(`Role cannot be granted from dashboard: ${role}`);
+    }
+
+    const admin = this.accessControl.connect(this.getSigner('admin')) as ethers.Contract;
+    const roleHash = this.roleNameToBytes32(normalizedRole);
+    const hasRole = await this.accessControl.hasRole(roleHash, account);
+    let txHash = '';
+
+    if (!hasRole) {
+      const tx = await admin.grantUserRole(account, roleHash);
+      const receipt = await tx.wait();
+      txHash = receipt?.hash || tx.hash;
+    }
+
+    if (setPrimary) {
+      const primaryRoleHash = await this.accessControl.getPrimaryRole(account);
+      if (String(primaryRoleHash).toLowerCase() !== roleHash.toLowerCase()) {
+        const tx = await admin.setPrimaryRole(account, roleHash);
+        const receipt = await tx.wait();
+        txHash = receipt?.hash || tx.hash || txHash;
+      }
+    }
+
+    return txHash;
   }
 
   /**

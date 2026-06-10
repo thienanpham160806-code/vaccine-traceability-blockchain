@@ -298,6 +298,15 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
   const { language } = useLanguage();
   const text = copy[language];
   const decodedLookup = decodeURIComponent(serialId);
+  const [fromScan] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("from") === "scan";
+  });
+  const [scanReturnHref] = useState(() => {
+    if (typeof window === "undefined") return "/login?scan=1";
+    return new URLSearchParams(window.location.search).get("returnTo") === "dashboard" ? "/dashboard/scan" : "/login?scan=1";
+  });
+  const scanAgainText = language === "en" ? "Scan another code" : "Quét mã khác";
   const [data, setData] = useState<VerifyResult | null>(null);
   const [viewState, setViewState] = useState<ViewState>("loading");
   const [retryId, setRetryId] = useState("");
@@ -381,9 +390,16 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
               </div>
             </div>
 
-            <Link href="/" className="inline-flex text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
-              {text.backHome}
-            </Link>
+            <div className="flex justify-center gap-3">
+              {fromScan ? (
+                <Link href={scanReturnHref} className="inline-flex rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                  {scanAgainText}
+                </Link>
+              ) : null}
+              <Link href="/" className="inline-flex items-center text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
+                {text.backHome}
+              </Link>
+            </div>
           </div>
         </section>
       </VerifyShell>
@@ -442,8 +458,8 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
               >
                 {text.viewAnyway}
               </button>
-              <Link href="/" className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
-                {text.backHome}
+              <Link href={fromScan ? scanReturnHref : "/"} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+                {fromScan ? scanAgainText : text.backHome}
               </Link>
             </div>
           </div>
@@ -513,9 +529,16 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
           <SupplyChainDiagram events={timeline || []} currentOwner={product?.currentOwner} language={language} emptyText={text.noTimeline} />
         </div>
 
-        <Link href="/" className="block text-center text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
-          {text.backHome}
-        </Link>
+        <div className="flex justify-center gap-3">
+          {fromScan ? (
+            <Link href={scanReturnHref} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+              {scanAgainText}
+            </Link>
+          ) : null}
+          <Link href="/" className="inline-flex items-center text-sm text-zinc-500 transition hover:text-blue-600 dark:text-zinc-400 dark:hover:text-blue-300">
+            {text.backHome}
+          </Link>
+        </div>
       </section>
     </VerifyShell>
   );

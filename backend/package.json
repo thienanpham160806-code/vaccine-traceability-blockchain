@@ -10,35 +10,40 @@
     "seed:demo": "ts-node -r tsconfig-paths/register scripts/seed-demo.ts",
     "seed:demo:activate": "ts-node -r tsconfig-paths/register scripts/seed-demo.ts --activate"
   },
-  "keywords": ["blockchain", "vaccine", "traceability"],
+  "keywords": [
+    "blockchain",
+    "vaccine",
+    "traceability"
+  ],
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2",
-    "ethers": "^6.8.0",
-    "dotenv": "^16.3.1",
-    "firebase": "^10.7.0",
-    "firebase-admin": "^12.0.0",
-    "jsonwebtoken": "^9.0.2",
-    "cors": "^2.8.5",
-    "helmet": "^7.1.0",
-    "qrcode": "^1.5.3",
+    "@metamask/connect-evm": "^2.0.0",
     "axios": "^1.6.2",
     "circomlibjs": "^0.1.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.8.0",
+    "express": "^4.18.2",
+    "firebase": "^10.7.0",
+    "firebase-admin": "^12.0.0",
+    "helmet": "^7.1.0",
     "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "qrcode": "^1.5.3",
     "snarkjs": "^0.7.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^20.10.5",
     "@types/qrcode": "^1.5.2",
-    "@types/jsonwebtoken": "^9.0.7",
-    "typescript": "^5.3.3",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
-    "tsconfig-paths": "^4.2.0",
     "tsc-alias": "^1.8.16",
-    "@types/cors": "^2.8.17"
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.3.3"
   }
 }

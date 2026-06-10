@@ -25,9 +25,10 @@ import {
   UserCheck,
   UserCog,
 } from "lucide-react";
-import { getApiErrorMessage, getDemoActors, loginWithSignature, requestAuthNonce } from "@/lib/api";
+import { getApiErrorMessage, getDemoActors, getHealth, loginWithSignature, requestAuthNonce } from "@/lib/api";
 import { demoActors as fallbackActors, loginDemo, setSession } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
+import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { ContactFooter } from "@/components/layout/ContactFooter";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
@@ -54,6 +55,21 @@ const themeOptions = [
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+type EthereumProvider = {
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+};
+
+type MetaMaskDiagnostic = {
+  step: string;
+  detail?: string;
+  status: "pending" | "ok" | "error";
+};
+
+function getInjectedEthereum(): EthereumProvider | null {
+  if (typeof window === "undefined") return null;
+  return (window as unknown as { ethereum?: EthereumProvider }).ethereum ?? null;
 }
 
 function PreferenceControls() {
@@ -170,12 +186,19 @@ export default function LoginPage() {
   const { language } = useLanguage();
   const t = useTranslation();
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>("login");
+  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
+    if (typeof window === "undefined") return "login";
+    return new URLSearchParams(window.location.search).get("scan") === "1" ? "verify" : "login";
+  });
   const [actors, setActors] = useState(fallbackActors);
   const [selectedRole, setSelectedRole] = useState(fallbackActors[0]?.role || "MANUFACTURER");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [verifyMode, setVerifyMode] = useState<VerifyMode>("manual");
+  const [metaMaskDiagnostics, setMetaMaskDiagnostics] = useState<MetaMaskDiagnostic[]>([]);
+  const [verifyMode, setVerifyMode] = useState<VerifyMode>(() => {
+    if (typeof window === "undefined") return "manual";
+    return new URLSearchParams(window.location.search).get("scan") === "1" ? "camera" : "manual";
+  });
   const [serialId, setSerialId] = useState("");
   const [scanError, setScanError] = useState<string | null>(null);
 
@@ -192,29 +215,115 @@ export default function LoginPage() {
 
   const selectedActor = useMemo(() => actors.find((actor) => actor.role === selectedRole) ?? actors[0], [actors, selectedRole]);
 
+  function addMetaMaskDiagnostic(step: string, status: MetaMaskDiagnostic["status"], detail?: string) {
+    const message = detail ? `${step}: ${detail}` : step;
+    if (status === "error") {
+      console.error(`[MetaMask login] ${message}`);
+    } else {
+      console.info(`[MetaMask login] ${message}`);
+    }
+    setMetaMaskDiagnostics((items) => [...items, { step, detail, status }]);
+  }
+
   async function connectWithMetaMask() {
     const metaMaskConnector = connectors.find((connector) => connector.id.toLowerCase().includes("metamask"));
-    if (!metaMaskConnector) throw new Error(t("Không tìm thấy MetaMask."));
+    const injectedEthereum = getInjectedEthereum();
+    addMetaMaskDiagnostic(
+      "Kiểm tra extension",
+      metaMaskConnector || injectedEthereum ? "ok" : "error",
+      `wagmi=${Boolean(metaMaskConnector)}, injected=${Boolean(injectedEthereum)}`
+    );
+    if (!metaMaskConnector && !injectedEthereum) throw new Error("MetaMask extension was not found.");
     if (isConnected) {
+      addMetaMaskDiagnostic("Ngắt kết nối cũ", "pending");
       disconnect();
       await new Promise((resolve) => window.setTimeout(resolve, 150));
+      addMetaMaskDiagnostic("Ngắt kết nối cũ", "ok");
     }
-    const result = await connectAsync({ connector: metaMaskConnector });
-    return result.accounts[0];
+
+    if (metaMaskConnector) {
+      try {
+        addMetaMaskDiagnostic("Kết nối bằng wagmi connector", "pending");
+        const result = await connectAsync({ connector: metaMaskConnector });
+        const account = result.accounts[0];
+        if (account) {
+          addMetaMaskDiagnostic("Kết nối bằng wagmi connector", "ok", account);
+          return account;
+        }
+      } catch (err) {
+        addMetaMaskDiagnostic("Kết nối bằng wagmi connector", "error", err instanceof Error ? err.message : String(err));
+        if (!injectedEthereum) throw err;
+      }
+    }
+
+    if (!injectedEthereum) throw new Error("MetaMask extension was not found.");
+    addMetaMaskDiagnostic("Fallback window.ethereum", "pending");
+    const accounts = await injectedEthereum.request({ method: "eth_requestAccounts" });
+    const account = Array.isArray(accounts) ? String(accounts[0] || "") : "";
+    if (!account) throw new Error("MetaMask did not return a wallet address.");
+    addMetaMaskDiagnostic("Fallback window.ethereum", "ok", account);
+    return account;
+  }
+
+  async function signMetaMaskMessage(walletAddress: string, message: string) {
+    try {
+      addMetaMaskDiagnostic("Ký bằng wagmi", "pending");
+      const signature = await signMessageAsync({ message });
+      addMetaMaskDiagnostic("Ký bằng wagmi", "ok");
+      return signature;
+    } catch (err) {
+      addMetaMaskDiagnostic("Ký bằng wagmi", "error", err instanceof Error ? err.message : String(err));
+    }
+
+    const injectedEthereum = getInjectedEthereum();
+    if (!injectedEthereum) throw new Error("MetaMask extension was not found for signing.");
+
+    try {
+      addMetaMaskDiagnostic("Fallback personal_sign", "pending");
+      const signature = await injectedEthereum.request({
+        method: "personal_sign",
+        params: [message, walletAddress],
+      });
+      if (typeof signature !== "string" || !signature) throw new Error("MetaMask did not return a signature.");
+      addMetaMaskDiagnostic("Fallback personal_sign", "ok");
+      return signature;
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      addMetaMaskDiagnostic("Fallback personal_sign", "error", detail);
+      throw new Error(detail || "MetaMask signature was rejected or failed.");
+    }
   }
 
   async function handleMetaMask() {
     setError(null);
+    setMetaMaskDiagnostics([]);
     setIsLoading(true);
     try {
+      addMetaMaskDiagnostic("Bắt đầu đăng nhập MetaMask", "pending");
       const walletAddress = await connectWithMetaMask();
+      addMetaMaskDiagnostic("Ví đã kết nối", "ok", walletAddress);
+      try {
+        addMetaMaskDiagnostic("Kiểm tra backend /health", "pending");
+        await getHealth();
+        addMetaMaskDiagnostic("Kiểm tra backend /health", "ok");
+      } catch {
+        addMetaMaskDiagnostic("Kiểm tra backend /health", "error");
+        throw new Error("Backend is not reachable. Check NEXT_PUBLIC_API_URL or backend deployment.");
+      }
+      addMetaMaskDiagnostic("Lấy nonce từ backend", "pending");
       const nonce = await requestAuthNonce(walletAddress);
-      if (!nonce?.message) throw new Error(t("Backend không trả về nội dung ký MetaMask."));
-      const signature = await signMessageAsync({ message: nonce.message });
+      if (!nonce?.message) throw new Error("Backend did not return a MetaMask signing message.");
+      addMetaMaskDiagnostic("Lấy nonce từ backend", "ok");
+      addMetaMaskDiagnostic("Yêu cầu ký message", "pending");
+      const signature = await signMetaMaskMessage(walletAddress, nonce.message);
+      addMetaMaskDiagnostic("Yêu cầu ký message", "ok");
+      addMetaMaskDiagnostic("Xác thực chữ ký với backend", "pending");
       const { token, user } = await loginWithSignature({ address: walletAddress, signature });
+      addMetaMaskDiagnostic("Xác thực chữ ký với backend", "ok", user.role);
       setSession(token, user, "wallet");
-      router.push("/dashboard");
+      router.push(user.role === "PUBLIC" ? "/dashboard/role-request" : "/dashboard");
     } catch (err: unknown) {
+      addMetaMaskDiagnostic("Đăng nhập MetaMask thất bại", "error", err instanceof Error ? err.message : String(err));
       setError(getApiErrorMessage(err, err instanceof Error ? err.message : t("Đăng nhập MetaMask thất bại.")));
     } finally {
       setIsLoading(false);
@@ -239,8 +348,13 @@ export default function LoginPage() {
   }
 
   function goVerify(value = serialId) {
-    const trimmed = value.trim();
-    if (trimmed) router.push(`/consumer/verify/${encodeURIComponent(trimmed)}`);
+    const parsed = parseVaxiTrustQr(value);
+    if (!parsed.valid) {
+      setScanError(parsed.reason);
+      return;
+    }
+    setScanError(null);
+    router.push(verifyHrefFromQr(parsed, "consumer"));
   }
 
   return (
@@ -303,6 +417,25 @@ export default function LoginPage() {
               <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 font-mono text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-400">{selectedActor?.address || t("Chưa có ví demo")}</div>
 
               {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">{error}</p> : null}
+
+              {metaMaskDiagnostics.length > 0 ? (
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+                  <p className="mb-1 font-bold text-zinc-800 dark:text-zinc-100">{t("Chẩn đoán MetaMask")}</p>
+                  <ul className="space-y-1">
+                    {metaMaskDiagnostics.map((item, index) => (
+                      <li key={`${item.step}-${index}`} className="flex gap-2">
+                        <span className={item.status === "ok" ? "text-emerald-600 dark:text-emerald-300" : item.status === "error" ? "text-red-600 dark:text-red-300" : "text-blue-600 dark:text-blue-300"}>
+                          {item.status === "ok" ? "OK" : item.status === "error" ? "ERR" : "..."}
+                        </span>
+                        <span>
+                          {item.step}
+                          {item.detail ? <span className="break-all text-zinc-500 dark:text-zinc-400"> - {item.detail}</span> : null}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               <button type="button" onClick={handleDemoLogin} disabled={isLoading || !selectedActor} className="flex min-h-12 w-full items-center justify-center rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-50">
                 {isLoading ? t("Đang đăng nhập...") : t("Đăng nhập bằng ví demo")}

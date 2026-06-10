@@ -171,4 +171,16 @@
       radial-gradient(50% 50% at 33% 32%, rgba(46, 125, 255, 0.03) 0%, rgba(46, 125, 255, 0) 40%),
       #ffffff;
   }
+
+  .qr-surface {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: #e4e4e7 !important;
+  }
+
+  .dark .qr-surface {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    border-color: #d4d4d8 !important;
+  }
 }

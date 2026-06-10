@@ -12,15 +12,19 @@ import {
   LogOut,
   Monitor,
   Moon,
+  QrCode,
   RotateCcw,
   Search,
   Settings,
   ShieldAlert,
   Sun,
   Truck,
+  UserCheck,
+  UserCog,
 } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
+import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
@@ -60,7 +64,8 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
   const t = useTranslation();
-  const [serialId, setSerialId] = useState("");
+  const [lookupValue, setLookupValue] = useState("");
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const settingsRef = useRef<HTMLDivElement | null>(null);
@@ -76,16 +81,23 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
 
   const isActive = (href: string) => (href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href));
 
-  const goVerify = () => {
-    if (!serialId.trim()) return;
-    onNavigate?.();
-    router.push(`/dashboard/verify/${encodeURIComponent(serialId.trim())}`);
-  };
-
   const logout = () => {
     clearSession();
     onNavigate?.();
     router.push("/login");
+  };
+
+  const goLookup = () => {
+    const parsed = parseVaxiTrustQr(lookupValue);
+    if (!parsed.valid) {
+      setLookupError(parsed.reason);
+      return;
+    }
+
+    setLookupError(null);
+    onNavigate?.();
+    router.push(verifyHrefFromQr(parsed, "consumer", { returnTo: "dashboard" }));
+    setLookupValue("");
   };
 
   const visibleMenuItems = menuItems.filter((item) => {
@@ -93,6 +105,11 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
     if (item.href === "/dashboard/recall") return role === "RECALL_AUTHORITY" || role === "ADMIN";
     return true;
   });
+  const extraMenuItems = [
+    ...(user?.role === "PUBLIC" ? [{ title: "Yêu cầu role", href: "/dashboard/role-request", icon: UserCheck }] : []),
+    ...(user?.role === "ADMIN" || user?.roles?.includes("ADMIN") ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
+    ...(user?.role === "RECALL_AUTHORITY" || user?.roles?.includes("RECALL_AUTHORITY") ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
+  ];
 
   return (
     <aside className={`${mobile ? "flex h-full w-72" : "hidden h-screen w-64 shrink-0 lg:flex"} min-h-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950`}>
@@ -109,6 +126,46 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
           </div>
         </div>
       ) : null}
+
+      <div className="mx-3 mt-4 rounded-xl border border-blue-200 bg-blue-50/80 p-3 shadow-sm dark:border-blue-500/20 dark:bg-blue-500/10">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-blue-700 dark:text-blue-200">{t("Quét / Tra cứu")}</p>
+          <button
+            type="button"
+            onClick={() => {
+              onNavigate?.();
+              router.push("/dashboard/scan");
+            }}
+            className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600 text-white hover:bg-blue-700"
+            aria-label={t("Quét QR")}
+            title={t("Quét QR")}
+          >
+            <QrCode className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex gap-1.5">
+          <input
+            className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-2 py-2 font-mono text-xs text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:ring-blue-500/20"
+            value={lookupValue}
+            onChange={(event) => {
+              setLookupValue(event.target.value);
+              setLookupError(null);
+            }}
+            onKeyDown={(event) => event.key === "Enter" && goLookup()}
+            placeholder="VCN-DEMO-001"
+          />
+          <button
+            onClick={goLookup}
+            disabled={!lookupValue.trim()}
+            className="flex h-10 w-10 items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-40"
+            aria-label={t("Tra cứu")}
+            type="button"
+          >
+            <Search className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        {lookupError ? <p className="mt-2 text-xs font-semibold text-red-700 dark:text-red-200">{lookupError}</p> : null}
+      </div>
 
       <nav className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-3 pt-4">
         {visibleMenuItems.map((item) => {
@@ -128,23 +185,24 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
             </Link>
           );
         })}
+        {extraMenuItems.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(item.href);
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              onClick={onNavigate}
+              className={`group flex min-h-11 items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
+                active ? "bg-blue-600/15 text-blue-400 shadow-[inset_2px_0_0_#3b82f6]" : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800/60 dark:hover:text-zinc-100"
+              }`}
+            >
+              <Icon className={`h-4 w-4 ${active ? "text-blue-400" : "text-zinc-500"}`} />
+              {t(item.title)}
+            </Link>
+          );
+        })}
       </nav>
-
-      <div className="mx-3 mb-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-950/80">
-        <p className="mb-2 font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{t("Tra cứu serial")}</p>
-        <div className="flex gap-1.5">
-          <input
-            className="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-800 px-2 py-2 text-xs text-white placeholder-zinc-500 outline-none focus:border-blue-500"
-            value={serialId}
-            onChange={(event) => setSerialId(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && goVerify()}
-            placeholder="VCN-DEMO-001"
-          />
-          <button onClick={goVerify} className="flex h-11 w-11 items-center justify-center rounded-md bg-blue-600 text-white hover:bg-blue-700" aria-label={t("Xác minh serial")}>
-            <Search className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
 
       <div className="space-y-1 border-t border-zinc-200 p-3 dark:border-zinc-800">
         <a className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-500 transition hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-blue-400" href="mailto:support@vaxitrust.local">

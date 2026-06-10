@@ -62,6 +62,9 @@ const pageTitles: Record<string, PageMeta> = {
       { title: "Quét chuyển giao" },
     ],
   },
+  "/dashboard/scan": { title: "Quét QR", sub: "Tra cứu QR và serial" },
+  "/dashboard/role-request": { title: "Yêu cầu role", sub: "Đăng ký quyền MetaMask" },
+  "/dashboard/admin/roles": { title: "Duyệt role", sub: "Quản trị quyền ví MetaMask" },
 };
 
 function withDefaultBreadcrumb(meta: PageMeta): PageMeta {

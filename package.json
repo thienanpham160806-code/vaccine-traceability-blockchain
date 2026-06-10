@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@metamask/connect-evm": "^2.0.0"
+  }
+}

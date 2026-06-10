@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { getApiErrorMessage, verifyProduct } from "@/lib/api";
 import type { VerifyResult } from "@/lib/types";
@@ -12,6 +13,10 @@ interface PageProps {
 
 export default function VerifyPage({ params }: PageProps) {
   const { serialId } = use(params);
+  const [fromScan] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("from") === "scan";
+  });
   const [result, setResult] = useState<VerifyResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,9 +34,14 @@ export default function VerifyPage({ params }: PageProps) {
       <div>
         <h1 className="text-3xl font-bold">Verify Serial</h1>
         <p className="text-muted-foreground">{serialId}</p>
+        {fromScan ? (
+          <Link href="/dashboard/scan" className="mt-3 inline-flex rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700">
+            Quét mã khác
+          </Link>
+        ) : null}
       </div>
 
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
         <h2 className="text-xl font-bold">{result.product.productName}</h2>
         <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <p><span className="font-semibold">Batch:</span> {result.product.batchId}</p>
@@ -43,7 +53,7 @@ export default function VerifyPage({ params }: PageProps) {
         </div>
       </div>
 
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
         <h2 className="text-xl font-bold">Timeline</h2>
         <div className="mt-4 space-y-3">
           {result.timeline.map((item) => (
