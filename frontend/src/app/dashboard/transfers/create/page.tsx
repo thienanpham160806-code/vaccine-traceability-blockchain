@@ -69,6 +69,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 const nonTransferableStatuses = new Set(["RECALLED", "FLAGGED", "IN_TRANSIT", "PENDING_DELIVERY", "INVALID"]);
+const hardBlockedStatuses = new Set(["RECALLED", "FLAGGED", "INVALID"]);
 
 function normalizeAddress(address?: string) {
   return String(address || "").trim().toLowerCase();
@@ -81,6 +82,33 @@ function canRoleInitiateTransfer(role?: string) {
 function isProductTransferable(product: Product, ownerAddress?: string) {
   if (!product.serialId || nonTransferableStatuses.has(String(product.status))) return false;
   return normalizeAddress(product.currentOwner) === normalizeAddress(ownerAddress);
+}
+
+function getLatestConfirmedOwners(transfers: TransferRecord[]) {
+  const owners = new Map<string, { address: string; timestamp: number }>();
+
+  transfers.forEach((transfer) => {
+    if (transfer.status !== "CONFIRMED" || !transfer.serialId || !transfer.toAddress) return;
+    const timestamp = transfer.confirmedAt || transfer.updatedAt || transfer.createdAt || 0;
+    const current = owners.get(transfer.serialId);
+    if (!current || timestamp >= current.timestamp) {
+      owners.set(transfer.serialId, {
+        address: transfer.toAddress,
+        timestamp,
+      });
+    }
+  });
+
+  return owners;
+}
+
+function getPendingSerials(transfers: TransferRecord[]) {
+  return new Set(
+    transfers
+      .filter((transfer) => transfer.status === "PENDING")
+      .map((transfer) => transfer.serialId)
+      .filter(Boolean)
+  );
 }
 
 function groupProductsByBatch(products: Product[]) {
@@ -343,6 +371,12 @@ export default function ScanTransferPage() {
     },
   });
 
+  const { data: ownershipTransfers = [] } = useQuery<TransferRecord[]>({
+    queryKey: ["transferable-products", "ownership-transfers"],
+    queryFn: getTransfers,
+    staleTime: 20_000,
+  });
+
   useEffect(() => {
     const storedUser = getStoredUser();
     setUser(storedUser);
@@ -362,9 +396,20 @@ export default function ScanTransferPage() {
   }, [user]);
 
   const ownerAddress = user?.role === "ADMIN" ? actorAddressByRole.get(fromRole) : user?.address;
+  const confirmedOwnerBySerial = useMemo(() => getLatestConfirmedOwners(ownershipTransfers), [ownershipTransfers]);
+  const pendingTransferSerials = useMemo(() => getPendingSerials(ownershipTransfers), [ownershipTransfers]);
   const transferableProducts = useMemo(() => {
-    return products.filter((product) => isProductTransferable(product, ownerAddress));
-  }, [ownerAddress, products]);
+    const normalizedOwner = normalizeAddress(ownerAddress);
+
+    return products.filter((product) => {
+      if (!product.serialId || pendingTransferSerials.has(product.serialId)) return false;
+      if (hardBlockedStatuses.has(String(product.status))) return false;
+      if (isProductTransferable(product, ownerAddress)) return true;
+
+      const inferredOwner = confirmedOwnerBySerial.get(product.serialId);
+      return Boolean(inferredOwner && normalizeAddress(inferredOwner.address) === normalizedOwner);
+    });
+  }, [confirmedOwnerBySerial, ownerAddress, pendingTransferSerials, products]);
 
   const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts), [transferableProducts]);
 
