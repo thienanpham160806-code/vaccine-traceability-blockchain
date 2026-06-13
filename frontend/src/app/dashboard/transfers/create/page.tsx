@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
-import { confirmTransfer, getApiErrorMessage, getDemoActors, getProducts, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferCreate } from "@/lib/api";
+import { confirmTransfer, getApiErrorMessage, getDemoActors, getProducts, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
@@ -143,6 +143,8 @@ function TransferList() {
   const tLabel = useTranslation();
   const { language } = useLanguage();
   const qc = useQueryClient();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
   const { data: allTransfers = [], isLoading } = useQuery<TransferRecord[]>({
     queryKey: ["transfers"],
     queryFn: getTransfers,
@@ -176,7 +178,21 @@ function TransferList() {
         return;
       }
 
-      await confirmTransfer(parsed.data.serialId);
+      if (storedUser?.authMode === "wallet") {
+        if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
+        const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
+        if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ xác nhận."));
+        const txHash = await writeContractAsync({
+          address: getTransferLedgerAddress(),
+          abi: transferLedgerAbi,
+          functionName: "confirmTransfer",
+          args: [toBytes32(transfer.serialId), toBytes32(transfer.toLocationHash || `to:${transfer.toAddress}`)],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        await syncWalletTransferConfirm(parsed.data.serialId, txHash);
+      } else {
+        await confirmTransfer(parsed.data.serialId);
+      }
       qc.invalidateQueries({ queryKey: ["transfers"] });
   } catch (err: unknown) {
       setError(getApiErrorMessage(err, tLabel("Xác nhận thất bại.")));
@@ -197,7 +213,21 @@ function TransferList() {
         return;
       }
 
-      await rejectTransfer(parsed.data.serialId, parsed.data.rejectionReason);
+      if (storedUser?.authMode === "wallet") {
+        if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
+        const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
+        if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ từ chối."));
+        const txHash = await writeContractAsync({
+          address: getTransferLedgerAddress(),
+          abi: transferLedgerAbi,
+          functionName: "rejectTransfer",
+          args: [toBytes32(transfer.serialId), toBytes32(parsed.data.rejectionReason)],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        await syncWalletTransferReject(parsed.data.serialId, parsed.data.rejectionReason, txHash);
+      } else {
+        await rejectTransfer(parsed.data.serialId, parsed.data.rejectionReason);
+      }
       setRejectingId(null);
       setRejectReason("");
       qc.invalidateQueries({ queryKey: ["transfers"] });

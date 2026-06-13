@@ -506,6 +506,19 @@ export class ContractClient {
     }
   }
 
+  async getCurrentOwner(serialId: string): Promise<string> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    try {
+      return await this.productRegistry.getCurrentOwner(serialId);
+    } catch (error) {
+      Logger.error('Failed to get current owner', error);
+      throw error;
+    }
+  }
+
   /**
    * Create transfer request on blockchain
    */

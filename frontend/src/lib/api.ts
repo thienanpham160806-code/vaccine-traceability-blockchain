@@ -204,6 +204,7 @@ export const endpoints = {
   addDisputeEvidence: (id: string) => `/disputes/${id}/evidence`,
 
   recalls: "/recalls",
+  syncWalletRecall: "/recalls/sync-wallet",
 };
 
 export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
@@ -571,6 +572,11 @@ export async function getRecalls() {
 export async function createRecall(payload: { batchHash: string; reason: string; serials: string[] }) {
   const res = await api.post<ApiResponse<RecallRecord>>(endpoints.recalls, payload);
   return requireApiData(res.data.data, "Create recall response did not include data.");
+}
+
+export async function syncWalletRecall(payload: { batchHash: string; reason: string; serials: string[]; txHash: string }) {
+  const res = await api.post<ApiResponse<RecallRecord>>(endpoints.syncWalletRecall, payload);
+  return requireApiData(res.data.data, "Wallet recall sync response did not include data.");
 }
 
 export async function getDisputes() {

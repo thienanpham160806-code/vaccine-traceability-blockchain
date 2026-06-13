@@ -39,7 +39,21 @@ function toBytes32(value?: string): string {
 }
 
 function getErrorMessage(error: any, fallback: string): string {
-  return error?.shortMessage || error?.reason || error?.message || fallback;
+  const raw =
+    error?.shortMessage ||
+    error?.reason ||
+    error?.revert?.args?.[0] ||
+    error?.error?.reason ||
+    error?.error?.message ||
+    error?.info?.error?.message ||
+    error?.message ||
+    fallback;
+
+  if (typeof raw !== 'string') return fallback;
+  if (/missing revert data/i.test(raw)) {
+    return `${fallback}. Smart contract reverted before returning a reason. Check that the selected wallet is the on-chain owner/receiver and that the product is not pending, flagged, or recalled.`;
+  }
+  return raw;
 }
 
 function httpError(statusCode: number, code: string, message: string): Error & { statusCode: number; code: string } {
@@ -79,6 +93,11 @@ function isAllowedTransferRoute(fromRole: string, toRole: string): boolean {
 function productRegistryStatusToProductStatus(status: number): TransferRecord['status'] | 'REGISTERED' | 'VERIFIED' | 'IN_TRANSIT' | 'DELIVERED' | 'FLAGGED' | 'RECALLED' {
   const statuses = ['REGISTERED', 'VERIFIED', 'IN_TRANSIT', 'DELIVERED', 'FLAGGED', 'RECALLED'] as const;
   return statuses[status] || 'VERIFIED';
+}
+
+function canCreateOnChainTransfer(status: number): boolean {
+  // ProductRegistry.markInTransit only accepts VERIFIED or DELIVERED.
+  return status === 1 || status === 3;
 }
 
 async function resolvePendingTransfer(serialId: string, serialHash: string): Promise<[string, TransferRecord] | null> {
@@ -319,6 +338,45 @@ router.post(
     }
 
     const senderAddress = contractClient.getRoleAddress(fromRole);
+    const [currentOwner, statusBefore, onChainPending] = await Promise.all([
+      contractClient.getCurrentOwner(serialHash),
+      contractClient.getProductStatus(serialHash),
+      contractClient.getPendingTransfer(serialHash),
+    ]);
+
+    if (onChainPending.exists) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'PENDING_TRANSFER_EXISTS_ON_CHAIN',
+          message: `Serial ${serialId} already has a pending on-chain transfer. Confirm or reject that transfer before creating a new one.`,
+        },
+        timestamp: Date.now(),
+      });
+    }
+
+    if (!sameHex(currentOwner, senderAddress)) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'NOT_CURRENT_OWNER_ON_CHAIN',
+          message: `Role ${fromRole} cannot transfer ${serialId} because its signer ${senderAddress} is not the current on-chain owner ${currentOwner}. Log in with the current owner role/wallet or sync product ownership first.`,
+        },
+        timestamp: Date.now(),
+      });
+    }
+
+    if (!canCreateOnChainTransfer(Number(statusBefore))) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'PRODUCT_STATUS_NOT_TRANSFERABLE',
+          message: `Product ${serialId} cannot be transferred from current on-chain status ${productRegistryStatusToProductStatus(Number(statusBefore))}.`,
+        },
+        timestamp: Date.now(),
+      });
+    }
+
     const fromLoc = toBytes32(fromLocationHash || (fromLocation ? `location:${fromLocation}` : `from:${senderAddress}`));
     const toLoc = toBytes32(toLocationHash || `to:${receiverAddress}`);
     const txHash = await contractClient.createTransferRequest(

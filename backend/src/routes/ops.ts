@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import { ethers } from 'ethers';
 import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { CryptoUtils } from '../utils/crypto';
@@ -6,9 +7,120 @@ import { Logger } from '../utils/logger';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 
 const router = Router();
+const txHashPattern = /^0x[a-fA-F0-9]{64}$/;
+const productRegistryEvents = new ethers.Interface([
+  'event BatchRecalled(bytes32 indexed batchHash, bytes32 indexed reasonHash, uint256 totalProducts)',
+]);
 
 function toBytes32(value: string): string {
   return CryptoUtils.isValidHash(value) ? value : CryptoUtils.keccak256(value);
+}
+
+function sameHex(left?: string, right?: string): boolean {
+  return String(left || '').toLowerCase() === String(right || '').toLowerCase();
+}
+
+function getErrorMessage(error: any, fallback: string): string {
+  const raw =
+    error?.shortMessage ||
+    error?.reason ||
+    error?.revert?.args?.[0] ||
+    error?.error?.reason ||
+    error?.error?.message ||
+    error?.info?.error?.message ||
+    error?.message ||
+    fallback;
+
+  if (typeof raw !== 'string') return fallback;
+  if (/missing revert data/i.test(raw)) {
+    return `${fallback}. Smart contract rejected the recall before returning a reason. Check that the signer has RECALL_AUTHORITY and that the batch exists on-chain and has not been recalled.`;
+  }
+  return raw;
+}
+
+async function requireRecallReceipt(txHash: string) {
+  if (!txHashPattern.test(txHash)) {
+    const error: any = new Error('Invalid transaction hash');
+    error.statusCode = 400;
+    error.code = 'INVALID_TX_HASH';
+    throw error;
+  }
+
+  const receipt = await contractClient.getProvider().getTransactionReceipt(txHash);
+  if (!receipt || receipt.status !== 1) {
+    const error: any = new Error('Transaction is not confirmed successfully on-chain');
+    error.statusCode = 400;
+    error.code = 'TX_NOT_CONFIRMED';
+    throw error;
+  }
+
+  if (
+    contractClient.productRegistry?.target &&
+    receipt.to &&
+    receipt.to.toLowerCase() !== String(contractClient.productRegistry.target).toLowerCase()
+  ) {
+    const error: any = new Error('Transaction target does not match the active ProductRegistry contract');
+    error.statusCode = 400;
+    error.code = 'TX_CONTRACT_MISMATCH';
+    throw error;
+  }
+
+  return receipt;
+}
+
+function requireBatchRecalledEvent(receipt: any) {
+  for (const log of receipt.logs || []) {
+    try {
+      const parsed = productRegistryEvents.parseLog(log);
+      if (parsed?.name === 'BatchRecalled') {
+        return parsed;
+      }
+    } catch {
+      // Ignore logs emitted by other contracts.
+    }
+  }
+
+  const error: any = new Error('Transaction did not emit BatchRecalled');
+  error.statusCode = 400;
+  error.code = 'TX_EVENT_MISMATCH';
+  throw error;
+}
+
+async function writeRecallRecord(params: {
+  batchHash: string;
+  reason: string;
+  reasonHash: string;
+  serials: string[];
+  txHash: string;
+  authorityAddress?: string;
+}) {
+  const serialHashes = params.serials.map((serial) => toBytes32(serial));
+  const now = Date.now();
+  const recall = {
+    id: params.batchHash,
+    batchHash: params.batchHash,
+    reason: params.reason,
+    reasonHash: params.reasonHash,
+    authorityAddress: params.authorityAddress || contractClient.getRoleAddress('RECALL_AUTHORITY'),
+    serialsAffected: serialHashes.length,
+    txHash: params.txHash,
+    createdAt: now,
+  };
+
+  const updates: Record<string, unknown> = {
+    [`recalls/${params.batchHash}`]: recall,
+    [`batches/${params.batchHash}/recalledAt`]: now,
+    [`batches/${params.batchHash}/updatedAt`]: now,
+  };
+
+  serialHashes.forEach((serialHash) => {
+    updates[`products/${serialHash}/status`] = 'RECALLED';
+    updates[`products/${serialHash}/riskLevel`] = 'CRITICAL';
+    updates[`products/${serialHash}/updatedAt`] = now;
+  });
+
+  await db.ref().update(updates);
+  return recall;
 }
 
 router.get('/risk-flags', async (_req: Request, res: Response) => {
@@ -96,37 +208,71 @@ router.post('/recalls', verifyToken, requireRole(['RECALL_AUTHORITY', 'ADMIN']),
 
     const normalizedBatchHash = toBytes32(batchHash);
     const reasonHash = toBytes32(reason);
-    const serialHashes = serials.map((serial: string) => toBytes32(serial));
     const txHash = await contractClient.recallBatch(normalizedBatchHash, reasonHash, 'RECALL_AUTHORITY');
-    const now = Date.now();
-    const recall = {
-      id: normalizedBatchHash,
+    const recall = await writeRecallRecord({
       batchHash: normalizedBatchHash,
       reason,
       reasonHash,
-      authorityAddress: req.user?.address || contractClient.getRoleAddress('RECALL_AUTHORITY'),
-      serialsAffected: serialHashes.length,
+      serials,
       txHash,
-      createdAt: now,
-    };
-
-    const updates: Record<string, unknown> = {
-      [`recalls/${normalizedBatchHash}`]: recall,
-      [`batches/${normalizedBatchHash}/recalledAt`]: now,
-      [`batches/${normalizedBatchHash}/updatedAt`]: now,
-    };
-
-    serialHashes.forEach((serialHash) => {
-      updates[`products/${serialHash}/status`] = 'RECALLED';
-      updates[`products/${serialHash}/riskLevel`] = 'CRITICAL';
-      updates[`products/${serialHash}/updatedAt`] = now;
+      authorityAddress: req.user?.address,
     });
-
-    await db.ref().update(updates);
     res.json({ success: true, data: recall });
   } catch (error) {
     Logger.error('Create recall error', error);
-    res.status(500).json({ success: false, error: { code: 'RECALL_ERROR', message: 'Failed to recall batch' } });
+    res.status(500).json({ success: false, error: { code: 'RECALL_ERROR', message: getErrorMessage(error, 'Failed to recall batch') } });
+  }
+});
+
+router.post('/recalls/sync-wallet', verifyToken, requireRole(['RECALL_AUTHORITY', 'ADMIN']), async (req: AuthRequest, res: Response) => {
+  try {
+    const { batchHash, reason, serials = [], txHash } = req.body;
+
+    if (!batchHash || !reason || !txHash || !Array.isArray(serials) || serials.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          code: 'MISSING_FIELDS',
+          message: 'Missing required fields: batchHash, reason, serials[], txHash',
+        },
+      });
+    }
+
+    const normalizedBatchHash = toBytes32(batchHash);
+    const reasonHash = toBytes32(reason);
+    const receipt = await requireRecallReceipt(txHash);
+    const event = requireBatchRecalledEvent(receipt);
+
+    if (!sameHex(String(event.args.batchHash), normalizedBatchHash)) {
+      const error: any = new Error('Transaction batchHash does not match request payload');
+      error.statusCode = 400;
+      error.code = 'TX_BATCH_MISMATCH';
+      throw error;
+    }
+
+    if (!sameHex(String(event.args.reasonHash), reasonHash)) {
+      const error: any = new Error('Transaction reasonHash does not match request payload');
+      error.statusCode = 400;
+      error.code = 'TX_REASON_MISMATCH';
+      throw error;
+    }
+
+    const recall = await writeRecallRecord({
+      batchHash: normalizedBatchHash,
+      reason,
+      reasonHash,
+      serials,
+      txHash,
+      authorityAddress: req.user?.address,
+    });
+
+    res.json({ success: true, data: recall });
+  } catch (error: any) {
+    Logger.error('Sync wallet recall error', error);
+    res.status(error.statusCode || 500).json({
+      success: false,
+      error: { code: error.code || 'WALLET_RECALL_SYNC_ERROR', message: getErrorMessage(error, 'Failed to sync wallet recall') },
+    });
   }
 });
 
