@@ -85,15 +85,16 @@ function isProductTransferable(product: Product, ownerAddress?: string) {
 }
 
 function getLatestConfirmedOwners(transfers: TransferRecord[]) {
-  const owners = new Map<string, { address: string; timestamp: number }>();
+  const owners = new Map<string, { address: string; role: string; timestamp: number }>();
 
   transfers.forEach((transfer) => {
-    if (transfer.status !== "CONFIRMED" || !transfer.serialId || !transfer.toAddress) return;
+    if (transfer.status !== "CONFIRMED" || !transfer.serialId) return;
     const timestamp = transfer.confirmedAt || transfer.updatedAt || transfer.createdAt || 0;
     const current = owners.get(transfer.serialId);
     if (!current || timestamp >= current.timestamp) {
       owners.set(transfer.serialId, {
-        address: transfer.toAddress,
+        address: transfer.toAddress || "",
+        role: transfer.toRole || "",
         timestamp,
       });
     }
@@ -102,10 +103,10 @@ function getLatestConfirmedOwners(transfers: TransferRecord[]) {
   return owners;
 }
 
-function getPendingSerials(transfers: TransferRecord[]) {
+function getPendingOutgoingSerials(transfers: TransferRecord[], role: string) {
   return new Set(
     transfers
-      .filter((transfer) => transfer.status === "PENDING")
+      .filter((transfer) => transfer.status === "PENDING" && transfer.fromRole === role)
       .map((transfer) => transfer.serialId)
       .filter(Boolean)
   );
@@ -397,19 +398,25 @@ export default function ScanTransferPage() {
 
   const ownerAddress = user?.role === "ADMIN" ? actorAddressByRole.get(fromRole) : user?.address;
   const confirmedOwnerBySerial = useMemo(() => getLatestConfirmedOwners(ownershipTransfers), [ownershipTransfers]);
-  const pendingTransferSerials = useMemo(() => getPendingSerials(ownershipTransfers), [ownershipTransfers]);
+  const pendingOutgoingSerials = useMemo(
+    () => getPendingOutgoingSerials(ownershipTransfers, fromRole),
+    [fromRole, ownershipTransfers]
+  );
   const transferableProducts = useMemo(() => {
     const normalizedOwner = normalizeAddress(ownerAddress);
 
     return products.filter((product) => {
-      if (!product.serialId || pendingTransferSerials.has(product.serialId)) return false;
+      if (!product.serialId || pendingOutgoingSerials.has(product.serialId)) return false;
       if (hardBlockedStatuses.has(String(product.status))) return false;
       if (isProductTransferable(product, ownerAddress)) return true;
 
       const inferredOwner = confirmedOwnerBySerial.get(product.serialId);
-      return Boolean(inferredOwner && normalizeAddress(inferredOwner.address) === normalizedOwner);
+      return Boolean(
+        inferredOwner &&
+          (inferredOwner.role === fromRole || normalizeAddress(inferredOwner.address) === normalizedOwner)
+      );
     });
-  }, [confirmedOwnerBySerial, ownerAddress, pendingTransferSerials, products]);
+  }, [confirmedOwnerBySerial, fromRole, ownerAddress, pendingOutgoingSerials, products]);
 
   const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts), [transferableProducts]);
 
