@@ -120,6 +120,11 @@ const themeOptions = [
   { value: "system", icon: Monitor, labelKey: "system" },
 ] as const;
 
+const languageFlags = {
+  vi: "🇻🇳",
+  en: "🇬🇧",
+} as const;
+
 function VerifyTechBackdrop() {
   return (
     <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
@@ -231,14 +236,15 @@ function VerifyControls() {
             key={item}
             type="button"
             onClick={() => setLanguage(item)}
-            className={`flex h-9 min-w-10 items-center justify-center gap-1 rounded-md px-2 transition ${
+            className={`flex h-9 min-w-14 items-center justify-center gap-1.5 rounded-md px-2 transition ${
               language === item
                 ? "bg-blue-600 text-white"
                 : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
             }`}
           >
             {language === item ? <Check className="h-3 w-3" /> : null}
-            {item.toUpperCase()}
+            <span className="text-base leading-none">{languageFlags[item]}</span>
+            <span>{item.toUpperCase()}</span>
           </button>
         ))}
       </div>
