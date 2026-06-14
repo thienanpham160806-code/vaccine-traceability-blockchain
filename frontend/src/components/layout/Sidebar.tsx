@@ -67,8 +67,13 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
   const [lookupValue, setLookupValue] = useState("");
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const settingsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -110,6 +115,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
     ...(user?.role === "ADMIN" || user?.roles?.includes("ADMIN") ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
     ...(user?.role === "RECALL_AUTHORITY" || user?.roles?.includes("RECALL_AUTHORITY") ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
   ];
+  const selectedTheme = mounted ? theme || "system" : "system";
 
   return (
     <aside className={`${mobile ? "flex h-full w-72" : "hidden h-screen w-64 shrink-0 lg:flex"} min-h-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950`}>
@@ -228,7 +234,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
               <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">{t("Giao diện")}</p>
               {themeOptions.map((option) => {
                 const Icon = option.icon;
-                const selected = (theme || "system") === option.value;
+                const selected = selectedTheme === option.value;
                 return (
                   <button key={option.value} className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-sm ${selected ? "bg-blue-600/15 text-blue-400" : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"}`} onClick={() => setTheme(option.value)} type="button">
                     <Icon className="h-4 w-4" />

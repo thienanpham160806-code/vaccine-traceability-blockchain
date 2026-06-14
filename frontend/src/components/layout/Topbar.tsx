@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Bell, ChevronRight, LogOut, Menu, Wallet } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
@@ -144,7 +144,7 @@ function getPageMeta(pathname: string): PageMeta {
       breadcrumbs: [{ title: "Xác minh" }],
     };
   }
-  return withDefaultBreadcrumb({ title: "Dashboard", sub: "VaxiTrust" });
+  return withDefaultBreadcrumb({ title: "Tổng quan", sub: "VaxiTrust" });
 }
 
 const roleColor: Record<string, string> = {
@@ -204,6 +204,7 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     return loadReadNotificationIds(getNotificationStorageKey(getStoredUser()));
   });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const notificationCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meta = getPageMeta(pathname);
 
   const { data: activities = [] } = useQuery({
@@ -249,6 +250,22 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     router.push("/login");
   };
 
+  const openNotifications = () => {
+    if (notificationCloseTimer.current) {
+      clearTimeout(notificationCloseTimer.current);
+      notificationCloseTimer.current = null;
+    }
+    setNotificationsOpen(true);
+  };
+
+  const scheduleCloseNotifications = () => {
+    if (notificationCloseTimer.current) clearTimeout(notificationCloseTimer.current);
+    notificationCloseTimer.current = setTimeout(() => {
+      setNotificationsOpen(false);
+      notificationCloseTimer.current = null;
+    }, 650);
+  };
+
   return (
     <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 sm:px-6 dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex min-w-0 items-center gap-3">
@@ -284,8 +301,8 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
       <div className="flex shrink-0 items-center gap-2">
         <div
           className="relative hidden sm:block"
-          onMouseEnter={() => setNotificationsOpen(true)}
-          onMouseLeave={() => setNotificationsOpen(false)}
+          onMouseEnter={openNotifications}
+          onMouseLeave={scheduleCloseNotifications}
         >
           <button
             className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900"

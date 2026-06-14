@@ -76,13 +76,20 @@ function PreferenceControls() {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
   const t = useTranslation();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const selectedTheme = mounted ? theme || "system" : "system";
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <div className="flex rounded-lg border border-zinc-200 bg-white/80 p-1 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
         {themeOptions.map((option) => {
           const Icon = option.icon;
-          const selected = (theme || "light") === option.value;
+          const selected = selectedTheme === option.value;
           return (
             <button
               key={option.value}

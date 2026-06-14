@@ -185,6 +185,13 @@ function VerifyControls() {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
   const text = copy[language];
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const selectedTheme = mounted ? theme || "system" : "system";
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -194,7 +201,7 @@ function VerifyControls() {
       >
         {themeOptions.map((option) => {
           const Icon = option.icon;
-          const selected = (theme || "system") === option.value;
+          const selected = selectedTheme === option.value;
           return (
             <button
               key={option.value}
