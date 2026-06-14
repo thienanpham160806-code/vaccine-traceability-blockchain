@@ -57,6 +57,10 @@ function IpfsLink({ cid }: { cid?: string }) {
   );
 }
 
+function sameAddress(left?: string, right?: string) {
+  return String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
+}
+
 export default function TransferDetailPage({ params }: PageProps) {
   const { transferId } = use(params);
   const decoded = decodeURIComponent(transferId);
@@ -83,7 +87,7 @@ export default function TransferDetailPage({ params }: PageProps) {
     setActionSuccess(null);
     try {
       let result;
-      if (user?.authMode === "wallet") {
+      if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
         if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
         const txHash = await writeContractAsync({
           address: getTransferLedgerAddress(),
@@ -113,7 +117,7 @@ export default function TransferDetailPage({ params }: PageProps) {
     setActionSuccess(null);
     try {
       let result;
-      if (user?.authMode === "wallet") {
+      if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
         if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
         const txHash = await writeContractAsync({
           address: getTransferLedgerAddress(),

@@ -178,9 +178,10 @@ function TransferList() {
         return;
       }
 
-      if (storedUser?.authMode === "wallet") {
+      const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
+      const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer?.toAddress);
+      if (shouldUseWallet) {
         if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
-        const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
         if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ xác nhận."));
         const txHash = await writeContractAsync({
           address: getTransferLedgerAddress(),
@@ -213,9 +214,10 @@ function TransferList() {
         return;
       }
 
-      if (storedUser?.authMode === "wallet") {
+      const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
+      const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer?.toAddress);
+      if (shouldUseWallet) {
         if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
-        const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
         if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ từ chối."));
         const txHash = await writeContractAsync({
           address: getTransferLedgerAddress(),

@@ -560,7 +560,8 @@ export class ContractClient {
   async confirmTransfer(
     serialId: string,
     receiverLocationHash: string = '0x0000000000000000000000000000000000000000000000000000000000000000',
-    signerRole: string = 'DISTRIBUTOR'
+    signerRole: string = 'DISTRIBUTOR',
+    expectedReceiver?: string
   ): Promise<string> {
     if (!this.transferLedger) {
       throw new Error('TransferLedger contract not initialized');
@@ -569,7 +570,10 @@ export class ContractClient {
     try {
       Logger.info(`📝 Confirming transfer: ${serialId}`);
 
-      const ledger = this.transferLedger.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const signer = expectedReceiver
+        ? this.getSignerForAddress(expectedReceiver, signerRole)
+        : this.getSigner(signerRole);
+      const ledger = this.transferLedger.connect(signer) as ethers.Contract;
       const tx = await ledger.confirmTransfer(serialId, receiverLocationHash);
 
       const receipt = await tx.wait();

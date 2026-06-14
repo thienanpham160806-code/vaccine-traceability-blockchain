@@ -626,7 +626,12 @@ router.post(
     }
 
     const locationHash = toBytes32(receiverLocationHash || pendingTransfer.toLocationHash);
-    const txHash = await contractClient.confirmTransfer(serialHash, locationHash, pendingTransfer.toRole);
+    const txHash = await contractClient.confirmTransfer(
+      serialHash,
+      locationHash,
+      pendingTransfer.toRole,
+      pendingTransfer.toAddress
+    );
     const now = Date.now();
     const deliveredStatus = getDeliveredStatus(pendingTransfer.toRole);
 
