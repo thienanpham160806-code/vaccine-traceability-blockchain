@@ -21,6 +21,7 @@ import type { VerifyResult } from "@/lib/types";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { ContactFooter } from "@/components/layout/ContactFooter";
 import { SupplyChainDiagram } from "@/components/trace/SupplyChainDiagram";
+import { LanguageFlag } from "@/components/ui/LanguageFlag";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 interface PageProps {
@@ -119,11 +120,6 @@ const themeOptions = [
   { value: "dark", icon: Moon, labelKey: "dark" },
   { value: "system", icon: Monitor, labelKey: "system" },
 ] as const;
-
-const languageFlags = {
-  vi: "🇻🇳",
-  en: "🇬🇧",
-} as const;
 
 function VerifyTechBackdrop() {
   return (
@@ -243,7 +239,7 @@ function VerifyControls() {
             }`}
           >
             {language === item ? <Check className="h-3 w-3" /> : null}
-            <span className="text-base leading-none">{languageFlags[item]}</span>
+            <LanguageFlag language={item} />
             <span>{item.toUpperCase()}</span>
           </button>
         ))}

@@ -31,6 +31,7 @@ import { translateRole } from "@/lib/i18n";
 import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { ContactFooter } from "@/components/layout/ContactFooter";
+import { LanguageFlag } from "@/components/ui/LanguageFlag";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 type ActiveTab = "login" | "verify";
@@ -52,11 +53,6 @@ const themeOptions = [
   { value: "dark", label: "Tối", icon: Moon },
   { value: "system", label: "Hệ thống", icon: Monitor },
 ] as const;
-
-const languageFlags = {
-  vi: "🇻🇳",
-  en: "🇬🇧",
-} as const;
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -123,7 +119,7 @@ function PreferenceControls() {
             }`}
           >
             {language === item ? <Check className="h-3 w-3" /> : null}
-            <span className="text-base leading-none">{languageFlags[item]}</span>
+            <LanguageFlag language={item} />
             <span>{item.toUpperCase()}</span>
           </button>
         ))}

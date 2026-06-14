@@ -26,6 +26,7 @@ import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
+import { LanguageFlag } from "@/components/ui/LanguageFlag";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const menuItems = [
@@ -43,8 +44,8 @@ const themeOptions = [
 ] as const;
 
 const languageOptions = [
-  { value: "en", label: "EN", flag: "🇬🇧" },
-  { value: "vi", label: "VI", flag: "🇻🇳" },
+  { value: "en", label: "EN" },
+  { value: "vi", label: "VI" },
 ] as const;
 
 const roleColor: Record<string, string> = {
@@ -253,7 +254,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
                     className={`flex h-11 items-center justify-center gap-1.5 rounded-lg border px-2 text-sm font-semibold ${language === option.value ? "border-blue-500 bg-blue-600/15 text-blue-700 dark:text-blue-100" : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"}`}
                   >
                     {language === option.value ? <Check className="mr-1 h-3.5 w-3.5" /> : null}
-                    <span className="text-base leading-none">{option.flag}</span>
+                    <LanguageFlag language={option.value} />
                     <span>{option.label}</span>
                   </button>
                 ))}
