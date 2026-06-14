@@ -5,6 +5,7 @@ import { use, useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { getApiErrorMessage, getProductDetail, reregisterProduct, updateProduct } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 import type { ProductDetailResponse } from "@/lib/types";
 import { ProductStatusBadge, RiskLevelBadge } from "@/components/product/ProductStatusBadge";
 import { TransferTimeline } from "@/components/trace/TransferTimeline";
@@ -206,6 +207,9 @@ export default function ProductDetailPage({ params }: PageProps) {
   const txUrl = getTransactionUrl(txHash);
   const ipfsCid = batch?.ipfsCid || product.ipfsCid;
   const ipfsUrl = getIpfsUrl(ipfsCid);
+  const currentUser = getStoredUser();
+  const canReregisterRole = ["MANUFACTURER", "IMPORTER", "ADMIN"].includes(currentUser?.role || "");
+  const canReregisterOnChain = !blockchain.available && canReregisterRole;
 
   return (
     <div className="space-y-6">
@@ -216,7 +220,7 @@ export default function ProductDetailPage({ params }: PageProps) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {!blockchain.available && (
+          {canReregisterOnChain && (
             <button
               type="button"
               disabled={isReregistering}
