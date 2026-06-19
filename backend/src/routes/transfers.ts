@@ -425,6 +425,7 @@ router.post(
       db.ref(`products/${serialHash}`).update({
         status: 'IN_TRANSIT',
         currentOwner: senderAddress,
+        ownerRole: fromRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).set(transferId),
@@ -549,6 +550,7 @@ router.post(
       db.ref(`products/${serialHash}`).update({
         status: 'IN_TRANSIT',
         currentOwner: senderAddress,
+        ownerRole: fromRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).set(transferId),
@@ -645,6 +647,7 @@ router.post(
       db.ref(`products/${serialHash}`).update({
         status: deliveredStatus,
         currentOwner: pendingTransfer.toAddress,
+        ownerRole: pendingTransfer.toRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).remove(),
@@ -731,6 +734,7 @@ router.post(
       db.ref(`products/${serialHash}`).update({
         status: deliveredStatus,
         currentOwner: pendingTransfer.toAddress,
+        ownerRole: pendingTransfer.toRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).remove(),

@@ -44,6 +44,7 @@ export interface Product {
   manufacturerName: string;
   manufacturerAddress: string;
   currentOwner: string;
+  ownerRole?: UserRole;
   status: ProductStatus;
   riskLevel: RiskLevel;
   expiryDate: string;

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
-import { confirmTransfer, getApiErrorMessage, getDemoActors, getProducts, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
+import { confirmTransfer, getApiErrorMessage, getDemoActors, getTransferableProducts, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
@@ -68,48 +68,12 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const nonTransferableStatuses = new Set(["RECALLED", "FLAGGED", "IN_TRANSIT", "PENDING_DELIVERY", "INVALID"]);
-const hardBlockedStatuses = new Set(["RECALLED", "FLAGGED", "INVALID"]);
-
 function normalizeAddress(address?: string) {
   return String(address || "").trim().toLowerCase();
 }
 
 function canRoleInitiateTransfer(role?: string) {
   return Boolean(role && transferInitiatorRoles.includes(role as any));
-}
-
-function isProductTransferable(product: Product, ownerAddress?: string) {
-  if (!product.serialId || nonTransferableStatuses.has(String(product.status))) return false;
-  return normalizeAddress(product.currentOwner) === normalizeAddress(ownerAddress);
-}
-
-function getLatestConfirmedOwners(transfers: TransferRecord[]) {
-  const owners = new Map<string, { address: string; role: string; timestamp: number }>();
-
-  transfers.forEach((transfer) => {
-    if (transfer.status !== "CONFIRMED" || !transfer.serialId) return;
-    const timestamp = transfer.confirmedAt || transfer.updatedAt || transfer.createdAt || 0;
-    const current = owners.get(transfer.serialId);
-    if (!current || timestamp >= current.timestamp) {
-      owners.set(transfer.serialId, {
-        address: transfer.toAddress || "",
-        role: transfer.toRole || "",
-        timestamp,
-      });
-    }
-  });
-
-  return owners;
-}
-
-function getPendingOutgoingSerials(transfers: TransferRecord[], role: string) {
-  return new Set(
-    transfers
-      .filter((transfer) => transfer.status === "PENDING" && transfer.fromRole === role)
-      .map((transfer) => transfer.serialId)
-      .filter(Boolean)
-  );
 }
 
 function groupProductsByBatch(products: Product[]) {
@@ -195,6 +159,7 @@ function TransferList() {
         await confirmTransfer(parsed.data.serialId);
       }
       qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
   } catch (err: unknown) {
       setError(getApiErrorMessage(err, tLabel("Xác nhận thất bại.")));
     } finally {
@@ -233,6 +198,7 @@ function TransferList() {
       setRejectingId(null);
       setRejectReason("");
       qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
   } catch (err: unknown) {
       setError(getApiErrorMessage(err, tLabel("Từ chối thất bại.")));
     } finally {
@@ -381,35 +347,6 @@ export default function ScanTransferPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isBusy, setIsBusy] = useState(false);
 
-  const { data: actors = [] } = useQuery({
-    queryKey: ["demo-actors"],
-    queryFn: getDemoActors,
-  });
-
-  const { data: products = [], isLoading: productsLoading } = useQuery({
-    queryKey: ["transferable-products"],
-    queryFn: async () => {
-      const allProducts: Product[] = [];
-      let page = 1;
-      let total = 0;
-
-      do {
-        const result = await getProducts({ page, pageSize: 100, sort: "updatedAt:desc" });
-        allProducts.push(...result.items);
-        total = result.total;
-        page += 1;
-      } while (allProducts.length < total && page <= 20);
-
-      return allProducts;
-    },
-  });
-
-  const { data: ownershipTransfers = [] } = useQuery<TransferRecord[]>({
-    queryKey: ["transferable-products", "ownership-transfers"],
-    queryFn: getTransfers,
-    staleTime: 20_000,
-  });
-
   useEffect(() => {
     const storedUser = getStoredUser();
     setUser(storedUser);
@@ -419,36 +356,23 @@ export default function ScanTransferPage() {
 
   }, []);
 
-  const actorAddressByRole = useMemo(() => {
-    return new Map(actors.map((actor) => [actor.role, actor.address]));
-  }, [actors]);
-
   const selectableFromRoles = useMemo<TransferInitiatorRole[]>(() => {
     if (user?.role === "ADMIN") return fromRoleOptions;
     return user?.role && isInitiatorRole(user.role) ? [user.role] : [];
   }, [user]);
 
-  const ownerAddress = user?.role === "ADMIN" ? actorAddressByRole.get(fromRole) : user?.address;
-  const confirmedOwnerBySerial = useMemo(() => getLatestConfirmedOwners(ownershipTransfers), [ownershipTransfers]);
-  const pendingOutgoingSerials = useMemo(
-    () => getPendingOutgoingSerials(ownershipTransfers, fromRole),
-    [fromRole, ownershipTransfers]
-  );
-  const transferableProducts = useMemo(() => {
-    const normalizedOwner = normalizeAddress(ownerAddress);
-
-    return products.filter((product) => {
-      if (!product.serialId || pendingOutgoingSerials.has(product.serialId)) return false;
-      if (hardBlockedStatuses.has(String(product.status))) return false;
-      if (isProductTransferable(product, ownerAddress)) return true;
-
-      const inferredOwner = confirmedOwnerBySerial.get(product.serialId);
-      return Boolean(
-        inferredOwner &&
-          (inferredOwner.role === fromRole || normalizeAddress(inferredOwner.address) === normalizedOwner)
-      );
-    });
-  }, [confirmedOwnerBySerial, fromRole, ownerAddress, pendingOutgoingSerials, products]);
+  const {
+    data: transferableInventory,
+    isLoading: productsLoading,
+    error: inventoryError,
+    refetch: refetchInventory,
+  } = useQuery({
+    queryKey: ["transferable-products", user?.address, fromRole],
+    queryFn: () => getTransferableProducts(fromRole),
+    enabled: Boolean(user && (user.role === "ADMIN" || user.role === fromRole)),
+    staleTime: 10_000,
+  });
+  const transferableProducts = transferableInventory?.items || [];
 
   const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts), [transferableProducts]);
 
@@ -516,6 +440,7 @@ export default function ScanTransferPage() {
       setTransferId(data.transfer?.id ?? null);
       setStatusMsg(t("Đã tạo lệnh. Xác nhận giao hàng ở danh sách bên phải."));
       qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, t("Tạo lệnh thất bại.")));
       setStatusMsg(null);
@@ -549,6 +474,7 @@ export default function ScanTransferPage() {
       setTransferId(data.transferId ?? transferId);
       setStatusMsg(t("Xác nhận thành công."));
       qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, t("Xác nhận thất bại.")));
       setStatusMsg(null);
@@ -646,6 +572,20 @@ export default function ScanTransferPage() {
                 {[1, 2].map((item) => (
                   <div key={item} className="h-20 animate-pulse rounded-lg bg-white dark:bg-zinc-950" />
                 ))}
+              </div>
+            ) : inventoryError ? (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-4 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                <p className="font-semibold">
+                  {getApiErrorMessage(inventoryError, t("Không thể tải danh sách lô có thể chuyển."))}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetchInventory()}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 py-1.5 font-bold text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:bg-zinc-950 dark:text-red-200"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {t("Làm mới")}
+                </button>
               </div>
             ) : batchGroups.length === 0 ? (
               <div className="mt-3 rounded-lg border border-dashed border-zinc-300 bg-white px-3 py-6 text-center text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">

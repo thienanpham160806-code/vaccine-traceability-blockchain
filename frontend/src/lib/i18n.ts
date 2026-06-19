@@ -238,6 +238,7 @@ const translationPairs: Array<[vi: string, en: string]> = [
   ["sở hữu và đủ điều kiện chuyển giao.", "that is eligible for transfer."],
   ["Role hiện tại không có quyền tạo lệnh chuyển.", "The current role cannot create transfer requests."],
   ["Không có lô hoặc serial nào thuộc sở hữu role này và sẵn sàng chuyển giao.", "No batches or serials owned by this role are ready to transfer."],
+  ["Không thể tải danh sách lô có thể chuyển.", "Could not load transferable batches."],
   ["Có thể chuyển đến", "Can transfer to"],
   ["Từ", "From"],
   ["Đến", "To"],

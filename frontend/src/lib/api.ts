@@ -177,6 +177,7 @@ export const endpoints = {
   getBatchSerials: (batchId: string) => `/batches/${batchId}/serials`,
   createBatch: "/batches",
   registerProduct: "/products/register",
+  transferableProducts: "/products/transferable",
   syncWalletProductRegistration: "/products/sync-wallet-register",
   bulkRegisterProducts: "/products/bulk",
   getProducts: "/products",
@@ -572,6 +573,21 @@ export async function getRecalls() {
 export async function createRecall(payload: { batchHash: string; reason: string; serials: string[] }) {
   const res = await api.post<ApiResponse<RecallRecord>>(endpoints.recalls, payload);
   return requireApiData(res.data.data, "Create recall response did not include data.");
+}
+
+export async function getTransferableProducts(role?: string) {
+  const res = await api.get<
+    ApiResponse<{
+      items: Product[];
+      total: number;
+      ownerAddress: string;
+      ownerRole: string;
+    }>
+  >(endpoints.transferableProducts, {
+    params: role ? { role } : undefined,
+  });
+
+  return requireApiData(res.data.data, "Transferable product response did not include data.");
 }
 
 export async function syncWalletRecall(payload: { batchHash: string; reason: string; serials: string[]; txHash: string }) {

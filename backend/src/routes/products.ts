@@ -155,6 +155,133 @@ function requireString(value: unknown, fieldName: string): string {
   return value.trim();
 }
 
+const TRANSFERABLE_PRODUCT_STATUSES = new Set([
+  'REGISTERED',
+  'VERIFIED',
+  'DELIVERED',
+  'DELIVERED_TO_DISTRIBUTOR',
+  'DELIVERED_TO_CLINIC',
+  'DELIVERED_TO_PHARMACY',
+]);
+const TRANSFER_INITIATOR_ROLES = new Set(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR']);
+
+/**
+ * GET /products/transferable
+ * Return products owned by the authenticated wallet and ready for a new transfer.
+ * ADMIN may inspect another operational role by passing ?role=...
+ */
+router.get(
+  '/transferable',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'ADMIN']),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const requestedRole = String(req.query.role || req.user?.role || '').toUpperCase();
+      const ownerRole = req.user?.role === 'ADMIN' ? requestedRole : String(req.user?.role || '');
+
+      if (!TRANSFER_INITIATOR_ROLES.has(ownerRole)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_OWNER_ROLE', message: `Role ${ownerRole || 'UNKNOWN'} cannot initiate product transfers.` },
+        });
+      }
+
+      const ownerAddress =
+        req.user?.role === 'ADMIN'
+          ? contractClient.getRoleAddress(ownerRole)
+          : String(req.user?.address || '');
+
+      if (!ownerAddress || !CryptoUtils.isValidAddress(ownerAddress)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_OWNER_ADDRESS', message: 'Authenticated profile does not have a valid wallet address.' },
+        });
+      }
+
+      const [productsSnapshot, transfersSnapshot] = await Promise.all([
+        db.ref('products').once('value'),
+        db.ref('transfers').once('value'),
+      ]);
+      const productEntries = Object.entries(productsSnapshot.val() || {}) as Array<[string, Product]>;
+      const transfers = Object.values(transfersSnapshot.val() || {}) as any[];
+      const latestConfirmedBySerial = new Map<string, any>();
+      const latestTransferBySerial = new Map<string, any>();
+
+      for (const transfer of transfers) {
+        if (!transfer?.serialId) continue;
+        const timestamp = transfer.confirmedAt || transfer.rejectedAt || transfer.returnedAt || transfer.updatedAt || transfer.createdAt || 0;
+        const latest = latestTransferBySerial.get(transfer.serialId);
+        const latestTimestamp =
+          latest?.confirmedAt || latest?.rejectedAt || latest?.returnedAt || latest?.updatedAt || latest?.createdAt || 0;
+        if (!latest || timestamp >= latestTimestamp) {
+          latestTransferBySerial.set(transfer.serialId, transfer);
+        }
+
+        if (transfer.status !== 'CONFIRMED') continue;
+
+        const current = latestConfirmedBySerial.get(transfer.serialId);
+        const currentTimestamp = current?.confirmedAt || current?.updatedAt || current?.createdAt || 0;
+        if (!current || timestamp >= currentTimestamp) {
+          latestConfirmedBySerial.set(transfer.serialId, transfer);
+        }
+      }
+
+      const normalizedOwner = normalizeAddress(ownerAddress);
+      const repairs: Promise<unknown>[] = [];
+      const items = productEntries.flatMap(([productKey, product]) => {
+        const latestTransfer = latestConfirmedBySerial.get(product.serialId);
+        const resolvedOwner = latestTransfer?.toAddress || product.currentOwner || '';
+        const resolvedRole =
+          latestTransfer?.toRole ||
+          product.ownerRole ||
+          (normalizeAddress(resolvedOwner) === normalizedOwner ? ownerRole : '');
+
+        if (
+          resolvedOwner &&
+          (normalizeAddress(product.currentOwner) !== normalizeAddress(resolvedOwner) ||
+            product.ownerRole !== resolvedRole)
+        ) {
+          repairs.push(
+            db.ref(`products/${productKey}`).update({
+              currentOwner: resolvedOwner,
+              ownerRole: resolvedRole || null,
+              updatedAt: Date.now(),
+            })
+          );
+        }
+
+        if (normalizeAddress(resolvedOwner) !== normalizedOwner) return [];
+        if (resolvedRole && resolvedRole !== ownerRole) return [];
+        if (latestTransferBySerial.get(product.serialId)?.status === 'PENDING') return [];
+        if (!TRANSFERABLE_PRODUCT_STATUSES.has(String(product.status))) return [];
+
+        return [{ ...product, currentOwner: resolvedOwner, ownerRole: resolvedRole || ownerRole }];
+      });
+
+      if (repairs.length > 0) {
+        await Promise.allSettled(repairs);
+      }
+
+      items.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+      res.json({
+        success: true,
+        data: {
+          items,
+          total: items.length,
+          ownerAddress,
+          ownerRole,
+        },
+      });
+    } catch (error) {
+      Logger.error('Get transferable products error', error);
+      res.status(500).json({
+        success: false,
+        error: { code: 'GET_TRANSFERABLE_PRODUCTS_ERROR', message: getErrorMessage(error, 'Failed to fetch transferable products') },
+      });
+    }
+  }
+);
+
 /**
  * GET /products?search=&status=&manufacturer=&sort=&page=&pageSize=
  * List products with search, filter, sort, and pagination
@@ -835,6 +962,7 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       manufacturerName,
       manufacturerAddress: batch.manufacturerAddress,
       currentOwner: contractClient.getRoleAddress(signerRole),
+      ownerRole: signerRole,
       status: 'VERIFIED',
       riskLevel: 'SAFE',
       expiryDate,
@@ -1004,6 +1132,7 @@ router.post('/sync-wallet-register', verifyToken, validateRequest({ body: regist
       manufacturerName,
       manufacturerAddress: batch.manufacturerAddress,
       currentOwner: batch.manufacturerAddress,
+      ownerRole: origin === 'IMPORTED' ? 'IMPORTER' : 'MANUFACTURER',
       status: 'VERIFIED',
       riskLevel: 'SAFE',
       expiryDate,
@@ -1264,6 +1393,7 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           manufacturerName,
           manufacturerAddress: batch.manufacturerAddress,
           currentOwner: contractClient.getRoleAddress(signerRole),
+          ownerRole: signerRole,
           status: 'VERIFIED',
           riskLevel: 'SAFE',
           expiryDate,
