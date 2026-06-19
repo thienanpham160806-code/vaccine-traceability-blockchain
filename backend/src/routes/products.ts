@@ -164,6 +164,14 @@ const TRANSFERABLE_PRODUCT_STATUSES = new Set([
   'DELIVERED_TO_PHARMACY',
 ]);
 const TRANSFER_INITIATOR_ROLES = new Set(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR']);
+const INVENTORY_ROLES = new Set(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY']);
+const INVENTORY_TRANSFER_ROUTES: Record<string, string[]> = {
+  MANUFACTURER: ['IMPORTER', 'DISTRIBUTOR'],
+  IMPORTER: ['DISTRIBUTOR'],
+  DISTRIBUTOR: ['DISTRIBUTOR', 'CLINIC', 'PHARMACY'],
+  CLINIC: [],
+  PHARMACY: [],
+};
 
 /**
  * GET /products/transferable
@@ -173,16 +181,16 @@ const TRANSFER_INITIATOR_ROLES = new Set(['MANUFACTURER', 'IMPORTER', 'DISTRIBUT
 router.get(
   '/transferable',
   verifyToken,
-  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'ADMIN']),
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
   async (req: AuthRequest, res: Response) => {
     try {
       const requestedRole = String(req.query.role || req.user?.role || '').toUpperCase();
       const ownerRole = req.user?.role === 'ADMIN' ? requestedRole : String(req.user?.role || '');
 
-      if (!TRANSFER_INITIATOR_ROLES.has(ownerRole)) {
+      if (!INVENTORY_ROLES.has(ownerRole)) {
         return res.status(400).json({
           success: false,
-          error: { code: 'INVALID_OWNER_ROLE', message: `Role ${ownerRole || 'UNKNOWN'} cannot initiate product transfers.` },
+          error: { code: 'INVALID_OWNER_ROLE', message: `Role ${ownerRole || 'UNKNOWN'} does not own operational inventory.` },
         });
       }
 
@@ -270,6 +278,8 @@ router.get(
           total: items.length,
           ownerAddress,
           ownerRole,
+          canTransfer: TRANSFER_INITIATOR_ROLES.has(ownerRole),
+          allowedToRoles: INVENTORY_TRANSFER_ROUTES[ownerRole] || [],
         },
       });
     } catch (error) {

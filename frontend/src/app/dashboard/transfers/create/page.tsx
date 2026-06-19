@@ -32,6 +32,7 @@ const statusChip: Record<string, string> = {
 const fromRoleOptions = [...transferInitiatorRoles];
 type TransferInitiatorRole = (typeof transferInitiatorRoles)[number];
 type TransferReceiverRole = (typeof transferReceiverRoles)[number];
+const operationalInventoryRoles = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY"] as const;
 
 const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
@@ -70,10 +71,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function normalizeAddress(address?: string) {
   return String(address || "").trim().toLowerCase();
-}
-
-function canRoleInitiateTransfer(role?: string) {
-  return Boolean(role && transferInitiatorRoles.includes(role as any));
 }
 
 function groupProductsByBatch(products: Product[]) {
@@ -360,6 +357,10 @@ export default function ScanTransferPage() {
     if (user?.role === "ADMIN") return fromRoleOptions;
     return user?.role && isInitiatorRole(user.role) ? [user.role] : [];
   }, [user]);
+  const inventoryRole = user?.role === "ADMIN" ? fromRole : user?.role;
+  const canLoadInventory = Boolean(
+    user && inventoryRole && operationalInventoryRoles.includes(inventoryRole as (typeof operationalInventoryRoles)[number])
+  );
 
   const {
     data: transferableInventory,
@@ -367,16 +368,20 @@ export default function ScanTransferPage() {
     error: inventoryError,
     refetch: refetchInventory,
   } = useQuery({
-    queryKey: ["transferable-products", user?.address, fromRole],
-    queryFn: () => getTransferableProducts(fromRole),
-    enabled: Boolean(user && (user.role === "ADMIN" || user.role === fromRole)),
+    queryKey: ["transferable-products", user?.address, inventoryRole],
+    queryFn: () => getTransferableProducts(inventoryRole),
+    enabled: canLoadInventory,
     staleTime: 10_000,
   });
   const transferableProducts = transferableInventory?.items || [];
+  const canCreateTransfer = Boolean(transferableInventory?.canTransfer);
 
   const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts), [transferableProducts]);
 
-  const toRoleOptions = useMemo(() => allowedTransferRoutes[fromRole] || [...transferReceiverRoles], [fromRole]);
+  const toRoleOptions = useMemo(() => {
+    const backendRoles = (transferableInventory?.allowedToRoles || []).filter(isReceiverRole);
+    return backendRoles.length > 0 ? backendRoles : allowedTransferRoutes[fromRole] || [];
+  }, [fromRole, transferableInventory?.allowedToRoles]);
   const effectiveToRole = toRoleOptions.includes(toRole) ? toRole : toRoleOptions[0] || "DISTRIBUTOR";
 
   useEffect(() => {
@@ -520,46 +525,50 @@ export default function ScanTransferPage() {
             />
           </Field>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={t("Từ")}>
-              <select
-                className={inputCls}
-                value={fromRole}
-                disabled={selectableFromRoles.length <= 1}
-                onChange={(e) => {
-                  setFieldErrors({});
-                  if (isInitiatorRole(e.target.value)) setFromRole(e.target.value);
-                }}
-              >
-                {(selectableFromRoles.length ? selectableFromRoles : fromRoleOptions).map((r) => (
-                  <option key={r} value={r}>{translateRole(r, language)}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label={t("Đến")}>
-              <select
-                className={inputCls}
-                value={effectiveToRole}
-                onChange={(e) => {
-                  setFieldErrors({});
-                  if (isReceiverRole(e.target.value)) setToRole(e.target.value);
-                }}
-              >
-                {toRoleOptions.map((r) => (
-                  <option key={r} value={r}>{translateRole(r, language)}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
+          {canCreateTransfer ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("Từ")}>
+                <select
+                  className={inputCls}
+                  value={fromRole}
+                  disabled={selectableFromRoles.length <= 1}
+                  onChange={(e) => {
+                    setFieldErrors({});
+                    if (isInitiatorRole(e.target.value)) setFromRole(e.target.value);
+                  }}
+                >
+                  {(selectableFromRoles.length ? selectableFromRoles : fromRoleOptions).map((r) => (
+                    <option key={r} value={r}>{translateRole(r, language)}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t("Đến")}>
+                <select
+                  className={inputCls}
+                  value={effectiveToRole}
+                  onChange={(e) => {
+                    setFieldErrors({});
+                    if (isReceiverRole(e.target.value)) setToRole(e.target.value);
+                  }}
+                >
+                  {toRoleOptions.map((r) => (
+                    <option key={r} value={r}>{translateRole(r, language)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t("Lô có thể chuyển")}</h3>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  {canCreateTransfer ? t("Lô có thể chuyển") : t("Lô đang sở hữu")}
+                </h3>
                 <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  {canRoleInitiateTransfer(fromRole)
-                    ? `${t("Đang hiển thị hàng do")} ${translateRole(fromRole, language)} ${t("sở hữu và đủ điều kiện chuyển giao.")}`
-                    : t("Role hiện tại không có quyền tạo lệnh chuyển.")}
+                  {canCreateTransfer
+                    ? `${t("Đang hiển thị hàng do")} ${translateRole(inventoryRole || fromRole, language)} ${t("sở hữu và đủ điều kiện chuyển giao.")}`
+                    : `${t("Đang hiển thị hàng do")} ${translateRole(inventoryRole || "", language)} ${t("sở hữu. Đây là điểm nhận cuối nên không thể tạo lệnh chuyển tiếp.")}`}
                 </p>
               </div>
               <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
@@ -630,23 +639,27 @@ export default function ScanTransferPage() {
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-3 text-[11px] text-zinc-400 dark:text-zinc-500">
-                      {t("Có thể chuyển đến")}: {toRoleOptions.map((role) => translateRole(role, language)).join(", ")}
-                    </p>
+                    {canCreateTransfer ? (
+                      <p className="mt-3 text-[11px] text-zinc-400 dark:text-zinc-500">
+                        {t("Có thể chuyển đến")}: {toRoleOptions.map((role) => translateRole(role, language)).join(", ")}
+                      </p>
+                    ) : null}
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <Field label={t("Vị trí (giả lập)")}>
-            <input
-              className={inputCls}
-              value={fromLocation}
-              onChange={(e) => setFromLocation(e.target.value)}
-              placeholder={t("Ví dụ: Hà Nội – Kho 1")}
-            />
-          </Field>
+          {canCreateTransfer ? (
+            <Field label={t("Vị trí (giả lập)")}>
+              <input
+                className={inputCls}
+                value={fromLocation}
+                onChange={(e) => setFromLocation(e.target.value)}
+                placeholder={t("Ví dụ: Hà Nội – Kho 1")}
+              />
+            </Field>
+          ) : null}
         </div>
 
         {/* Status */}
@@ -688,13 +701,15 @@ export default function ScanTransferPage() {
 
         {/* Action buttons */}
         <div className="mt-5 flex flex-wrap gap-2.5">
-          <button
-            disabled={isBusy || !serialId.trim()}
-            onClick={create}
-            className="btn-brand rounded-lg px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {isBusy ? t("Đang xử lý...") : t("Tạo lệnh")}
-          </button>
+          {canCreateTransfer ? (
+            <button
+              disabled={isBusy || !serialId.trim()}
+              onClick={create}
+              className="btn-brand rounded-lg px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {isBusy ? t("Đang xử lý...") : t("Tạo lệnh")}
+            </button>
+          ) : null}
           <button
             disabled={isBusy || !serialId.trim()}
             onClick={confirm}

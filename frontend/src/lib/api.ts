@@ -582,6 +582,8 @@ export async function getTransferableProducts(role?: string) {
       total: number;
       ownerAddress: string;
       ownerRole: string;
+      canTransfer: boolean;
+      allowedToRoles: string[];
     }>
   >(endpoints.transferableProducts, {
     params: role ? { role } : undefined,
