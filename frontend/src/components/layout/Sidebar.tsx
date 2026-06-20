@@ -22,7 +22,7 @@ import {
   UserCheck,
   UserCog,
 } from "lucide-react";
-import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
+import { clearSession, getStoredUser, SESSION_UPDATED_EVENT, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
@@ -69,11 +69,21 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const [user, setUser] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const settingsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const syncUser = () => setUser(getStoredUser());
+    window.addEventListener(SESSION_UPDATED_EVENT, syncUser);
+    window.addEventListener("storage", syncUser);
+    return () => {
+      window.removeEventListener(SESSION_UPDATED_EVENT, syncUser);
+      window.removeEventListener("storage", syncUser);
+    };
   }, []);
 
   useEffect(() => {

@@ -166,6 +166,7 @@ export const endpoints = {
   demoActors: "/auth/demo-actors",
   authNonce: "/auth/nonce",
   loginWithSignature: "/auth/login-with-signature",
+  authSession: "/auth/session",
   roleRequests: "/auth/role-requests",
   walletRoles: (address: string) => `/auth/roles/${encodeURIComponent(address)}`,
 
@@ -276,6 +277,11 @@ export async function requestAuthNonce(address: string) {
 export async function loginWithSignature(payload: { address: string; signature: string }) {
   const res = await api.post<ApiResponse<LoginResponse>>(endpoints.loginWithSignature, payload);
   return requireApiData(res.data.data, "Login response did not include data.");
+}
+
+export async function refreshAuthSession() {
+  const res = await api.get<ApiResponse<LoginResponse>>(endpoints.authSession);
+  return requireApiData(res.data.data, "Session refresh response did not include data.");
 }
 
 export async function getWalletRoles(address: string) {

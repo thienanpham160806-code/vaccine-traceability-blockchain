@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Boxes, Home, ListChecks, MoreHorizontal, QrCode } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { getStoredUser, SESSION_UPDATED_EVENT } from "@/lib/auth";
 import { useTranslation } from "@/providers/LanguageProvider";
 import { ContactFooter } from "./ContactFooter";
 import { Sidebar } from "./Sidebar";
@@ -56,6 +56,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     return Boolean(getStoredUser() && window.localStorage.getItem("demoToken"));
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sessionVersion, setSessionVersion] = useState(0);
 
   useEffect(() => {
     const user = getStoredUser();
@@ -68,6 +69,15 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   }, [router]);
 
+  useEffect(() => {
+    const handleSessionUpdate = () => {
+      setMobileMenuOpen(false);
+      setSessionVersion((current) => current + 1);
+    };
+    window.addEventListener(SESSION_UPDATED_EVENT, handleSessionUpdate);
+    return () => window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionUpdate);
+  }, []);
+
   if (!isReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-white text-sm font-semibold text-zinc-500 dark:bg-zinc-950 dark:text-zinc-200">
@@ -78,7 +88,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-white dark:bg-zinc-950">
-      <div className="flex min-h-screen min-w-0">
+      <div className="flex min-h-screen min-w-0" key={sessionVersion}>
         <Sidebar />
 
         {mobileMenuOpen && (

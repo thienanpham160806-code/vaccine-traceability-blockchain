@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Fragment, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronRight, LogOut, Menu, Wallet } from "lucide-react";
-import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
-import { getDashboardRecentActivity } from "@/lib/api";
+import { toast } from "sonner";
+import { clearSession, getStoredUser, setSession, type DemoUser } from "@/lib/auth";
+import { getDashboardRecentActivity, refreshAuthSession } from "@/lib/api";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
@@ -195,10 +196,11 @@ function getNotificationTitle(activity: DashboardActivity, language: "en" | "vi"
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const { language } = useLanguage();
   const t = useTranslation();
-  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const [user, setUser] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     return loadReadNotificationIds(getNotificationStorageKey(getStoredUser()));
@@ -206,6 +208,39 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const meta = getPageMeta(pathname);
+
+  const { data: refreshedSession } = useQuery({
+    queryKey: ["auth-session", user?.address],
+    queryFn: refreshAuthSession,
+    enabled: Boolean(user),
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    if (!refreshedSession || !user) return;
+
+    const nextUser = refreshedSession.user;
+    const previousRoles = [...(user.roles || [user.role])].sort().join(",");
+    const nextRoles = [...(nextUser.roles || [nextUser.role])].sort().join(",");
+    const roleChanged = user.role !== nextUser.role || previousRoles !== nextRoles;
+    if (!roleChanged) return;
+
+    const authMode = user.authMode || "wallet";
+    setSession(refreshedSession.token, nextUser, authMode);
+    const updatedUser: DemoUser = { ...nextUser, authMode };
+    setUser(updatedUser);
+    setReadNotificationIds(loadReadNotificationIds(getNotificationStorageKey(updatedUser)));
+    queryClient.invalidateQueries();
+    toast.success(
+      language === "en"
+        ? `Your role request was approved. Current role: ${translateRole(nextUser.role, language)}.`
+        : `Yêu cầu cấp quyền đã được duyệt. Role hiện tại: ${translateRole(nextUser.role, language)}.`
+    );
+    router.refresh();
+  }, [language, queryClient, refreshedSession, router, user]);
 
   const { data: activities = [] } = useQuery({
     queryKey: ["topbar-notifications", user?.role, user?.address],
