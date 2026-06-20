@@ -32,6 +32,7 @@ const allowedTransferRoutes: Record<string, string[]> = {
   IMPORTER: ['DISTRIBUTOR'],
   DISTRIBUTOR: ['DISTRIBUTOR', 'CLINIC', 'PHARMACY'],
 };
+const transferReceiverActionRoles = ['IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN'];
 
 function toBytes32(value?: string): string {
   if (!value) return ZERO_BYTES32;
@@ -88,6 +89,11 @@ function requireReceiptEvent(receipt: any, eventName: string) {
 
 function isAllowedTransferRoute(fromRole: string, toRole: string): boolean {
   return allowedTransferRoutes[fromRole]?.includes(toRole) || false;
+}
+
+function authenticatedUserHasRole(req: AuthRequest, role: string): boolean {
+  const roles = req.user?.roles?.length ? req.user.roles : [req.user?.role];
+  return roles.filter(Boolean).includes(role);
 }
 
 function productRegistryStatusToProductStatus(status: number): TransferRecord['status'] | 'REGISTERED' | 'VERIFIED' | 'IN_TRANSIT' | 'DELIVERED' | 'FLAGGED' | 'RECALLED' {
@@ -575,7 +581,7 @@ router.post(
 router.post(
   '/confirm',
   verifyToken,
-  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  requireRole(transferReceiverActionRoles),
   validateRequest({ body: transferConfirmSchema }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -617,7 +623,7 @@ router.post(
     }
 
     const [transferId, pendingTransfer] = pendingEntry;
-    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && !authenticatedUserHasRole(req, pendingTransfer.toRole)) {
       return res.status(403).json({
         success: false,
         error: {
@@ -678,7 +684,7 @@ router.post(
 router.post(
   '/sync-wallet-confirm',
   verifyToken,
-  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  requireRole(transferReceiverActionRoles),
   validateRequest({ body: transferConfirmSchema.extend({ txHash: txHashSchema }) }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -700,7 +706,7 @@ router.post(
     }
 
     const [transferId, pendingTransfer] = pendingEntry;
-    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && !authenticatedUserHasRole(req, pendingTransfer.toRole)) {
       return res.status(403).json({
         success: false,
         error: { code: 'ROLE_MISMATCH', message: `Only ${pendingTransfer.toRole} can confirm this transfer` },
@@ -759,7 +765,7 @@ router.post(
 router.post(
   '/reject',
   verifyToken,
-  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  requireRole(transferReceiverActionRoles),
   validateRequest({ body: transferRejectSchema }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -802,7 +808,7 @@ router.post(
 
     const [transferId, pendingTransfer] = pendingEntry;
 
-    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && !authenticatedUserHasRole(req, pendingTransfer.toRole)) {
       return res.status(403).json({
         success: false,
         error: {
@@ -895,7 +901,7 @@ router.post(
 router.post(
   '/sync-wallet-reject',
   verifyToken,
-  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  requireRole(transferReceiverActionRoles),
   validateRequest({ body: transferRejectSchema.extend({ txHash: txHashSchema }) }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -917,7 +923,7 @@ router.post(
     }
 
     const [transferId, pendingTransfer] = pendingEntry;
-    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && !authenticatedUserHasRole(req, pendingTransfer.toRole)) {
       return res.status(403).json({
         success: false,
         error: { code: 'ROLE_MISMATCH', message: `Only ${pendingTransfer.toRole} can reject this transfer` },
@@ -940,7 +946,7 @@ router.post(
       throw httpError(400, 'TX_REASON_MISMATCH', 'Transaction rejection reason does not match request payload');
     }
 
-    if (req.user?.role !== 'ADMIN' && normalizeAddress(req.user?.address) !== normalizeAddress(pendingTransfer.toAddress)) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && normalizeAddress(req.user?.address) !== normalizeAddress(pendingTransfer.toAddress)) {
       throw httpError(403, 'TX_SENDER_MISMATCH', 'Authenticated wallet cannot sync this receiver transaction');
     }
 

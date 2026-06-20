@@ -166,7 +166,10 @@ export default function TransferDetailPage({ params }: PageProps) {
     );
   }
 
-  const canAct = transfer.status === "PENDING" && (user?.role === transfer.toRole || user?.role === "ADMIN");
+  const assignedRoles = new Set([user?.role, ...(user?.roles || [])].filter(Boolean));
+  const canAct =
+    transfer.status === "PENDING" &&
+    (assignedRoles.has(transfer.toRole) || assignedRoles.has("ADMIN"));
   const canCreateTransfer = canInitiateTransfer(user);
   const endUser = isEndUserRole(user);
 
