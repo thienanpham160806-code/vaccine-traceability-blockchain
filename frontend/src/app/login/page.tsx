@@ -356,8 +356,8 @@ export default function LoginPage() {
     }
   }
 
-  function goVerify(value = serialId) {
-    const parsed = parseVaxiTrustQr(value);
+  function goVerify(value = serialId, source: "manual" | "scan" = "manual") {
+    const parsed = parseVaxiTrustQr(value, { source });
     if (!parsed.valid) {
       setScanError(parsed.reason);
       return;
@@ -490,7 +490,7 @@ export default function LoginPage() {
                     <Scanner
                       onScan={(detectedCodes) => {
                         const value = detectedCodes[0]?.rawValue;
-                        if (value) goVerify(value);
+                        if (value) goVerify(value, "scan");
                       }}
                       onError={(err) => setScanError(String(err))}
                     />

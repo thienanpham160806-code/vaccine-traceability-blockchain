@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { ArrowLeft, Download, ExternalLink, QrCode, X } from "lucide-react";
 import { getBatch, getBatchSerials } from "@/lib/api";
+import { getConsumerVerifyQrValue } from "@/lib/qr";
 import { getProductStatusLabel, getStatusChipClass } from "@/lib/status";
 import type { Batch, Product } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
@@ -23,6 +24,7 @@ function getOriginLabel(origin: string | undefined, isRecalled: boolean, t: (key
 function QRModal({ serialId, onClose }: { serialId: string; onClose: () => void }) {
   const t = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
+  const qrValue = getConsumerVerifyQrValue(serialId);
 
   const downloadSVG = () => {
     if (!svgRef.current) return;
@@ -58,7 +60,7 @@ function QRModal({ serialId, onClose }: { serialId: string; onClose: () => void 
         </p>
         <p className="mb-4 font-mono text-xs text-zinc-700">{serialId}</p>
         <div className="qr-surface flex justify-center rounded-xl border p-3">
-          <QRCodeSVG ref={svgRef} value={serialId} size={192} level="H" includeMargin bgColor="#ffffff" fgColor="#000000" />
+          <QRCodeSVG ref={svgRef} value={qrValue} size={192} level="H" includeMargin bgColor="#ffffff" fgColor="#000000" />
         </div>
         <button
           onClick={downloadSVG}

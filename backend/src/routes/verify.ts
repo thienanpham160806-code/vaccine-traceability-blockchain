@@ -3,6 +3,12 @@ import { db } from '../config/firebase';
 import { Logger } from '../utils/logger';
 import { CryptoUtils } from '../utils/crypto';
 import { TransferRecord, VerifyResult } from '../types';
+import {
+  findBatchForPayload,
+  findProductForLookup,
+  parseVerifyLookup,
+  productBelongsToBatch,
+} from '../utils/verifyLookup';
 
 const router = Router();
 
@@ -10,97 +16,56 @@ function toBytes32(value: string): string {
   return CryptoUtils.isValidHash(value) ? value : CryptoUtils.keccak256(value);
 }
 
-function normalizeLookupValue(value: string): string {
-  const decodedValue = decodeURIComponent(value).trim();
-
-  try {
-    const parsedUrl = new URL(decodedValue);
-    const marker = '/consumer/verify/';
-    const markerIndex = parsedUrl.pathname.indexOf(marker);
-    if (markerIndex >= 0) {
-      return decodeURIComponent(parsedUrl.pathname.slice(markerIndex + marker.length)).trim();
-    }
-  } catch {
-    // The lookup can be a plain serial, batch hash, or QR payload instead of a URL.
-  }
-
-  return decodedValue;
-}
-
 async function resolveProduct(lookupValue: string) {
-  const decodedValue = normalizeLookupValue(lookupValue);
-  const [qrBatchHash, qrMetadataHash] = decodedValue.split('/').map((part) => part?.trim()).filter(Boolean);
-  const lookupHash = toBytes32(decodedValue);
+  const lookup = parseVerifyLookup(lookupValue);
+  if (!lookup) return null;
 
-  let productSnapshot = await db.ref(`products/${lookupHash}`).once('value');
-  if (productSnapshot.exists()) {
-    return {
-      product: productSnapshot.val(),
-      lookupHash,
-      lookupValue: decodedValue,
-    };
-  }
-
-  productSnapshot = await db.ref(`products/${decodedValue}`).once('value');
-  if (productSnapshot.exists()) {
-    const product = productSnapshot.val();
-    return {
-      product,
-      lookupHash: product.serialHash || lookupHash,
-      lookupValue: decodedValue,
-    };
-  }
-
-  const indexSnapshot = await db.ref(`serial-index/${decodedValue}`).once('value');
-  const indexedHash = indexSnapshot.val();
-  if (indexedHash) {
-    productSnapshot = await db.ref(`products/${indexedHash}`).once('value');
+  if (lookup.kind === 'identifier') {
+    const lookupHash = toBytes32(lookup.value);
+    let productSnapshot = await db.ref(`products/${lookupHash}`).once('value');
     if (productSnapshot.exists()) {
       return {
         product: productSnapshot.val(),
-        lookupHash: indexedHash,
-        lookupValue: decodedValue,
+        lookupHash,
+        lookupValue: lookup.value,
       };
+    }
+
+    productSnapshot = await db.ref(`products/${lookup.value}`).once('value');
+    if (productSnapshot.exists()) {
+      const product = productSnapshot.val();
+      return {
+        product,
+        lookupHash: product.serialHash || lookupHash,
+        lookupValue: lookup.value,
+      };
+    }
+
+    const indexSnapshot = await db.ref(`serial-index/${lookup.value}`).once('value');
+    const indexedHash = indexSnapshot.val();
+    if (typeof indexedHash === 'string' && indexedHash.length > 0) {
+      productSnapshot = await db.ref(`products/${indexedHash}`).once('value');
+      if (productSnapshot.exists()) {
+        return {
+          product: productSnapshot.val(),
+          lookupHash: indexedHash,
+          lookupValue: lookup.value,
+        };
+      }
     }
   }
 
   const productsSnapshot = await db.ref('products').once('value');
   const products = Object.values(productsSnapshot.val() || {}) as any[];
+  let product = findProductForLookup(products, lookup);
 
-  let product = products.find((item: any) => {
-    return (
-      item?.serialId === decodedValue ||
-      item?.serialHash === decodedValue ||
-      item?.batchId === decodedValue ||
-      item?.batchHash === decodedValue ||
-      item?.metadataHash === decodedValue
-    );
-  });
-
-  if (!product && qrBatchHash) {
-    product = products.find((item: any) => {
-      return (
-        item?.batchHash === qrBatchHash ||
-        item?.batchId === qrBatchHash ||
-        item?.metadataHash === qrMetadataHash
-      );
-    });
-  }
-
-  if (!product && (qrBatchHash || qrMetadataHash)) {
+  if (!product && lookup.kind === 'batchPayload') {
     const batchesSnapshot = await db.ref('batches').once('value');
     const batches = Object.values(batchesSnapshot.val() || {}) as any[];
-    const batch = batches.find((item: any) => {
-      return (
-        item?.batchHash === qrBatchHash ||
-        item?.id === qrBatchHash ||
-        item?.batchQR === qrBatchHash ||
-        item?.metadataHash === qrMetadataHash
-      );
-    });
+    const batch = findBatchForPayload(batches, lookup);
 
     if (batch) {
-      product = products.find((item: any) => item?.batchHash === batch.batchHash || item?.batchId === batch.id);
+      product = products.find((item: any) => productBelongsToBatch(item, batch));
     }
   }
 
@@ -108,8 +73,8 @@ async function resolveProduct(lookupValue: string) {
 
   return {
     product,
-    lookupHash: product.serialHash || toBytes32(product.serialId || decodedValue),
-    lookupValue: product.serialId || decodedValue,
+    lookupHash: product.serialHash || toBytes32(product.serialId || lookup.value),
+    lookupValue: product.serialId || lookup.value,
   };
 }
 
