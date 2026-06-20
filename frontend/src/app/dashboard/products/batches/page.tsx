@@ -4,11 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, Boxes, Clock, RefreshCw, Truck } from "lucide-react";
-import { getBatches, getTransfers } from "@/lib/api";
+import { getBatches, getProducts, getTransfers } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import type { Batch, TransferRecord } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import { canRegisterProducts, isEndUserRole } from "@/lib/role-access";
 
 function BatchRow({ batch, t }: { batch: Batch; t: (key: string) => string }) {
   const isRecalled = !!batch.recalledAt;
@@ -133,10 +134,28 @@ export default function BatchManagementPage() {
     queryFn: getTransfers,
     staleTime: 20_000,
   });
-  const user = typeof window === "undefined" ? null : getStoredUser();
+  const [user] = useState(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const canRegister = canRegisterProducts(user);
+  const endUser = isEndUserRole(user);
+  const { data: ownedProducts, isLoading: ownedProductsLoading } = useQuery({
+    queryKey: ["owned-products", user?.address],
+    queryFn: () => getProducts({ owner: user?.address, page: 1, pageSize: 100 }),
+    enabled: endUser && Boolean(user?.address),
+  });
   const pendingBatchGroups = groupPendingTransfersByBatch(transfers, batches, user?.role);
 
-  const filteredBatches = batches.filter((batch) => {
+  const ownedBatchKeys = new Set(
+    (ownedProducts?.items || []).flatMap((product) =>
+      [product.batchId, product.batchHash].filter(Boolean).map(getBatchKey)
+    )
+  );
+  const visibleBatches = endUser
+    ? batches.filter((batch) =>
+        [batch.id, batch.batchHash, batch.batchQR].some((value) => ownedBatchKeys.has(getBatchKey(value)))
+      )
+    : batches;
+
+  const filteredBatches = visibleBatches.filter((batch) => {
     if (statusFilter === "RECALLED") return !!batch.recalledAt;
     if (statusFilter === "ACTIVE") return !batch.recalledAt;
     return true;
@@ -149,7 +168,9 @@ export default function BatchManagementPage() {
           <h1 className="text-3xl font-bold">{t("Quản lý lô hàng")}</h1>
           <p className="text-muted-foreground">{t("Xem lại các lô đã đăng ký, trạng thái thu hồi và serial bên trong từng lô.")}</p>
         </div>
-        <Link href="/dashboard/products/register" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white">{t("Đăng ký sản phẩm")}</Link>
+        {canRegister ? (
+          <Link href="/dashboard/products/register" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white">{t("Đăng ký sản phẩm")}</Link>
+        ) : null}
       </div>
 
       <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10">
@@ -184,7 +205,7 @@ export default function BatchManagementPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/70">
         <div className="flex items-center gap-2">
           <Boxes className="h-4 w-4 text-blue-500" />
-          <h2 className="font-semibold text-zinc-800 dark:text-zinc-100">{t("Tất cả lô hàng")}{batches.length > 0 ? <span className="ml-2 font-normal text-zinc-400">({batches.length})</span> : null}</h2>
+          <h2 className="font-semibold text-zinc-800 dark:text-zinc-100">{t(endUser ? "Lô đang quản lý" : "Tất cả lô hàng")}{visibleBatches.length > 0 ? <span className="ml-2 font-normal text-zinc-400">({visibleBatches.length})</span> : null}</h2>
         </div>
         <div className="flex flex-wrap gap-2">
           <select className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -203,14 +224,18 @@ export default function BatchManagementPage() {
       </div>
 
       <section className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/70 p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/30">
-        {isLoading ? (
+        {isLoading || (endUser && ownedProductsLoading) ? (
           <div className="space-y-2">{[1, 2, 3].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800" />)}</div>
         ) : filteredBatches.length === 0 ? (
           <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 py-14 text-center dark:border-zinc-700">
             <Boxes className="mb-3 h-8 w-8 text-zinc-300 dark:text-zinc-600" />
             <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-300">{t("Không tìm thấy lô hàng.")}</p>
-            <p className="text-xs text-zinc-400 dark:text-zinc-500">{t("Đăng ký một sản phẩm để tạo lô hàng đầu tiên.")}</p>
-            <Link href="/dashboard/products/register" className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">{t("Đăng ký sản phẩm")}</Link>
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              {t(canRegister ? "Đăng ký một sản phẩm để tạo lô hàng đầu tiên." : "Chưa có lô hàng nào được giao cho đơn vị của bạn.")}
+            </p>
+            {canRegister ? (
+              <Link href="/dashboard/products/register" className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300">{t("Đăng ký sản phẩm")}</Link>
+            ) : null}
           </div>
         ) : (
           <div className="max-h-[min(58vh,580px)] space-y-2 overflow-y-auto pr-1">

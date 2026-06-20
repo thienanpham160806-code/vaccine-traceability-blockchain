@@ -28,6 +28,15 @@ import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { LanguageFlag } from "@/components/ui/LanguageFlag";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import {
+  canManageRecall,
+  canManageRoles,
+  canViewInternalProducts,
+  canViewOperationalRisk,
+  canViewTransfers,
+  isEndUserRole,
+  isPublicUser,
+} from "@/lib/role-access";
 
 const menuItems = [
   { title: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
@@ -116,15 +125,22 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
     setLookupValue("");
   };
 
-  const visibleMenuItems = menuItems.filter((item) => {
-    const role = user?.role;
-    if (item.href === "/dashboard/recall") return role === "RECALL_AUTHORITY" || role === "ADMIN";
-    return true;
-  });
+  const visibleMenuItems = menuItems
+    .filter((item) => {
+      if (item.href === "/dashboard/products") return canViewInternalProducts(user);
+      if (item.href === "/dashboard/transfers") return canViewTransfers(user);
+      if (item.href === "/dashboard/risk-dispute") return canViewOperationalRisk(user);
+      if (item.href === "/dashboard/recall") return canManageRecall(user);
+      return true;
+    })
+    .map((item) =>
+      item.href === "/dashboard/transfers" && isEndUserRole(user)
+        ? { ...item, title: "Lô chờ nhận" }
+        : item
+    );
   const extraMenuItems = [
-    ...(user?.role === "PUBLIC" ? [{ title: "Yêu cầu role", href: "/dashboard/role-request", icon: UserCheck }] : []),
-    ...(user?.role === "ADMIN" || user?.roles?.includes("ADMIN") ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
-    ...(user?.role === "RECALL_AUTHORITY" || user?.roles?.includes("RECALL_AUTHORITY") ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
+    ...(isPublicUser(user) ? [{ title: "Yêu cầu role", href: "/dashboard/role-request", icon: UserCheck }] : []),
+    ...(canManageRoles(user) ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
   ];
   const selectedTheme = mounted ? theme || "system" : "system";
 

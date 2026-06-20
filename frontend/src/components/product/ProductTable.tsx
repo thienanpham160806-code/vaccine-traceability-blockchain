@@ -10,6 +10,8 @@ import { TableSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { getProductStatusLabel } from "@/lib/status";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import { getStoredUser } from "@/lib/auth";
+import { canInitiateTransfer, isEndUserRole } from "@/lib/role-access";
 
 const statusOptions = ["ALL", "REGISTERED", "VERIFIED", "IN_TRANSIT", "PENDING_DELIVERY", "DELIVERED", "FLAGGED", "RECALLED"];
 const originOptions = ["ALL", "MANUFACTURED", "IMPORTED"];
@@ -31,6 +33,8 @@ export function ProductTable() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [user] = useState(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const showTransferAction = canInitiateTransfer(user);
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
@@ -40,6 +44,7 @@ export function ProductTable() {
         search: search.trim() || undefined,
         status: statusFilter === "ALL" ? undefined : statusFilter,
         manufacturer: manufacturerFilter.trim() || undefined,
+        owner: isEndUserRole(user) ? user?.address : undefined,
         batch: batchFilter.trim() || undefined,
         origin: originFilter === "ALL" ? undefined : (originFilter as "MANUFACTURED" | "IMPORTED"),
         sort,
@@ -61,7 +66,7 @@ export function ProductTable() {
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
-  }, [batchFilter, manufacturerFilter, originFilter, page, pageSize, reloadKey, search, sort, statusFilter, t]);
+  }, [batchFilter, manufacturerFilter, originFilter, page, pageSize, reloadKey, search, sort, statusFilter, t, user]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -152,7 +157,9 @@ export function ProductTable() {
                 </div>
                 <div className="mt-4 flex flex-wrap gap-3 text-sm">
                   <Link href={`/dashboard/products/${encodeURIComponent(product.serialId)}`} className="font-semibold text-blue-600 hover:underline">{t("Chi tiết")}</Link>
-                  <Link href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`} className="font-semibold text-emerald-600 hover:underline">{t("Chuyển giao")}</Link>
+                  {showTransferAction ? (
+                    <Link href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`} className="font-semibold text-emerald-600 hover:underline">{t("Chuyển giao")}</Link>
+                  ) : null}
                   <Link href={`/consumer/verify/${encodeURIComponent(product.serialId)}`} className="font-semibold text-zinc-600 hover:underline dark:text-zinc-300">{t("Công khai")}</Link>
                 </div>
               </article>
@@ -181,7 +188,9 @@ export function ProductTable() {
                     <td className="px-5 py-4"><ProductStatusBadge status={product.status} /></td>
                     <td className="flex flex-wrap gap-3 px-5 py-4">
                       <Link href={`/dashboard/products/${encodeURIComponent(product.serialId)}`} className="font-medium text-blue-600 hover:underline">{t("Chi tiết")}</Link>
-                      <Link href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`} className="font-medium text-emerald-600 hover:underline">{t("Chuyển giao")}</Link>
+                      {showTransferAction ? (
+                        <Link href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`} className="font-medium text-emerald-600 hover:underline">{t("Chuyển giao")}</Link>
+                      ) : null}
                       <Link href={`/consumer/verify/${encodeURIComponent(product.serialId)}`} className="font-medium text-zinc-600 hover:underline dark:text-zinc-300">{t("Công khai")}</Link>
                     </td>
                   </tr>

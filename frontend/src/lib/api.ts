@@ -344,6 +344,7 @@ export async function getProducts(params?: {
   search?: string;
   status?: string;
   manufacturer?: string;
+  owner?: string;
   batch?: string;
   origin?: "MANUFACTURED" | "IMPORTED";
   sort?: string;

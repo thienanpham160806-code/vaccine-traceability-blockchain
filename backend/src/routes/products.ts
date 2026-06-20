@@ -302,6 +302,7 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
       search,
       status,
       manufacturer,
+      owner,
       batch,
       origin,
       sort = 'createdAt:desc',
@@ -313,6 +314,7 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
       search,
       status,
       manufacturer,
+      owner,
       batch,
       origin,
       sort,
@@ -329,6 +331,7 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
     const searchText = normalizeText(String(search || ''));
     const statusText = normalizeText(String(status || ''));
     const manufacturerText = normalizeText(String(manufacturer || ''));
+    const ownerText = normalizeAddress(String(owner || ''));
     const batchText = normalizeText(String(batch || ''));
     const originText = normalizeText(String(origin || ''));
 
@@ -363,6 +366,12 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
           normalizeText(product.manufacturerAddress).includes(manufacturerText)
         );
       });
+    }
+
+    if (ownerText) {
+      products = products.filter(
+        (product) => normalizeAddress(product.currentOwner) === ownerText
+      );
     }
 
     if (batchText) {

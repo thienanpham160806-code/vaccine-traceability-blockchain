@@ -10,6 +10,7 @@ import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { TransferRecord } from "@/lib/types";
 import { getTransferLedgerAddress, toBytes32, transferLedgerAbi } from "@/lib/wallet-contracts";
+import { canInitiateTransfer, isEndUserRole } from "@/lib/role-access";
 
 interface PageProps {
   params: Promise<{ transferId: string }>;
@@ -166,6 +167,8 @@ export default function TransferDetailPage({ params }: PageProps) {
   }
 
   const canAct = transfer.status === "PENDING" && (user?.role === transfer.toRole || user?.role === "ADMIN");
+  const canCreateTransfer = canInitiateTransfer(user);
+  const endUser = isEndUserRole(user);
 
   return (
     <div className="max-w-3xl space-y-5 pb-20 lg:pb-0">
@@ -268,14 +271,16 @@ export default function TransferDetailPage({ params }: PageProps) {
           <ExternalLink className="h-3.5 w-3.5" /> Xác minh sản phẩm
         </Link>
         <Link href="/dashboard/transfers" className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
-          <ArrowLeft className="h-3.5 w-3.5" /> Tất cả lệnh
+          <ArrowLeft className="h-3.5 w-3.5" /> {endUser ? "Lô chờ nhận" : "Tất cả lệnh"}
         </Link>
-        <Link
-          href={`/dashboard/transfers/create?serialId=${encodeURIComponent(transfer.serialId)}`}
-          className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
-        >
-          <ArrowRight className="h-3.5 w-3.5" /> Tạo lệnh chuyển
-        </Link>
+        {canCreateTransfer ? (
+          <Link
+            href={`/dashboard/transfers/create?serialId=${encodeURIComponent(transfer.serialId)}`}
+            className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
+          >
+            <ArrowRight className="h-3.5 w-3.5" /> Tạo lệnh chuyển
+          </Link>
+        ) : null}
       </div>
     </div>
   );

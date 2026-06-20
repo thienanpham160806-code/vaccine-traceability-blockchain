@@ -12,6 +12,7 @@ import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import type { DashboardActivity } from "@/lib/types";
+import { isEndUserRole } from "@/lib/role-access";
 
 type BreadcrumbItem = {
   title: string;
@@ -207,7 +208,14 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const notificationCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const meta = getPageMeta(pathname);
+  const defaultMeta = getPageMeta(pathname);
+  const meta =
+    pathname === "/dashboard/transfers" && isEndUserRole(user)
+      ? withDefaultBreadcrumb({
+          title: "Lô chờ nhận",
+          sub: "Xem và xác nhận lô vaccine gửi đến đơn vị",
+        })
+      : defaultMeta;
 
   const { data: refreshedSession } = useQuery({
     queryKey: ["auth-session", user?.address],
