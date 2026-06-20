@@ -30,7 +30,7 @@ const defaultDemoActors: Record<string, string> = {
   RECALL_AUTHORITY: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
 };
 const demoRoleOrder = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'RECALL_AUTHORITY'];
-const grantableRoles = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'AUDITOR', 'RECALL_AUTHORITY'] as const;
+const grantableRoles = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'RECALL_AUTHORITY'] as const;
 type GrantableRole = (typeof grantableRoles)[number];
 
 function normalizeAddress(address: string): string {
