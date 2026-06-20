@@ -54,10 +54,6 @@ const themeOptions = [
   { value: "system", label: "Hệ thống", icon: Monitor },
 ] as const;
 
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
-
 type EthereumProvider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
 };
@@ -374,7 +370,6 @@ export default function LoginPage() {
           <VaxiTrustLogo className="h-12 w-12" iconClassName="h-7 w-7" showWordmark wordmarkClassName="text-2xl" />
           <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
             <PreferenceControls />
-            {address ? <span className="rounded-lg border border-zinc-200 bg-white/80 px-3 py-2 font-mono text-xs text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-400">{shortAddress(address)}</span> : null}
           </div>
         </header>
 
