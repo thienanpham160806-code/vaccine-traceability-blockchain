@@ -21,6 +21,7 @@ import type { VerifyResult } from "@/lib/types";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { ContactFooter } from "@/components/layout/ContactFooter";
 import { SupplyChainNodeGraph } from "@/components/trace/SupplyChainNodeGraph";
+import { LanguageFlag } from "@/components/ui/LanguageFlag";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 interface PageProps {
@@ -186,6 +187,13 @@ function VerifyControls() {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
   const text = copy[language];
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const selectedTheme = mounted ? theme || "system" : "system";
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -195,7 +203,7 @@ function VerifyControls() {
       >
         {themeOptions.map((option) => {
           const Icon = option.icon;
-          const selected = (theme || "system") === option.value;
+          const selected = selectedTheme === option.value;
           return (
             <button
               key={option.value}
@@ -225,14 +233,15 @@ function VerifyControls() {
             key={item}
             type="button"
             onClick={() => setLanguage(item)}
-            className={`flex h-9 min-w-10 items-center justify-center gap-1 rounded-md px-2 transition ${
+            className={`flex h-9 min-w-14 items-center justify-center gap-1.5 rounded-md px-2 transition ${
               language === item
                 ? "bg-blue-600 text-white"
                 : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
             }`}
           >
             {language === item ? <Check className="h-3 w-3" /> : null}
-            {item.toUpperCase()}
+            <LanguageFlag language={item} />
+            <span>{item.toUpperCase()}</span>
           </button>
         ))}
       </div>

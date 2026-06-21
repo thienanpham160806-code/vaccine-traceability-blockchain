@@ -4,7 +4,7 @@
     ".write": "auth != null",
 
     "products": {
-      ".indexOn": ["serialId", "serialHash", "status", "batchHash", "batchId", "manufacturerName", "currentOwner", "createdAt"]
+      ".indexOn": ["serialId", "serialHash", "status", "batchHash", "batchId", "manufacturerName", "currentOwner", "ownerRole", "createdAt"]
     },
     "transfers": {
       ".indexOn": ["serialId", "serialHash", "status", "fromRole", "toRole", "createdAt", "updatedAt"]

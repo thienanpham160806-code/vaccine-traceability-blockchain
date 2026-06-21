@@ -10,6 +10,7 @@ import { translateRole } from "@/lib/i18n";
 import { getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { TransferRecord, TransferStatus } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import { canInitiateTransfer, hasAnyRole, isEndUserRole } from "@/lib/role-access";
 
 const statusOptions: Array<TransferStatus | "ALL"> = ["ALL", "PENDING", "CONFIRMED", "REJECTED", "RETURNED"];
 
@@ -124,9 +125,30 @@ export default function TransfersPage() {
     refetchOnWindowFocus: false,
   });
 
+  const roleTransfers = useMemo(() => {
+    if (!user) return [];
+    if (hasAnyRole(user, ["ADMIN", "AUDITOR", "RECALL_AUTHORITY"])) return transfers;
+
+    if (isEndUserRole(user)) {
+      return transfers.filter(
+        (transfer) =>
+          transfer.toRole === user.role ||
+          transfer.toAddress?.toLowerCase() === user.address.toLowerCase()
+      );
+    }
+
+    return transfers.filter(
+      (transfer) =>
+        transfer.fromRole === user.role ||
+        transfer.toRole === user.role ||
+        transfer.fromAddress?.toLowerCase() === user.address.toLowerCase() ||
+        transfer.toAddress?.toLowerCase() === user.address.toLowerCase()
+    );
+  }, [transfers, user]);
+
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
-    return transfers.filter((transfer) => {
+    return roleTransfers.filter((transfer) => {
       const matchesStatus = status === "ALL" || transfer.status === status;
       const matchesSearch =
         !q ||
@@ -136,30 +158,42 @@ export default function TransfersPage() {
         transfer.toRole?.toLowerCase().includes(q);
       return matchesStatus && matchesSearch;
     });
-  }, [debouncedSearch, status, transfers]);
+  }, [debouncedSearch, roleTransfers, status]);
 
-  const pendingCount = transfers.filter((transfer) => transfer.status === "PENDING").length;
+  const pendingCount = roleTransfers.filter((transfer) => transfer.status === "PENDING").length;
+  const endUser = isEndUserRole(user);
+  const canCreate = canInitiateTransfer(user);
 
   return (
     <div className="space-y-5 pb-20 lg:pb-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-zinc-900">{t("Lệnh chuyển")}</h1>
-          <p className="text-sm text-zinc-500">{t("Theo dõi yêu cầu chuyển giao, xác nhận và từ chối bàn giao.")}</p>
+          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+            {t(endUser ? "Lô chờ nhận" : "Lệnh chuyển")}
+          </h1>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {t(
+              endUser
+                ? "Xem và xử lý các lô vaccine được gửi đến đơn vị của bạn."
+                : "Theo dõi yêu cầu chuyển giao, xác nhận và từ chối bàn giao."
+            )}
+          </p>
         </div>
-        <Link
-          href="/dashboard/transfers/create"
-          className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700"
-        >
-          <Plus className="h-4 w-4" />
-          {t("Tạo lệnh chuyển")}
-        </Link>
+        {canCreate ? (
+          <Link
+            href="/dashboard/transfers/create"
+            className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white hover:bg-blue-700"
+          >
+            <Plus className="h-4 w-4" />
+            {t("Tạo lệnh chuyển")}
+          </Link>
+        ) : null}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
-          <p className="text-2xl font-bold text-zinc-900">{transfers.length}</p>
-          <p className="text-xs text-zinc-500">{t("Tổng lệnh chuyển")}</p>
+          <p className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">{roleTransfers.length}</p>
+          <p className="text-xs text-zinc-500">{t(endUser ? "Tổng lô được gửi đến" : "Tổng lệnh chuyển")}</p>
         </div>
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 shadow-sm">
           <p className="text-2xl font-bold text-amber-800">{pendingCount}</p>
@@ -167,7 +201,7 @@ export default function TransfersPage() {
         </div>
         <div className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
           <p className="text-2xl font-bold text-zinc-900">
-            {transfers.filter((transfer) => user?.role && transfer.toRole === user.role && transfer.status === "PENDING").length}
+            {roleTransfers.filter((transfer) => user?.role && transfer.toRole === user.role && transfer.status === "PENDING").length}
           </p>
           <p className="text-xs text-zinc-500">{t("Cần vai trò của bạn")}</p>
         </div>

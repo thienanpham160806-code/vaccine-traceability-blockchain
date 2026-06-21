@@ -2,9 +2,12 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePublicClient, useWriteContract } from "wagmi";
 import { AlertTriangle, CheckSquare, RefreshCw, RotateCcw, ShieldAlert, Square } from "lucide-react";
-import { createRecall, getApiErrorMessage, getBatches, getRecalls, getRiskFlags } from "@/lib/api";
+import { createRecall, getApiErrorMessage, getBatches, getRecalls, getRiskFlags, syncWalletRecall } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 import type { Batch, RecallRecord, RiskFlag } from "@/lib/types";
+import { getProductRegistryAddress, productRegistryAbi, toBytes32 } from "@/lib/wallet-contracts";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const inputCls =
@@ -192,6 +195,8 @@ function FlaggedBatchesSection({
 export default function RecallPage() {
   const qc = useQueryClient();
   const t = useTranslation();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
   const { data: recalls = [], isLoading } = useQuery<RecallRecord[]>({
     queryKey: ["recalls"],
     queryFn: getRecalls,
@@ -217,11 +222,26 @@ export default function RecallPage() {
     setError(null);
     setSuccess(null);
     try {
-      const data = await createRecall({
+      const payload = {
         batchHash: batchHash.trim(),
         reason: reason.trim(),
         serials: serials.split(",").map((s) => s.trim()).filter(Boolean),
-      });
+      };
+      let data;
+      const user = getStoredUser();
+      if (user?.authMode === "wallet") {
+        if (!publicClient) throw new Error(t("Chưa sẵn sàng kết nối Sepolia."));
+        const txHash = await writeContractAsync({
+          address: getProductRegistryAddress(),
+          abi: productRegistryAbi,
+          functionName: "recallBatch",
+          args: [toBytes32(payload.batchHash), toBytes32(payload.reason)],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        data = await syncWalletRecall({ ...payload, txHash });
+      } else {
+        data = await createRecall(payload);
+      }
       setSuccess(`${t("Lệnh thu hồi đã được tạo on-chain.")} TX: ${data.txHash || data.blockchainTx || "N/A"}`);
       setBatchHash("");
       setReason("");

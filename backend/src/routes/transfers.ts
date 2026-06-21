@@ -32,6 +32,7 @@ const allowedTransferRoutes: Record<string, string[]> = {
   IMPORTER: ['DISTRIBUTOR'],
   DISTRIBUTOR: ['DISTRIBUTOR', 'CLINIC', 'PHARMACY'],
 };
+const transferReceiverActionRoles = ['IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN'];
 
 function toBytes32(value?: string): string {
   if (!value) return ZERO_BYTES32;
@@ -39,7 +40,21 @@ function toBytes32(value?: string): string {
 }
 
 function getErrorMessage(error: any, fallback: string): string {
-  return error?.shortMessage || error?.reason || error?.message || fallback;
+  const raw =
+    error?.shortMessage ||
+    error?.reason ||
+    error?.revert?.args?.[0] ||
+    error?.error?.reason ||
+    error?.error?.message ||
+    error?.info?.error?.message ||
+    error?.message ||
+    fallback;
+
+  if (typeof raw !== 'string') return fallback;
+  if (/missing revert data/i.test(raw)) {
+    return `${fallback}. Smart contract reverted before returning a reason. Check that the selected wallet is the on-chain owner/receiver and that the product is not pending, flagged, or recalled.`;
+  }
+  return raw;
 }
 
 function httpError(statusCode: number, code: string, message: string): Error & { statusCode: number; code: string } {
@@ -93,9 +108,19 @@ function isAllowedTransferRoute(fromRole: string, toRole: string): boolean {
   return allowedTransferRoutes[fromRole]?.includes(toRole) || false;
 }
 
+function authenticatedUserHasRole(req: AuthRequest, role: string): boolean {
+  const roles = req.user?.roles?.length ? req.user.roles : [req.user?.role];
+  return roles.filter(Boolean).includes(role);
+}
+
 function productRegistryStatusToProductStatus(status: number): TransferRecord['status'] | 'REGISTERED' | 'VERIFIED' | 'IN_TRANSIT' | 'DELIVERED' | 'FLAGGED' | 'RECALLED' {
   const statuses = ['REGISTERED', 'VERIFIED', 'IN_TRANSIT', 'DELIVERED', 'FLAGGED', 'RECALLED'] as const;
   return statuses[status] || 'VERIFIED';
+}
+
+function canCreateOnChainTransfer(status: number): boolean {
+  // ProductRegistry.markInTransit only accepts VERIFIED or DELIVERED.
+  return status === 1 || status === 3;
 }
 
 async function resolvePendingTransfer(serialId: string, serialHash: string): Promise<[string, TransferRecord] | null> {
@@ -336,6 +361,45 @@ router.post(
     }
 
     const senderAddress = contractClient.getRoleAddress(fromRole);
+    const [currentOwner, statusBefore, onChainPending] = await Promise.all([
+      contractClient.getCurrentOwner(serialHash),
+      contractClient.getProductStatus(serialHash),
+      contractClient.getPendingTransfer(serialHash),
+    ]);
+
+    if (onChainPending.exists) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'PENDING_TRANSFER_EXISTS_ON_CHAIN',
+          message: `Serial ${serialId} already has a pending on-chain transfer. Confirm or reject that transfer before creating a new one.`,
+        },
+        timestamp: Date.now(),
+      });
+    }
+
+    if (!sameHex(currentOwner, senderAddress)) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'NOT_CURRENT_OWNER_ON_CHAIN',
+          message: `Role ${fromRole} cannot transfer ${serialId} because its signer ${senderAddress} is not the current on-chain owner ${currentOwner}. Log in with the current owner role/wallet or sync product ownership first.`,
+        },
+        timestamp: Date.now(),
+      });
+    }
+
+    if (!canCreateOnChainTransfer(Number(statusBefore))) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'PRODUCT_STATUS_NOT_TRANSFERABLE',
+          message: `Product ${serialId} cannot be transferred from current on-chain status ${productRegistryStatusToProductStatus(Number(statusBefore))}.`,
+        },
+        timestamp: Date.now(),
+      });
+    }
+
     const fromLoc = toBytes32(fromLocationHash || (fromLocation ? `location:${fromLocation}` : `from:${senderAddress}`));
     const toLoc = toBytes32(toLocationHash || `to:${receiverAddress}`);
     const transferMetadata = buildTransferMetadata(req.body);
@@ -387,6 +451,7 @@ router.post(
       db.ref(`products/${serialHash}`).update({
         status: 'IN_TRANSIT',
         currentOwner: senderAddress,
+        ownerRole: fromRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).set(transferId),
@@ -514,6 +579,7 @@ router.post(
       db.ref(`products/${serialHash}`).update({
         status: 'IN_TRANSIT',
         currentOwner: senderAddress,
+        ownerRole: fromRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).set(transferId),
@@ -538,7 +604,7 @@ router.post(
 router.post(
   '/confirm',
   verifyToken,
-  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  requireRole(transferReceiverActionRoles),
   validateRequest({ body: transferConfirmSchema }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -580,7 +646,7 @@ router.post(
     }
 
     const [transferId, pendingTransfer] = pendingEntry;
-    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && !authenticatedUserHasRole(req, pendingTransfer.toRole)) {
       return res.status(403).json({
         success: false,
         error: {
@@ -591,7 +657,12 @@ router.post(
     }
 
     const locationHash = toBytes32(receiverLocationHash || pendingTransfer.toLocationHash);
-    const txHash = await contractClient.confirmTransfer(serialHash, locationHash, pendingTransfer.toRole);
+    const txHash = await contractClient.confirmTransfer(
+      serialHash,
+      locationHash,
+      pendingTransfer.toRole,
+      pendingTransfer.toAddress
+    );
     const now = Date.now();
     const deliveredStatus = getDeliveredStatus(pendingTransfer.toRole);
 
@@ -605,6 +676,7 @@ router.post(
       db.ref(`products/${serialHash}`).update({
         status: deliveredStatus,
         currentOwner: pendingTransfer.toAddress,
+        ownerRole: pendingTransfer.toRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).remove(),
@@ -635,7 +707,7 @@ router.post(
 router.post(
   '/sync-wallet-confirm',
   verifyToken,
-  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  requireRole(transferReceiverActionRoles),
   validateRequest({ body: transferConfirmSchema.extend({ txHash: txHashSchema }) }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -657,7 +729,7 @@ router.post(
     }
 
     const [transferId, pendingTransfer] = pendingEntry;
-    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && !authenticatedUserHasRole(req, pendingTransfer.toRole)) {
       return res.status(403).json({
         success: false,
         error: { code: 'ROLE_MISMATCH', message: `Only ${pendingTransfer.toRole} can confirm this transfer` },
@@ -691,6 +763,7 @@ router.post(
       db.ref(`products/${serialHash}`).update({
         status: deliveredStatus,
         currentOwner: pendingTransfer.toAddress,
+        ownerRole: pendingTransfer.toRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).remove(),
@@ -715,7 +788,7 @@ router.post(
 router.post(
   '/reject',
   verifyToken,
-  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  requireRole(transferReceiverActionRoles),
   validateRequest({ body: transferRejectSchema }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -758,7 +831,7 @@ router.post(
 
     const [transferId, pendingTransfer] = pendingEntry;
 
-    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && !authenticatedUserHasRole(req, pendingTransfer.toRole)) {
       return res.status(403).json({
         success: false,
         error: {
@@ -851,7 +924,7 @@ router.post(
 router.post(
   '/sync-wallet-reject',
   verifyToken,
-  requireRole(['DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  requireRole(transferReceiverActionRoles),
   validateRequest({ body: transferRejectSchema.extend({ txHash: txHashSchema }) }),
   async (req: AuthRequest, res: Response) => {
   try {
@@ -873,7 +946,7 @@ router.post(
     }
 
     const [transferId, pendingTransfer] = pendingEntry;
-    if (req.user?.role !== 'ADMIN' && req.user?.role !== pendingTransfer.toRole) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && !authenticatedUserHasRole(req, pendingTransfer.toRole)) {
       return res.status(403).json({
         success: false,
         error: { code: 'ROLE_MISMATCH', message: `Only ${pendingTransfer.toRole} can reject this transfer` },
@@ -896,7 +969,7 @@ router.post(
       throw httpError(400, 'TX_REASON_MISMATCH', 'Transaction rejection reason does not match request payload');
     }
 
-    if (req.user?.role !== 'ADMIN' && normalizeAddress(req.user?.address) !== normalizeAddress(pendingTransfer.toAddress)) {
+    if (!authenticatedUserHasRole(req, 'ADMIN') && normalizeAddress(req.user?.address) !== normalizeAddress(pendingTransfer.toAddress)) {
       throw httpError(403, 'TX_SENDER_MISMATCH', 'Authenticated wallet cannot sync this receiver transaction');
     }
 

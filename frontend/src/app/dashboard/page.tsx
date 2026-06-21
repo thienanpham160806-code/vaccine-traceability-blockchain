@@ -21,6 +21,16 @@ import { translateRole } from "@/lib/i18n";
 import { getProductStatusLabel, getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { DashboardActivity } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import {
+  canAccessDashboardPath,
+  canInitiateTransfer,
+  canManageRecall,
+  canRegisterProducts,
+  canViewInternalProducts,
+  canViewTransfers,
+  isEndUserRole,
+  isPublicUser,
+} from "@/lib/role-access";
 
 const activityIcon = {
   PRODUCT: CheckCircle2,
@@ -34,44 +44,57 @@ function formatTime(timestamp: number, language: "en" | "vi") {
   return new Date(timestamp).toLocaleString(language === "en" ? "en-US" : "vi-VN");
 }
 
-function roleActions(role?: string) {
-  const base = [
-    { label: "Sản phẩm", href: "/dashboard/products", icon: CheckCircle2, tone: "white" },
-    { label: "Lệnh chuyển", href: "/dashboard/transfers", icon: Truck, tone: "white" },
-  ];
+function roleActions(user: DemoUser | null) {
+  if (isPublicUser(user)) {
+    return [
+      { label: "Quét QR", href: "/dashboard/scan", icon: CheckCircle2, tone: "primary" },
+      { label: "Yêu cầu role", href: "/dashboard/role-request", icon: ShieldAlert, tone: "white" },
+    ];
+  }
 
-  if (role === "MANUFACTURER" || role === "IMPORTER" || role === "ADMIN") {
+  if (canRegisterProducts(user)) {
     return [
       { label: "Đăng ký lô", href: "/dashboard/products/batches", icon: PackagePlus, tone: "primary" },
       { label: "Tạo lệnh chuyển", href: "/dashboard/transfers/create", icon: Truck, tone: "white" },
-      ...base.slice(0, 1),
+      { label: "Sản phẩm", href: "/dashboard/products", icon: CheckCircle2, tone: "white" },
     ];
   }
 
-  if (role === "DISTRIBUTOR") {
+  if (user?.role === "DISTRIBUTOR") {
     return [
       { label: "Lệnh chờ xác nhận", href: "/dashboard/transfers?status=PENDING", icon: Clock, tone: "primary" },
       { label: "Tạo lệnh chuyển", href: "/dashboard/transfers/create", icon: Truck, tone: "white" },
-      ...base.slice(0, 1),
+      { label: "Sản phẩm", href: "/dashboard/products", icon: CheckCircle2, tone: "white" },
     ];
   }
 
-  if (role === "CLINIC" || role === "PHARMACY") {
+  if (isEndUserRole(user)) {
     return [
-      { label: "Lệnh chờ xác nhận", href: "/dashboard/transfers?status=PENDING", icon: Clock, tone: "primary" },
-      ...base.slice(0, 1),
+      { label: "Lô chờ nhận", href: "/dashboard/transfers?status=PENDING", icon: Clock, tone: "primary" },
+      { label: "Sản phẩm đang quản lý", href: "/dashboard/products", icon: CheckCircle2, tone: "white" },
+      { label: "Quét QR", href: "/dashboard/scan", icon: CheckCircle2, tone: "white" },
     ];
   }
 
-  if (role === "RECALL_AUTHORITY") {
+  if (canManageRecall(user)) {
     return [
       { label: "Thu hồi", href: "/dashboard/recall", icon: RotateCcw, tone: "primary" },
       { label: "Rủi ro", href: "/dashboard/risk-dispute", icon: ShieldAlert, tone: "white" },
-      ...base.slice(0, 1),
+      { label: "Sản phẩm", href: "/dashboard/products", icon: CheckCircle2, tone: "white" },
     ];
   }
 
-  return base;
+  return [
+    ...(canViewInternalProducts(user)
+      ? [{ label: "Sản phẩm", href: "/dashboard/products", icon: CheckCircle2, tone: "primary" }]
+      : []),
+    ...(canViewTransfers(user)
+      ? [{ label: "Lệnh chuyển", href: "/dashboard/transfers", icon: Truck, tone: "white" }]
+      : []),
+    ...(canInitiateTransfer(user)
+      ? [{ label: "Tạo lệnh chuyển", href: "/dashboard/transfers/create", icon: Truck, tone: "white" }]
+      : []),
+  ];
 }
 
 const StatCard = memo(function StatCard({
@@ -157,7 +180,27 @@ export default function DashboardPage() {
     () => stats?.last7DaysTrend?.reduce((sum, day) => sum + day.count, 0) ?? 0,
     [stats?.last7DaysTrend]
   );
-  const actions = roleActions(user?.role);
+  const actions = roleActions(user);
+  const publicUser = isPublicUser(user);
+  const endUser = isEndUserRole(user);
+  const visibleActivity = useMemo(
+    () =>
+      activity.filter((item) => {
+        if (item.audienceRoles?.length && user?.role && !item.audienceRoles.includes(user.role)) {
+          return false;
+        }
+        if (publicUser && !item.audienceRoles?.includes("PUBLIC")) return false;
+        if (!item.href?.startsWith("/dashboard")) return true;
+        return canAccessDashboardPath(user, item.href.split("?")[0]);
+      }),
+    [activity, publicUser, user]
+  );
+  const activityLink = canViewTransfers(user) ? "/dashboard/transfers" : "/dashboard/scan";
+  const activityLinkLabel = canViewTransfers(user)
+    ? isEndUserRole(user)
+      ? "Lô chờ nhận"
+      : "Lệnh chuyển"
+    : "Quét QR";
 
   return (
     <div className="space-y-4 pb-20 lg:pb-0 bg-white dark:bg-zinc-950">
@@ -166,7 +209,15 @@ export default function DashboardPage() {
           <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
             {user ? `${t("Xin chào")}, ${translateRole(user.role, language)}` : t("Tổng quan")}
           </h1>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">{t("Theo dõi lô vaccine, chuyển giao, thu hồi và cảnh báo vận hành.")}</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">
+            {t(
+              publicUser
+                ? "Quét mã QR hoặc nhập serial để kiểm tra nguồn gốc vaccine."
+                : endUser
+                  ? "Theo dõi sản phẩm, lô chờ nhận và các cảnh báo liên quan đến đơn vị."
+                  : "Theo dõi lô vaccine, chuyển giao, thu hồi và cảnh báo vận hành."
+            )}
+          </p>
         </div>
 
         <div className="flex min-h-11 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm shadow-sm dark:border-zinc-700 dark:bg-zinc-950">
@@ -177,13 +228,15 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        <StatCard label={t("Lô hàng")} value={stats?.totalBatches ?? "-"} icon={Boxes} tone="bg-blue-50 text-blue-600" />
-        <StatCard label={t("Sản phẩm")} value={stats?.totalProducts ?? stats?.totalSerials ?? "-"} icon={Activity} tone="bg-emerald-50 text-emerald-600" />
-        <StatCard label={t("Lệnh chờ xác nhận")} value={stats?.pendingTransfers ?? "-"} icon={Truck} tone="bg-amber-50 text-amber-600" />
-        <StatCard label={t("Cảnh báo rủi ro")} value={stats?.riskAlerts ?? "-"} icon={ShieldAlert} tone="bg-red-50 text-red-600" />
-        <StatCard label={t("Lô đã thu hồi")} value={stats?.recalledBatches ?? 0} icon={RotateCcw} tone="bg-zinc-100 text-zinc-600" hint={`${trendTotal} / ${t("7 ngày")}`} />
-      </div>
+      {!publicUser ? (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <StatCard label={t("Lô hàng")} value={stats?.totalBatches ?? "-"} icon={Boxes} tone="bg-blue-50 text-blue-600" />
+          <StatCard label={t("Sản phẩm")} value={stats?.totalProducts ?? stats?.totalSerials ?? "-"} icon={Activity} tone="bg-emerald-50 text-emerald-600" />
+          <StatCard label={t(endUser ? "Lô chờ nhận" : "Lệnh chờ xác nhận")} value={stats?.pendingTransfers ?? "-"} icon={Truck} tone="bg-amber-50 text-amber-600" />
+          <StatCard label={t("Cảnh báo rủi ro")} value={stats?.riskAlerts ?? "-"} icon={ShieldAlert} tone="bg-red-50 text-red-600" />
+          <StatCard label={t("Lô đã thu hồi")} value={stats?.recalledBatches ?? 0} icon={RotateCcw} tone="bg-zinc-100 text-zinc-600" hint={`${trendTotal} / ${t("7 ngày")}`} />
+        </div>
+      ) : null}
 
       <div className="grid gap-3 sm:grid-cols-3">
         {actions.map((action) => {
@@ -213,16 +266,16 @@ export default function DashboardPage() {
               <Zap className="h-4 w-4 text-blue-500" />
               <h2 className="font-semibold text-zinc-800 dark:text-zinc-100">{t("Hoạt động gần đây")}</h2>
             </div>
-            <Link href="/dashboard/transfers" className="flex min-h-11 items-center gap-1 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-300">
-              {t("Lệnh chuyển")} <ArrowRight className="h-3 w-3" />
+            <Link href={activityLink} className="flex min-h-11 items-center gap-1 text-xs font-semibold text-blue-600 hover:underline dark:text-blue-300">
+              {t(activityLinkLabel)} <ArrowRight className="h-3 w-3" />
             </Link>
           </div>
 
           <div className="min-h-0 flex-1 divide-y divide-zinc-100 overflow-y-auto dark:divide-transparent">
-            {activity.length === 0 ? (
+            {visibleActivity.length === 0 ? (
               <p className="px-6 py-10 text-center text-sm text-zinc-400 dark:text-zinc-400">{t("Chưa có hoạt động gần đây.")}</p>
             ) : (
-              activity.map((item) => <ActivityRow key={item.id} item={item} language={language} />)
+              visibleActivity.map((item) => <ActivityRow key={item.id} item={item} language={language} />)
             )}
           </div>
         </section>

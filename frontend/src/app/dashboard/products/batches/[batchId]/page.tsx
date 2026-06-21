@@ -6,9 +6,12 @@ import { useQuery } from "@tanstack/react-query";
 import { QRCodeSVG } from "qrcode.react";
 import { ArrowLeft, Download, ExternalLink, QrCode, X } from "lucide-react";
 import { getBatch, getBatchSerials } from "@/lib/api";
+import { getConsumerVerifyQrValue } from "@/lib/qr";
 import { getProductStatusLabel, getStatusChipClass } from "@/lib/status";
 import type { Batch, Product } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import { getStoredUser } from "@/lib/auth";
+import { canInitiateTransfer, canRegisterProducts } from "@/lib/role-access";
 
 interface PageProps {
   params: Promise<{ batchId: string }>;
@@ -23,6 +26,7 @@ function getOriginLabel(origin: string | undefined, isRecalled: boolean, t: (key
 function QRModal({ serialId, onClose }: { serialId: string; onClose: () => void }) {
   const t = useTranslation();
   const svgRef = useRef<SVGSVGElement>(null);
+  const qrValue = getConsumerVerifyQrValue(serialId);
 
   const downloadSVG = () => {
     if (!svgRef.current) return;
@@ -58,7 +62,7 @@ function QRModal({ serialId, onClose }: { serialId: string; onClose: () => void 
         </p>
         <p className="mb-4 font-mono text-xs text-zinc-700">{serialId}</p>
         <div className="qr-surface flex justify-center rounded-xl border p-3">
-          <QRCodeSVG ref={svgRef} value={serialId} size={192} level="H" includeMargin bgColor="#ffffff" fgColor="#000000" />
+          <QRCodeSVG ref={svgRef} value={qrValue} size={192} level="H" includeMargin bgColor="#ffffff" fgColor="#000000" />
         </div>
         <button
           onClick={downloadSVG}
@@ -87,6 +91,9 @@ export default function BatchDetailPage({ params }: PageProps) {
   const [qrSerial, setQrSerial] = useState<string | null>(null);
   const t = useTranslation();
   const { language } = useLanguage();
+  const [user] = useState(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const canTransfer = canInitiateTransfer(user);
+  const canRegister = canRegisterProducts(user);
 
   const { data: batch, isLoading: batchLoading } = useQuery<Batch | undefined>({
     queryKey: ["batch", decoded],
@@ -210,12 +217,14 @@ export default function BatchDetailPage({ params }: PageProps) {
           ) : serials.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-zinc-300 py-12 text-center">
               <p className="text-sm text-zinc-500">{t("Chưa có serial nào cho lô này.")}</p>
-              <Link
-                href="/dashboard/products/batches"
-                className="mt-2 inline-block text-xs font-semibold text-blue-600 hover:underline"
-              >
-                {t("Đăng ký sản phẩm")}
-              </Link>
+              {canRegister ? (
+                <Link
+                  href="/dashboard/products/register"
+                  className="mt-2 inline-block text-xs font-semibold text-blue-600 hover:underline"
+                >
+                  {t("Đăng ký sản phẩm")}
+                </Link>
+              ) : null}
             </div>
           ) : (
             <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm">
@@ -260,12 +269,14 @@ export default function BatchDetailPage({ params }: PageProps) {
                           >
                             <ExternalLink className="h-3 w-3" /> {t("Xác minh")}
                           </Link>
-                          <Link
-                            href={`/dashboard/transfers/create?serialId=${encodeURIComponent(serial.serialId)}`}
-                            className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
-                          >
-                            {t("Chuyển")}
-                          </Link>
+                          {canTransfer ? (
+                            <Link
+                              href={`/dashboard/transfers/create?serialId=${encodeURIComponent(serial.serialId)}`}
+                              className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"
+                            >
+                              {t("Chuyển")}
+                            </Link>
+                          ) : null}
                         </div>
                       </td>
                     </tr>

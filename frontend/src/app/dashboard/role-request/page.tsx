@@ -15,7 +15,6 @@ const requestableRoles: Array<Exclude<UserRole, "ADMIN" | "PUBLIC">> = [
   "DISTRIBUTOR",
   "CLINIC",
   "PHARMACY",
-  "AUDITOR",
   "RECALL_AUTHORITY",
 ];
 

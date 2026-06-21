@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Fragment, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell, ChevronRight, LogOut, Menu, Wallet } from "lucide-react";
-import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
-import { getDashboardRecentActivity } from "@/lib/api";
+import { toast } from "sonner";
+import { clearSession, getStoredUser, setSession, type DemoUser } from "@/lib/auth";
+import { getDashboardRecentActivity, refreshAuthSession } from "@/lib/api";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import type { DashboardActivity } from "@/lib/types";
+import { isEndUserRole } from "@/lib/role-access";
 
 type BreadcrumbItem = {
   title: string;
@@ -144,7 +146,7 @@ function getPageMeta(pathname: string): PageMeta {
       breadcrumbs: [{ title: "Xác minh" }],
     };
   }
-  return withDefaultBreadcrumb({ title: "Dashboard", sub: "VaxiTrust" });
+  return withDefaultBreadcrumb({ title: "Tổng quan", sub: "VaxiTrust" });
 }
 
 const roleColor: Record<string, string> = {
@@ -195,16 +197,58 @@ function getNotificationTitle(activity: DashboardActivity, language: "en" | "vi"
 
 export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const pathname = usePathname();
   const { language } = useLanguage();
   const t = useTranslation();
-  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const [user, setUser] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const [readNotificationIds, setReadNotificationIds] = useState<string[]>(() => {
     if (typeof window === "undefined") return [];
     return loadReadNotificationIds(getNotificationStorageKey(getStoredUser()));
   });
   const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const meta = getPageMeta(pathname);
+  const notificationCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const defaultMeta = getPageMeta(pathname);
+  const meta =
+    pathname === "/dashboard/transfers" && isEndUserRole(user)
+      ? withDefaultBreadcrumb({
+          title: "Lô chờ nhận",
+          sub: "Xem và xác nhận lô vaccine gửi đến đơn vị",
+        })
+      : defaultMeta;
+
+  const { data: refreshedSession } = useQuery({
+    queryKey: ["auth-session", user?.address],
+    queryFn: refreshAuthSession,
+    enabled: Boolean(user),
+    refetchInterval: 5_000,
+    refetchIntervalInBackground: true,
+    refetchOnWindowFocus: true,
+    retry: 1,
+  });
+
+  useEffect(() => {
+    if (!refreshedSession || !user) return;
+
+    const nextUser = refreshedSession.user;
+    const previousRoles = [...(user.roles || [user.role])].sort().join(",");
+    const nextRoles = [...(nextUser.roles || [nextUser.role])].sort().join(",");
+    const roleChanged = user.role !== nextUser.role || previousRoles !== nextRoles;
+    if (!roleChanged) return;
+
+    const authMode = user.authMode || "wallet";
+    setSession(refreshedSession.token, nextUser, authMode);
+    const updatedUser: DemoUser = { ...nextUser, authMode };
+    setUser(updatedUser);
+    setReadNotificationIds(loadReadNotificationIds(getNotificationStorageKey(updatedUser)));
+    queryClient.invalidateQueries();
+    toast.success(
+      language === "en"
+        ? `Your role request was approved. Current role: ${translateRole(nextUser.role, language)}.`
+        : `Yêu cầu cấp quyền đã được duyệt. Role hiện tại: ${translateRole(nextUser.role, language)}.`
+    );
+    router.refresh();
+  }, [language, queryClient, refreshedSession, router, user]);
 
   const { data: activities = [] } = useQuery({
     queryKey: ["topbar-notifications", user?.role, user?.address],
@@ -249,6 +293,22 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
     router.push("/login");
   };
 
+  const openNotifications = () => {
+    if (notificationCloseTimer.current) {
+      clearTimeout(notificationCloseTimer.current);
+      notificationCloseTimer.current = null;
+    }
+    setNotificationsOpen(true);
+  };
+
+  const scheduleCloseNotifications = () => {
+    if (notificationCloseTimer.current) clearTimeout(notificationCloseTimer.current);
+    notificationCloseTimer.current = setTimeout(() => {
+      setNotificationsOpen(false);
+      notificationCloseTimer.current = null;
+    }, 650);
+  };
+
   return (
     <header className="flex min-h-16 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 bg-white px-4 sm:px-6 dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex min-w-0 items-center gap-3">
@@ -284,8 +344,8 @@ export function Topbar({ onMenuClick }: { onMenuClick?: () => void }) {
       <div className="flex shrink-0 items-center gap-2">
         <div
           className="relative hidden sm:block"
-          onMouseEnter={() => setNotificationsOpen(true)}
-          onMouseLeave={() => setNotificationsOpen(false)}
+          onMouseEnter={openNotifications}
+          onMouseLeave={scheduleCloseNotifications}
         >
           <button
             className="relative flex h-11 w-11 items-center justify-center rounded-lg border border-zinc-200 text-zinc-500 hover:bg-zinc-50 dark:border-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-900"

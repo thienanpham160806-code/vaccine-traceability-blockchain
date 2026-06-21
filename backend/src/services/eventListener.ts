@@ -144,6 +144,7 @@ export class EventListener {
             serialHash,
             batchHash: asString(batchHash),
             currentOwner: asString(owner),
+            ownerRole: Boolean(isImported) ? 'IMPORTER' : 'MANUFACTURER',
             isImported: Boolean(isImported),
             zkpVerified: Boolean(zkpVerified),
             status: chainStatus(status),
@@ -306,6 +307,7 @@ export class EventListener {
           await db.ref(`products/${serialHash}`).update({
             status: deliveredStatus(existing?.value.toRole),
             currentOwner: asString(receiver),
+            ownerRole: existing?.value.toRole || null,
             updatedAt: now,
           });
           Logger.success(`✅ Synced transfer confirm: ${serialID}`);

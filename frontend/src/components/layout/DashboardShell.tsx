@@ -3,28 +3,50 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Boxes, Home, ListChecks, MoreHorizontal, QrCode } from "lucide-react";
-import { getStoredUser } from "@/lib/auth";
+import { Boxes, Home, ListChecks, QrCode, ShieldAlert, UserCheck } from "lucide-react";
+import { getStoredUser, SESSION_UPDATED_EVENT, type DemoUser } from "@/lib/auth";
+import {
+  canAccessDashboardPath,
+  canViewInternalProducts,
+  canViewOperationalRisk,
+  canViewTransfers,
+  isEndUserRole,
+  isPublicUser,
+} from "@/lib/role-access";
 import { useTranslation } from "@/providers/LanguageProvider";
 import { ContactFooter } from "./ContactFooter";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 
-const bottomItems = [
-  { title: "Tổng quan", href: "/dashboard", icon: Home },
-  { title: "Sản phẩm", href: "/dashboard/products", icon: Boxes },
-  { title: "Quét", href: "/dashboard/scan", icon: QrCode, featured: true },
-  { title: "Lệnh", href: "/dashboard/transfers", icon: ListChecks },
-  { title: "Thêm", href: "/dashboard/products/batches", icon: MoreHorizontal },
-];
+function getBottomItems(user: DemoUser | null) {
+  const items = [{ title: "Tổng quan", href: "/dashboard", icon: Home }];
+  if (canViewInternalProducts(user)) {
+    items.push({ title: "Sản phẩm", href: "/dashboard/products", icon: Boxes });
+  }
+  items.push({ title: "Quét", href: "/dashboard/scan", icon: QrCode });
+  if (canViewTransfers(user)) {
+    items.push({
+      title: isEndUserRole(user) ? "Lô chờ nhận" : "Lệnh",
+      href: "/dashboard/transfers",
+      icon: ListChecks,
+    });
+  }
+  if (canViewOperationalRisk(user)) {
+    items.push({ title: "Rủi ro", href: "/dashboard/risk-dispute", icon: ShieldAlert });
+  } else if (isPublicUser(user)) {
+    items.push({ title: "Yêu cầu role", href: "/dashboard/role-request", icon: UserCheck });
+  }
+  return items;
+}
 
-function BottomNav() {
+function BottomNav({ user }: { user: DemoUser | null }) {
   const pathname = usePathname();
   const t = useTranslation();
+  const bottomItems = getBottomItems(user);
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-zinc-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_24px_rgba(15,23,42,0.08)] backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/95 lg:hidden">
-      <div className="grid h-16 grid-cols-5">
+      <div className="grid h-16" style={{ gridTemplateColumns: `repeat(${bottomItems.length}, minmax(0, 1fr))` }}>
         {bottomItems.map((item) => {
           const Icon = item.icon;
           const active = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
@@ -33,9 +55,7 @@ function BottomNav() {
               key={item.href}
               href={item.href}
               className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg text-[11px] font-semibold ${
-                item.featured
-                  ? "mx-1 my-1 bg-blue-600 text-white shadow-sm"
-                  : active ? "text-blue-600" : "text-zinc-500"
+                active ? "text-blue-600" : "text-zinc-500"
               }`}
             >
               <Icon className="h-4 w-4" />
@@ -50,23 +70,41 @@ function BottomNav() {
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const t = useTranslation();
   const [isReady] = useState(() => {
     if (typeof window === "undefined") return false;
     return Boolean(getStoredUser() && window.localStorage.getItem("demoToken"));
   });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sessionVersion, setSessionVersion] = useState(0);
+  const [user, setUser] = useState<DemoUser | null>(() =>
+    typeof window === "undefined" ? null : getStoredUser()
+  );
 
   useEffect(() => {
-    const user = getStoredUser();
+    const currentUser = getStoredUser();
     const token = window.localStorage.getItem("demoToken");
 
-    if (!user || !token) {
+    if (!currentUser || !token) {
       router.replace("/login");
       return;
     }
 
-  }, [router]);
+    if (!canAccessDashboardPath(currentUser, pathname)) {
+      router.replace("/dashboard");
+    }
+  }, [pathname, router, user]);
+
+  useEffect(() => {
+    const handleSessionUpdate = () => {
+      setMobileMenuOpen(false);
+      setUser(getStoredUser());
+      setSessionVersion((current) => current + 1);
+    };
+    window.addEventListener(SESSION_UPDATED_EVENT, handleSessionUpdate);
+    return () => window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionUpdate);
+  }, []);
 
   if (!isReady) {
     return (
@@ -78,7 +116,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-white dark:bg-zinc-950">
-      <div className="flex min-h-screen min-w-0">
+      <div className="flex min-h-screen min-w-0" key={sessionVersion}>
         <Sidebar />
 
         {mobileMenuOpen && (
@@ -104,7 +142,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       </div>
 
       <ContactFooter className="mx-4 mb-20 sm:mx-6 lg:mx-0 lg:mb-0 lg:rounded-none lg:border-x-0 lg:border-b-0" />
-      <BottomNav />
+      <BottomNav user={user} />
     </div>
   );
 }

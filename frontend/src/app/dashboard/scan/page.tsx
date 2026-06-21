@@ -14,8 +14,8 @@ export default function DashboardScanPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
 
-  const goLookup = (value: string) => {
-    const parsed = parseVaxiTrustQr(value);
+  const goLookup = (value: string, source: "manual" | "scan") => {
+    const parsed = parseVaxiTrustQr(value, { source });
     if (!parsed.valid) {
       setMessage(parsed.reason);
       setIsPaused(false);
@@ -47,7 +47,7 @@ export default function DashboardScanPage() {
               <Scanner
                 onScan={(detectedCodes) => {
                   const value = detectedCodes[0]?.rawValue;
-                  if (value) goLookup(value);
+                  if (value) goLookup(value, "scan");
                 }}
                 onError={(err) => setMessage(String(err))}
               />
@@ -75,12 +75,12 @@ export default function DashboardScanPage() {
                 className="min-w-0 flex-1 rounded-md border border-zinc-200 bg-white px-3 py-2 font-mono text-sm text-zinc-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:focus:ring-blue-500/20"
                 value={manualValue}
                 onChange={(event) => setManualValue(event.target.value)}
-                onKeyDown={(event) => event.key === "Enter" && goLookup(manualValue)}
+                onKeyDown={(event) => event.key === "Enter" && goLookup(manualValue, "manual")}
                 placeholder="VCN-DEMO-001"
               />
               <button
                 type="button"
-                onClick={() => goLookup(manualValue)}
+                onClick={() => goLookup(manualValue, "manual")}
                 disabled={!manualValue.trim()}
                 className="inline-flex min-h-10 items-center gap-2 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-40"
               >

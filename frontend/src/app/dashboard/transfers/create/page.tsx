@@ -1,11 +1,11 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
-import { confirmTransfer, getApiErrorMessage, getDemoActors, getProducts, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferCreate } from "@/lib/api";
+import { confirmTransfer, getApiErrorMessage, getDemoActors, getTransferableProducts, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
@@ -32,6 +32,7 @@ const statusChip: Record<string, string> = {
 const fromRoleOptions = [...transferInitiatorRoles];
 type TransferInitiatorRole = (typeof transferInitiatorRoles)[number];
 type TransferReceiverRole = (typeof transferReceiverRoles)[number];
+const operationalInventoryRoles = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY"] as const;
 
 const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
@@ -87,47 +88,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-const nonTransferableStatuses = new Set(["RECALLED", "FLAGGED", "IN_TRANSIT", "PENDING_DELIVERY", "INVALID"]);
-const hardBlockedStatuses = new Set(["RECALLED", "FLAGGED", "INVALID"]);
-
 function normalizeAddress(address?: string) {
   return String(address || "").trim().toLowerCase();
-}
-
-function canRoleInitiateTransfer(role?: string) {
-  return Boolean(role && isInitiatorRole(role));
-}
-
-function isProductTransferable(product: Product, ownerAddress?: string) {
-  if (!product.serialId || nonTransferableStatuses.has(String(product.status))) return false;
-  return normalizeAddress(product.currentOwner) === normalizeAddress(ownerAddress);
-}
-
-function getLatestConfirmedOwners(transfers: TransferRecord[]) {
-  const owners = new Map<string, { address: string; timestamp: number }>();
-
-  transfers.forEach((transfer) => {
-    if (transfer.status !== "CONFIRMED" || !transfer.serialId || !transfer.toAddress) return;
-    const timestamp = transfer.confirmedAt || transfer.updatedAt || transfer.createdAt || 0;
-    const current = owners.get(transfer.serialId);
-    if (!current || timestamp >= current.timestamp) {
-      owners.set(transfer.serialId, {
-        address: transfer.toAddress,
-        timestamp,
-      });
-    }
-  });
-
-  return owners;
-}
-
-function getPendingSerials(transfers: TransferRecord[]) {
-  return new Set(
-    transfers
-      .filter((transfer) => transfer.status === "PENDING")
-      .map((transfer) => transfer.serialId)
-      .filter(Boolean)
-  );
 }
 
 function groupProductsByBatch(products: Product[]) {
@@ -161,6 +123,8 @@ function TransferList() {
   const tLabel = useTranslation();
   const { language } = useLanguage();
   const qc = useQueryClient();
+  const publicClient = usePublicClient();
+  const { writeContractAsync } = useWriteContract();
   const { data: allTransfers = [], isLoading } = useQuery<TransferRecord[]>({
     queryKey: ["transfers"],
     queryFn: getTransfers,
@@ -194,8 +158,24 @@ function TransferList() {
         return;
       }
 
-      await confirmTransfer(parsed.data.serialId);
+      const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
+      const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer?.toAddress);
+      if (shouldUseWallet) {
+        if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
+        if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ xác nhận."));
+        const txHash = await writeContractAsync({
+          address: getTransferLedgerAddress(),
+          abi: transferLedgerAbi,
+          functionName: "confirmTransfer",
+          args: [toBytes32(transfer.serialId), toBytes32(transfer.toLocationHash || `to:${transfer.toAddress}`)],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        await syncWalletTransferConfirm(parsed.data.serialId, txHash);
+      } else {
+        await confirmTransfer(parsed.data.serialId);
+      }
       qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
   } catch (err: unknown) {
       setError(getApiErrorMessage(err, tLabel("Xác nhận thất bại.")));
     } finally {
@@ -215,10 +195,26 @@ function TransferList() {
         return;
       }
 
-      await rejectTransfer(parsed.data.serialId, parsed.data.rejectionReason);
+      const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
+      const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer?.toAddress);
+      if (shouldUseWallet) {
+        if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
+        if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ từ chối."));
+        const txHash = await writeContractAsync({
+          address: getTransferLedgerAddress(),
+          abi: transferLedgerAbi,
+          functionName: "rejectTransfer",
+          args: [toBytes32(transfer.serialId), toBytes32(parsed.data.rejectionReason)],
+        });
+        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        await syncWalletTransferReject(parsed.data.serialId, parsed.data.rejectionReason, txHash);
+      } else {
+        await rejectTransfer(parsed.data.serialId, parsed.data.rejectionReason);
+      }
       setRejectingId(null);
       setRejectReason("");
       qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
   } catch (err: unknown) {
       setError(getApiErrorMessage(err, tLabel("Từ chối thất bại.")));
     } finally {
@@ -369,7 +365,7 @@ export default function ScanTransferPage() {
   const [temperatureMinC, setTemperatureMinC] = useState("");
   const [temperatureMaxC, setTemperatureMaxC] = useState("");
   const [handlingNotes, setHandlingNotes] = useState("");
-  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const [user, setUser] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [transferId, setTransferId] = useState<string | null>(null);
@@ -377,63 +373,44 @@ export default function ScanTransferPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isBusy, setIsBusy] = useState(false);
 
-  const { data: actors = [] } = useQuery({
-    queryKey: ["demo-actors"],
-    queryFn: getDemoActors,
-  });
+  useEffect(() => {
+    const storedUser = getStoredUser();
+    setUser(storedUser);
+    if (storedUser?.role && isInitiatorRole(storedUser.role)) {
+      setFromRole(storedUser.role);
+    }
 
-  const { data: products = [], isLoading: productsLoading } = useQuery({
-    queryKey: ["transferable-products"],
-    queryFn: async () => {
-      const allProducts: Product[] = [];
-      let page = 1;
-      let total = 0;
-
-      do {
-        const result = await getProducts({ page, pageSize: 100, sort: "updatedAt:desc" });
-        allProducts.push(...result.items);
-        total = result.total;
-        page += 1;
-      } while (allProducts.length < total && page <= 20);
-
-      return allProducts;
-    },
-  });
-
-  const { data: ownershipTransfers = [] } = useQuery<TransferRecord[]>({
-    queryKey: ["transferable-products", "ownership-transfers"],
-    queryFn: getTransfers,
-    staleTime: 20_000,
-  });
-
-  const actorAddressByRole = useMemo(() => {
-    return new Map(actors.map((actor) => [actor.role, actor.address]));
-  }, [actors]);
+  }, []);
 
   const selectableFromRoles = useMemo<TransferInitiatorRole[]>(() => {
     if (user?.role === "ADMIN") return fromRoleOptions;
     return user?.role && isInitiatorRole(user.role) ? [user.role] : [];
   }, [user]);
+  const inventoryRole = user?.role === "ADMIN" ? fromRole : user?.role;
+  const canLoadInventory = Boolean(
+    user && inventoryRole && operationalInventoryRoles.includes(inventoryRole as (typeof operationalInventoryRoles)[number])
+  );
 
-  const ownerAddress = user?.role === "ADMIN" ? actorAddressByRole.get(fromRole) : user?.address;
-  const confirmedOwnerBySerial = useMemo(() => getLatestConfirmedOwners(ownershipTransfers), [ownershipTransfers]);
-  const pendingTransferSerials = useMemo(() => getPendingSerials(ownershipTransfers), [ownershipTransfers]);
-  const transferableProducts = useMemo(() => {
-    const normalizedOwner = normalizeAddress(ownerAddress);
-
-    return products.filter((product) => {
-      if (!product.serialId || pendingTransferSerials.has(product.serialId)) return false;
-      if (hardBlockedStatuses.has(String(product.status))) return false;
-      if (isProductTransferable(product, ownerAddress)) return true;
-
-      const inferredOwner = confirmedOwnerBySerial.get(product.serialId);
-      return Boolean(inferredOwner && normalizeAddress(inferredOwner.address) === normalizedOwner);
-    });
-  }, [confirmedOwnerBySerial, ownerAddress, pendingTransferSerials, products]);
+  const {
+    data: transferableInventory,
+    isLoading: productsLoading,
+    error: inventoryError,
+    refetch: refetchInventory,
+  } = useQuery({
+    queryKey: ["transferable-products", user?.address, inventoryRole],
+    queryFn: () => getTransferableProducts(inventoryRole),
+    enabled: canLoadInventory,
+    staleTime: 10_000,
+  });
+  const transferableProducts = transferableInventory?.items || [];
+  const canCreateTransfer = Boolean(transferableInventory?.canTransfer);
 
   const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts), [transferableProducts]);
 
-  const toRoleOptions = useMemo(() => allowedTransferRoutes[fromRole] || [...transferReceiverRoles], [fromRole]);
+  const toRoleOptions = useMemo(() => {
+    const backendRoles = (transferableInventory?.allowedToRoles || []).filter(isReceiverRole);
+    return backendRoles.length > 0 ? backendRoles : allowedTransferRoutes[fromRole] || [];
+  }, [fromRole, transferableInventory?.allowedToRoles]);
   const effectiveToRole = toRoleOptions.includes(toRole) ? toRole : toRoleOptions[0] || "DISTRIBUTOR";
 
   const create = async () => {
@@ -509,6 +486,7 @@ export default function ScanTransferPage() {
       setTransferId(data.transfer?.id ?? null);
       setStatusMsg(t("Đã tạo lệnh. Xác nhận giao hàng ở danh sách bên phải."));
       qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, t("Tạo lệnh thất bại.")));
       setStatusMsg(null);
@@ -542,6 +520,7 @@ export default function ScanTransferPage() {
       setTransferId(data.transferId ?? transferId);
       setStatusMsg(t("Xác nhận thành công."));
       qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
     } catch (err: unknown) {
       setError(getApiErrorMessage(err, t("Xác nhận thất bại.")));
       setStatusMsg(null);
@@ -587,46 +566,50 @@ export default function ScanTransferPage() {
             />
           </Field>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={t("Từ")}>
-              <select
-                className={inputCls}
-                value={fromRole}
-                disabled={selectableFromRoles.length <= 1}
-                onChange={(e) => {
-                  setFieldErrors({});
-                  if (isInitiatorRole(e.target.value)) setFromRole(e.target.value);
-                }}
-              >
-                {(selectableFromRoles.length ? selectableFromRoles : fromRoleOptions).map((r) => (
-                  <option key={r} value={r}>{translateRole(r, language)}</option>
-                ))}
-              </select>
-            </Field>
-            <Field label={t("Đến")}>
-              <select
-                className={inputCls}
-                value={effectiveToRole}
-                onChange={(e) => {
-                  setFieldErrors({});
-                  if (isReceiverRole(e.target.value)) setToRole(e.target.value);
-                }}
-              >
-                {toRoleOptions.map((r) => (
-                  <option key={r} value={r}>{translateRole(r, language)}</option>
-                ))}
-              </select>
-            </Field>
-          </div>
+          {canCreateTransfer ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("Từ")}>
+                <select
+                  className={inputCls}
+                  value={fromRole}
+                  disabled={selectableFromRoles.length <= 1}
+                  onChange={(e) => {
+                    setFieldErrors({});
+                    if (isInitiatorRole(e.target.value)) setFromRole(e.target.value);
+                  }}
+                >
+                  {(selectableFromRoles.length ? selectableFromRoles : fromRoleOptions).map((r) => (
+                    <option key={r} value={r}>{translateRole(r, language)}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t("Đến")}>
+                <select
+                  className={inputCls}
+                  value={effectiveToRole}
+                  onChange={(e) => {
+                    setFieldErrors({});
+                    if (isReceiverRole(e.target.value)) setToRole(e.target.value);
+                  }}
+                >
+                  {toRoleOptions.map((r) => (
+                    <option key={r} value={r}>{translateRole(r, language)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t("Lô có thể chuyển")}</h3>
+                <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                  {canCreateTransfer ? t("Lô có thể chuyển") : t("Lô đang sở hữu")}
+                </h3>
                 <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                  {canRoleInitiateTransfer(fromRole)
-                    ? `${t("Đang hiển thị hàng do")} ${translateRole(fromRole, language)} ${t("sở hữu và đủ điều kiện chuyển giao.")}`
-                    : t("Role hiện tại không có quyền tạo lệnh chuyển.")}
+                  {canCreateTransfer
+                    ? `${t("Đang hiển thị hàng do")} ${translateRole(inventoryRole || fromRole, language)} ${t("sở hữu và đủ điều kiện chuyển giao.")}`
+                    : `${t("Đang hiển thị hàng do")} ${translateRole(inventoryRole || "", language)} ${t("sở hữu. Đây là điểm nhận cuối nên không thể tạo lệnh chuyển tiếp.")}`}
                 </p>
               </div>
               <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
@@ -639,6 +622,20 @@ export default function ScanTransferPage() {
                 {[1, 2].map((item) => (
                   <div key={item} className="h-20 animate-pulse rounded-lg bg-white dark:bg-zinc-950" />
                 ))}
+              </div>
+            ) : inventoryError ? (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-4 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">
+                <p className="font-semibold">
+                  {getApiErrorMessage(inventoryError, t("Không thể tải danh sách lô có thể chuyển."))}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => refetchInventory()}
+                  className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 py-1.5 font-bold text-red-700 hover:bg-red-50 dark:border-red-500/30 dark:bg-zinc-950 dark:text-red-200"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  {t("Làm mới")}
+                </button>
               </div>
             ) : batchGroups.length === 0 ? (
               <div className="mt-3 rounded-lg border border-dashed border-zinc-300 bg-white px-3 py-6 text-center text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-400">
@@ -683,118 +680,124 @@ export default function ScanTransferPage() {
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-3 text-[11px] text-zinc-400 dark:text-zinc-500">
-                      {t("Có thể chuyển đến")}: {toRoleOptions.map((role) => translateRole(role, language)).join(", ")}
-                    </p>
+                    {canCreateTransfer ? (
+                      <p className="mt-3 text-[11px] text-zinc-400 dark:text-zinc-500">
+                        {t("Có thể chuyển đến")}: {toRoleOptions.map((role) => translateRole(role, language)).join(", ")}
+                      </p>
+                    ) : null}
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          <Field label={t("Vị trí (giả lập)")}>
-            <input
-              className={inputCls}
-              value={fromLocation}
-              onChange={(e) => setFromLocation(e.target.value)}
-              placeholder={t("Ví dụ: Hà Nội – Kho 1")}
-            />
-          </Field>
+          {canCreateTransfer ? (
+            <>
+              <Field label={t("Vị trí (giả lập)")}>
+                <input
+                  className={inputCls}
+                  value={fromLocation}
+                  onChange={(e) => setFromLocation(e.target.value)}
+                  placeholder={t("Ví dụ: Hà Nội – Kho 1")}
+                />
+              </Field>
 
-          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-            <div className="mb-3">
-              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t("Thông tin vận chuyển")}</h3>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("Dữ liệu này dùng để hiển thị node lịch sử chuỗi cung ứng khi verify.")}</p>
-            </div>
+              <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+                <div className="mb-3">
+                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t("Thông tin vận chuyển")}</h3>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("Dữ liệu này dùng để hiển thị node lịch sử chuỗi cung ứng khi verify.")}</p>
+                </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Field label={t("Kho đi")}>
-                <input
-                  className={inputCls}
-                  value={fromWarehouseName}
-                  onChange={(e) => setFromWarehouseName(e.target.value)}
-                  placeholder={t("Ví dụ: Kho lạnh A")}
-                />
-              </Field>
-              <Field label={t("Kho đến")}>
-                <input
-                  className={inputCls}
-                  value={toWarehouseName}
-                  onChange={(e) => setToWarehouseName(e.target.value)}
-                  placeholder={t("Ví dụ: Kho tiếp nhận B")}
-                />
-              </Field>
-              <Field label={t("Vị trí đến")}>
-                <input
-                  className={inputCls}
-                  value={toLocationName}
-                  onChange={(e) => setToLocationName(e.target.value)}
-                  placeholder={t("Ví dụ: TP.HCM – Quận 1")}
-                />
-              </Field>
-              <Field label={t("Đơn vị vận chuyển")}>
-                <input
-                  className={inputCls}
-                  value={carrierName}
-                  onChange={(e) => setCarrierName(e.target.value)}
-                  placeholder={t("Ví dụ: ColdChain Logistics")}
-                />
-              </Field>
-              <Field label={t("Mã xe / container")}>
-                <input
-                  className={inputCls}
-                  value={vehicleId}
-                  onChange={(e) => setVehicleId(e.target.value)}
-                  placeholder="TRUCK-01"
-                />
-              </Field>
-              <Field label={t("Thời gian rời kho")}>
-                <input
-                  className={inputCls}
-                  type="datetime-local"
-                  value={departedAt}
-                  onChange={(e) => setDepartedAt(e.target.value)}
-                />
-              </Field>
-              <Field label={t("Thời gian đến dự kiến")}>
-                <input
-                  className={inputCls}
-                  type="datetime-local"
-                  value={arrivedAt}
-                  onChange={(e) => setArrivedAt(e.target.value)}
-                />
-              </Field>
-              <Field label={t("Nhiệt độ tối thiểu (C)")}>
-                <input
-                  className={inputCls}
-                  type="number"
-                  step="0.1"
-                  value={temperatureMinC}
-                  onChange={(e) => setTemperatureMinC(e.target.value)}
-                  placeholder="2"
-                />
-              </Field>
-              <Field label={t("Nhiệt độ tối đa (C)")}>
-                <input
-                  className={inputCls}
-                  type="number"
-                  step="0.1"
-                  value={temperatureMaxC}
-                  onChange={(e) => setTemperatureMaxC(e.target.value)}
-                  placeholder="8"
-                />
-              </Field>
-            </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label={t("Kho đi")}>
+                    <input
+                      className={inputCls}
+                      value={fromWarehouseName}
+                      onChange={(e) => setFromWarehouseName(e.target.value)}
+                      placeholder={t("Ví dụ: Kho lạnh A")}
+                    />
+                  </Field>
+                  <Field label={t("Kho đến")}>
+                    <input
+                      className={inputCls}
+                      value={toWarehouseName}
+                      onChange={(e) => setToWarehouseName(e.target.value)}
+                      placeholder={t("Ví dụ: Kho tiếp nhận B")}
+                    />
+                  </Field>
+                  <Field label={t("Vị trí đến")}>
+                    <input
+                      className={inputCls}
+                      value={toLocationName}
+                      onChange={(e) => setToLocationName(e.target.value)}
+                      placeholder={t("Ví dụ: TP.HCM – Quận 1")}
+                    />
+                  </Field>
+                  <Field label={t("Đơn vị vận chuyển")}>
+                    <input
+                      className={inputCls}
+                      value={carrierName}
+                      onChange={(e) => setCarrierName(e.target.value)}
+                      placeholder={t("Ví dụ: ColdChain Logistics")}
+                    />
+                  </Field>
+                  <Field label={t("Mã xe / container")}>
+                    <input
+                      className={inputCls}
+                      value={vehicleId}
+                      onChange={(e) => setVehicleId(e.target.value)}
+                      placeholder="TRUCK-01"
+                    />
+                  </Field>
+                  <Field label={t("Thời gian rời kho")}>
+                    <input
+                      className={inputCls}
+                      type="datetime-local"
+                      value={departedAt}
+                      onChange={(e) => setDepartedAt(e.target.value)}
+                    />
+                  </Field>
+                  <Field label={t("Thời gian đến dự kiến")}>
+                    <input
+                      className={inputCls}
+                      type="datetime-local"
+                      value={arrivedAt}
+                      onChange={(e) => setArrivedAt(e.target.value)}
+                    />
+                  </Field>
+                  <Field label={t("Nhiệt độ tối thiểu (C)")}>
+                    <input
+                      className={inputCls}
+                      type="number"
+                      step="0.1"
+                      value={temperatureMinC}
+                      onChange={(e) => setTemperatureMinC(e.target.value)}
+                      placeholder="2"
+                    />
+                  </Field>
+                  <Field label={t("Nhiệt độ tối đa (C)")}>
+                    <input
+                      className={inputCls}
+                      type="number"
+                      step="0.1"
+                      value={temperatureMaxC}
+                      onChange={(e) => setTemperatureMaxC(e.target.value)}
+                      placeholder="8"
+                    />
+                  </Field>
+                </div>
 
-            <Field label={t("Ghi chú xử lý")}>
-              <textarea
-                className={`${inputCls} min-h-20 resize-y`}
-                value={handlingNotes}
-                onChange={(e) => setHandlingNotes(e.target.value)}
-                placeholder={t("Ví dụ: Niêm phong còn nguyên, duy trì thùng lạnh trong suốt quá trình vận chuyển.")}
-              />
-            </Field>
-          </div>
+                <Field label={t("Ghi chú xử lý")}>
+                  <textarea
+                    className={`${inputCls} min-h-20 resize-y`}
+                    value={handlingNotes}
+                    onChange={(e) => setHandlingNotes(e.target.value)}
+                    placeholder={t("Ví dụ: Niêm phong còn nguyên, duy trì thùng lạnh trong suốt quá trình vận chuyển.")}
+                  />
+                </Field>
+              </div>
+            </>
+          ) : null}
         </div>
 
         {/* Status */}
@@ -836,13 +839,15 @@ export default function ScanTransferPage() {
 
         {/* Action buttons */}
         <div className="mt-5 flex flex-wrap gap-2.5">
-          <button
-            disabled={isBusy || !serialId.trim()}
-            onClick={create}
-            className="btn-brand rounded-lg px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
-          >
-            {isBusy ? t("Đang xử lý...") : t("Tạo lệnh")}
-          </button>
+          {canCreateTransfer ? (
+            <button
+              disabled={isBusy || !serialId.trim()}
+              onClick={create}
+              className="btn-brand rounded-lg px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+            >
+              {isBusy ? t("Đang xử lý...") : t("Tạo lệnh")}
+            </button>
+          ) : null}
           <button
             disabled={isBusy || !serialId.trim()}
             onClick={confirm}

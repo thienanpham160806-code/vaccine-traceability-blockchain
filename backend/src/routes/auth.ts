@@ -30,7 +30,7 @@ const defaultDemoActors: Record<string, string> = {
   RECALL_AUTHORITY: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266',
 };
 const demoRoleOrder = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'RECALL_AUTHORITY'];
-const grantableRoles = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'AUDITOR', 'RECALL_AUTHORITY'] as const;
+const grantableRoles = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'RECALL_AUTHORITY'] as const;
 type GrantableRole = (typeof grantableRoles)[number];
 
 function normalizeAddress(address: string): string {
@@ -742,6 +742,42 @@ router.put('/me/profile', verifyToken, async (req: AuthRequest, res: Response) =
     res.status(500).json({
       success: false,
       error: { code: 'PROFILE_UPDATE_FAILED', message: 'Failed to update profile.' },
+    });
+  }
+});
+
+/**
+ * GET /auth/session
+ * Refresh the user snapshot and JWT after an admin changes wallet roles.
+ */
+router.get('/session', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.address) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'User not authenticated' },
+      });
+    }
+
+    const userSnapshot = await db.ref(`users/${userKey(req.user.address)}`).once('value');
+    if (!userSnapshot.exists()) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'USER_NOT_FOUND', message: 'User not found' },
+      });
+    }
+
+    const user = userSnapshot.val() as User;
+    const token = createToken(user);
+    res.json({
+      success: true,
+      data: { token, user },
+    });
+  } catch (error) {
+    Logger.error('Refresh session error', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'SESSION_REFRESH_FAILED', message: 'Failed to refresh user session' },
     });
   }
 });
