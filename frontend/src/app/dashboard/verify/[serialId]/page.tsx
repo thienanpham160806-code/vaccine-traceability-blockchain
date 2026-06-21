@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { getApiErrorMessage, verifyProduct } from "@/lib/api";
 import type { VerifyResult } from "@/lib/types";
+import { SupplyChainNodeGraph } from "@/components/trace/SupplyChainNodeGraph";
 
 interface PageProps {
   params: Promise<{
@@ -54,22 +55,14 @@ export default function VerifyPage({ params }: PageProps) {
       </div>
 
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
-        <h2 className="text-xl font-bold">Timeline</h2>
-        <div className="mt-4 space-y-3">
-          {result.timeline.map((item) => (
-            <div key={item.id || item.blockchainTx} className="rounded-lg border p-3 text-sm">
-              <p className="font-semibold">{item.status}</p>
-              <p className="text-muted-foreground">{item.fromAddress || item.sender} to {item.toAddress || item.receiver}</p>
-              {(item.status === "REJECTED" || item.status === "RETURNED") && (item.rejectedReason || item.rejectionReason) ? (
-                <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-                  <p className="font-bold">Rejection reason</p>
-                  <p className="mt-1 whitespace-pre-wrap break-words">{item.rejectedReason || item.rejectionReason}</p>
-                </div>
-              ) : null}
-              <p className="break-all text-xs text-muted-foreground">{item.blockchainTx}</p>
-            </div>
-          ))}
-          {result.timeline.length === 0 ? <p className="text-sm text-muted-foreground">No transfers yet.</p> : null}
+        <h2 className="text-xl font-bold">Supply Chain History</h2>
+        <div className="mt-4">
+          <SupplyChainNodeGraph
+            nodes={result.supplyChainNodes}
+            events={result.timeline || []}
+            language="vi"
+            emptyText="No transfers yet."
+          />
         </div>
       </div>
     </div>

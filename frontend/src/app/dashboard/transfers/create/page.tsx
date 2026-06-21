@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
@@ -37,6 +37,25 @@ const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
 const safeIdPattern = /^[A-Za-z0-9._:-]{3,128}$/;
 const safeIdMessage = "Chỉ dùng chữ, số, dấu chấm, gạch dưới, dấu hai chấm hoặc gạch ngang.";
+
+function optionalNumber(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const numberValue = Number(trimmed);
+  return Number.isFinite(numberValue) ? numberValue : undefined;
+}
+
+function optionalDateTime(value: string) {
+  if (!value) return undefined;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? undefined : timestamp;
+}
+
+function compactPayload<T extends Record<string, unknown>>(payload: T) {
+  return Object.fromEntries(
+    Object.entries(payload).filter(([, value]) => value !== undefined && value !== "")
+  ) as Partial<T>;
+}
 
 function isInitiatorRole(value: string): value is TransferInitiatorRole {
   return (transferInitiatorRoles as readonly string[]).includes(value);
@@ -76,7 +95,7 @@ function normalizeAddress(address?: string) {
 }
 
 function canRoleInitiateTransfer(role?: string) {
-  return Boolean(role && transferInitiatorRoles.includes(role as any));
+  return Boolean(role && isInitiatorRole(role));
 }
 
 function isProductTransferable(product: Product, ownerAddress?: string) {
@@ -340,7 +359,17 @@ export default function ScanTransferPage() {
   const [fromRole, setFromRole] = useState<TransferInitiatorRole>(initialTransferForm.fromRole);
   const [toRole, setToRole] = useState<TransferReceiverRole>("DISTRIBUTOR");
   const [fromLocation, setFromLocation] = useState("");
-  const [user, setUser] = useState<DemoUser | null>(null);
+  const [toLocationName, setToLocationName] = useState("");
+  const [fromWarehouseName, setFromWarehouseName] = useState("");
+  const [toWarehouseName, setToWarehouseName] = useState("");
+  const [carrierName, setCarrierName] = useState("");
+  const [vehicleId, setVehicleId] = useState("");
+  const [departedAt, setDepartedAt] = useState("");
+  const [arrivedAt, setArrivedAt] = useState("");
+  const [temperatureMinC, setTemperatureMinC] = useState("");
+  const [temperatureMaxC, setTemperatureMaxC] = useState("");
+  const [handlingNotes, setHandlingNotes] = useState("");
+  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [transferId, setTransferId] = useState<string | null>(null);
@@ -377,15 +406,6 @@ export default function ScanTransferPage() {
     staleTime: 20_000,
   });
 
-  useEffect(() => {
-    const storedUser = getStoredUser();
-    setUser(storedUser);
-    if (storedUser?.role && isInitiatorRole(storedUser.role)) {
-      setFromRole(storedUser.role);
-    }
-
-  }, []);
-
   const actorAddressByRole = useMemo(() => {
     return new Map(actors.map((actor) => [actor.role, actor.address]));
   }, [actors]);
@@ -416,24 +436,36 @@ export default function ScanTransferPage() {
   const toRoleOptions = useMemo(() => allowedTransferRoutes[fromRole] || [...transferReceiverRoles], [fromRole]);
   const effectiveToRole = toRoleOptions.includes(toRole) ? toRole : toRoleOptions[0] || "DISTRIBUTOR";
 
-  useEffect(() => {
-    if (selectableFromRoles.length > 0 && !selectableFromRoles.includes(fromRole as any)) {
-      setFromRole(selectableFromRoles[0]);
-    }
-  }, [fromRole, selectableFromRoles]);
-
   const create = async () => {
     if (!serialId.trim() || isBusy) return;
     if (!safeIdPattern.test(serialId.trim())) {
       setError(t(safeIdMessage));
       return;
     }
+    const transferPayload = compactPayload({
+      serialId: serialId.trim(),
+      fromRole,
+      toRole: effectiveToRole,
+      fromLocation: fromLocation.trim() || undefined,
+      fromLocationName: fromLocation.trim() || undefined,
+      toLocationName: toLocationName.trim() || undefined,
+      fromWarehouseName: fromWarehouseName.trim() || undefined,
+      toWarehouseName: toWarehouseName.trim() || undefined,
+      carrierName: carrierName.trim() || undefined,
+      vehicleId: vehicleId.trim() || undefined,
+      departedAt: optionalDateTime(departedAt),
+      arrivedAt: optionalDateTime(arrivedAt),
+      temperatureMinC: optionalNumber(temperatureMinC),
+      temperatureMaxC: optionalNumber(temperatureMaxC),
+      temperatureUnit: (temperatureMinC.trim() || temperatureMaxC.trim()) ? "C" : undefined,
+      handlingNotes: handlingNotes.trim() || undefined,
+    });
     setIsBusy(true);
     setError(null);
     setStatusMsg(`${t("Đang tạo lệnh")} ${fromRole} -> ${effectiveToRole} on-chain...`);
     setTxHash(null);
     try {
-      const parsed = transferScanFormSchema.safeParse({ serialId, fromRole, toRole: effectiveToRole, fromLocation: fromLocation.trim() || undefined });
+      const parsed = transferScanFormSchema.safeParse(transferPayload);
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
         setFieldErrors(errors);
@@ -471,7 +503,7 @@ export default function ScanTransferPage() {
           txHash,
         });
       } else {
-        data = await scanTransfer({ ...parsed.data, fromLocation: parsed.data.fromLocation });
+        data = await scanTransfer(parsed.data);
       }
       setTxHash(data.txHash ?? null);
       setTransferId(data.transfer?.id ?? null);
@@ -668,6 +700,101 @@ export default function ScanTransferPage() {
               placeholder={t("Ví dụ: Hà Nội – Kho 1")}
             />
           </Field>
+
+          <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="mb-3">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t("Thông tin vận chuyển")}</h3>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("Dữ liệu này dùng để hiển thị node lịch sử chuỗi cung ứng khi verify.")}</p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("Kho đi")}>
+                <input
+                  className={inputCls}
+                  value={fromWarehouseName}
+                  onChange={(e) => setFromWarehouseName(e.target.value)}
+                  placeholder={t("Ví dụ: Kho lạnh A")}
+                />
+              </Field>
+              <Field label={t("Kho đến")}>
+                <input
+                  className={inputCls}
+                  value={toWarehouseName}
+                  onChange={(e) => setToWarehouseName(e.target.value)}
+                  placeholder={t("Ví dụ: Kho tiếp nhận B")}
+                />
+              </Field>
+              <Field label={t("Vị trí đến")}>
+                <input
+                  className={inputCls}
+                  value={toLocationName}
+                  onChange={(e) => setToLocationName(e.target.value)}
+                  placeholder={t("Ví dụ: TP.HCM – Quận 1")}
+                />
+              </Field>
+              <Field label={t("Đơn vị vận chuyển")}>
+                <input
+                  className={inputCls}
+                  value={carrierName}
+                  onChange={(e) => setCarrierName(e.target.value)}
+                  placeholder={t("Ví dụ: ColdChain Logistics")}
+                />
+              </Field>
+              <Field label={t("Mã xe / container")}>
+                <input
+                  className={inputCls}
+                  value={vehicleId}
+                  onChange={(e) => setVehicleId(e.target.value)}
+                  placeholder="TRUCK-01"
+                />
+              </Field>
+              <Field label={t("Thời gian rời kho")}>
+                <input
+                  className={inputCls}
+                  type="datetime-local"
+                  value={departedAt}
+                  onChange={(e) => setDepartedAt(e.target.value)}
+                />
+              </Field>
+              <Field label={t("Thời gian đến dự kiến")}>
+                <input
+                  className={inputCls}
+                  type="datetime-local"
+                  value={arrivedAt}
+                  onChange={(e) => setArrivedAt(e.target.value)}
+                />
+              </Field>
+              <Field label={t("Nhiệt độ tối thiểu (C)")}>
+                <input
+                  className={inputCls}
+                  type="number"
+                  step="0.1"
+                  value={temperatureMinC}
+                  onChange={(e) => setTemperatureMinC(e.target.value)}
+                  placeholder="2"
+                />
+              </Field>
+              <Field label={t("Nhiệt độ tối đa (C)")}>
+                <input
+                  className={inputCls}
+                  type="number"
+                  step="0.1"
+                  value={temperatureMaxC}
+                  onChange={(e) => setTemperatureMaxC(e.target.value)}
+                  placeholder="8"
+                />
+              </Field>
+            </div>
+
+            <Field label={t("Ghi chú xử lý")}>
+              <textarea
+                className={`${inputCls} min-h-20 resize-y`}
+                value={handlingNotes}
+                onChange={(e) => setHandlingNotes(e.target.value)}
+                placeholder={t("Ví dụ: Niêm phong còn nguyên, duy trì thùng lạnh trong suốt quá trình vận chuyển.")}
+              />
+            </Field>
+          </div>
         </div>
 
         {/* Status */}

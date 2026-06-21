@@ -41,6 +41,31 @@ function userKey(address: string): string {
   return normalizeAddress(address).toLowerCase();
 }
 
+function publicOrganization(org: any) {
+  if (!org) return null;
+  return {
+    id: org.id,
+    name: org.name,
+    type: org.type,
+    code: org.code,
+    address: org.address,
+    walletAddress: org.walletAddress,
+    licenseNumber: org.licenseNumber,
+    facilityType: org.facilityType,
+    storageCapacity: org.storageCapacity,
+    coldChainCapability: org.coldChainCapability,
+    isActive: org.isActive,
+    createdAt: org.createdAt,
+    updatedAt: org.updatedAt,
+  };
+}
+
+function sanitizeProfileText(value: unknown, maxLength: number): string | undefined {
+  const text = String(value || '').trim();
+  if (!text) return undefined;
+  return text.slice(0, maxLength);
+}
+
 function isGrantableRole(role: string): role is GrantableRole {
   return grantableRoles.includes(role.toUpperCase() as GrantableRole);
 }
@@ -604,10 +629,24 @@ router.get('/me', verifyToken, async (req: AuthRequest, res: Response) => {
     }
 
     const user = userSnapshot.val();
+    let organization = null;
+    if (user.organizationId) {
+      const organizationSnapshot = await db.ref(`organizations/${user.organizationId}`).once('value');
+      organization = organizationSnapshot.val();
+    }
+
+    if (!organization) {
+      const organizationsSnapshot = await db.ref('organizations').once('value');
+      const organizations = Object.values(organizationsSnapshot.val() || {}) as any[];
+      organization = organizations.find((org) => normalizeAddress(org.walletAddress || '') === normalizeAddress(req.user!.address)) || null;
+    }
 
     res.json({
       success: true,
-      data: user,
+      data: {
+        user,
+        organization: publicOrganization(organization),
+      },
     });
   } catch (error) {
     Logger.error('Get user info error', error);
@@ -617,6 +656,92 @@ router.get('/me', verifyToken, async (req: AuthRequest, res: Response) => {
         code: 'GET_USER_FAILED',
         message: 'Failed to get user info',
       },
+    });
+  }
+});
+
+/**
+ * PUT /auth/me/profile
+ * Update the current wallet's public role profile and linked organization.
+ */
+router.put('/me/profile', verifyToken, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.user?.address) {
+      return res.status(401).json({
+        success: false,
+        error: { code: 'UNAUTHORIZED', message: 'User not authenticated' },
+      });
+    }
+
+    const address = normalizeAddress(req.user.address);
+    const key = userKey(address);
+    const now = Date.now();
+    const userRef = db.ref(`users/${key}`);
+    const userSnapshot = await userRef.once('value');
+    const existingUser = userSnapshot.exists() ? userSnapshot.val() : {
+      id: key,
+      address,
+      role: req.user.role || 'PUBLIC',
+      roles: req.user.roles || [req.user.role || 'PUBLIC'],
+      createdAt: now,
+    };
+
+    const requestedOrgId = sanitizeProfileText(req.body?.organizationId, 120);
+    const organizationId = requestedOrgId || existingUser.organizationId || `org-${key}`;
+
+    const userUpdate = {
+      address,
+      walletAddress: address,
+      role: existingUser.role || req.user.role || 'PUBLIC',
+      roles: existingUser.roles || req.user.roles || [req.user.role || 'PUBLIC'],
+      organizationId,
+      fullName: sanitizeProfileText(req.body?.fullName, 120) || existingUser.fullName || existingUser.name || '',
+      title: sanitizeProfileText(req.body?.title, 120) || existingUser.title || '',
+      email: sanitizeProfileText(req.body?.email, 160) || existingUser.email || '',
+      phone: sanitizeProfileText(req.body?.phone, 40) || existingUser.phone || '',
+      updatedAt: now,
+      createdAt: existingUser.createdAt || now,
+    };
+
+    const orgRef = db.ref(`organizations/${organizationId}`);
+    const orgSnapshot = await orgRef.once('value');
+    const existingOrg = orgSnapshot.exists() ? orgSnapshot.val() : {};
+    const role = String(existingUser.role || req.user.role || 'PUBLIC').toUpperCase();
+    const organizationUpdate = {
+      id: organizationId,
+      name: sanitizeProfileText(req.body?.organizationName, 160) || existingOrg.name || '',
+      type: sanitizeProfileText(req.body?.organizationType, 80) || existingOrg.type || role,
+      code: sanitizeProfileText(req.body?.organizationCode, 80) || existingOrg.code || '',
+      address: sanitizeProfileText(req.body?.organizationAddress, 240) || existingOrg.address || '',
+      walletAddress: address,
+      licenseNumber: sanitizeProfileText(req.body?.licenseNumber, 120) || existingOrg.licenseNumber || '',
+      contactEmail: sanitizeProfileText(req.body?.email, 160) || existingOrg.contactEmail || '',
+      contactPhone: sanitizeProfileText(req.body?.phone, 40) || existingOrg.contactPhone || '',
+      facilityType: sanitizeProfileText(req.body?.facilityType, 120) || existingOrg.facilityType || '',
+      storageCapacity: sanitizeProfileText(req.body?.storageCapacity, 120) || existingOrg.storageCapacity || '',
+      coldChainCapability: sanitizeProfileText(req.body?.coldChainCapability, 160) || existingOrg.coldChainCapability || '',
+      isActive: true,
+      createdAt: existingOrg.createdAt || now,
+      updatedAt: now,
+    };
+
+    await Promise.all([
+      userRef.update(userUpdate),
+      orgRef.update(organizationUpdate),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        user: { ...existingUser, ...userUpdate },
+        organization: publicOrganization(organizationUpdate),
+      },
+    });
+  } catch (error) {
+    Logger.error('Update profile error', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'PROFILE_UPDATE_FAILED', message: 'Failed to update profile.' },
     });
   }
 });

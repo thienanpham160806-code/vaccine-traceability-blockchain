@@ -20,6 +20,7 @@ import {
   Sun,
   Truck,
   UserCheck,
+  UserCircle,
   UserCog,
 } from "lucide-react";
 import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
@@ -29,6 +30,7 @@ import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const menuItems = [
+  { title: "Profile", href: "/dashboard/profile", icon: UserCircle },
   { title: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
   { title: "Sản phẩm và lô", href: "/dashboard/products", icon: ClipboardList },
   { title: "Chuyển giao", href: "/dashboard/transfers", icon: Truck },

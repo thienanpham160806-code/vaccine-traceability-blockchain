@@ -7,6 +7,7 @@ import type {
   Product,
   ProductDetailResponse,
   ProductListResponse,
+  ProfileResponse,
   RecallRecord,
   RoleRequest,
   RiskFlag,
@@ -166,6 +167,8 @@ export const endpoints = {
   demoActors: "/auth/demo-actors",
   authNonce: "/auth/nonce",
   loginWithSignature: "/auth/login-with-signature",
+  me: "/auth/me",
+  myProfile: "/auth/me/profile",
   roleRequests: "/auth/role-requests",
   walletRoles: (address: string) => `/auth/roles/${encodeURIComponent(address)}`,
 
@@ -279,6 +282,30 @@ export async function loginWithSignature(payload: { address: string; signature: 
 export async function getWalletRoles(address: string) {
   const res = await api.get<ApiResponse<WalletRoleInfo>>(endpoints.walletRoles(address));
   return requireApiData(res.data.data, "Wallet roles response did not include data.");
+}
+
+export async function getMyProfile() {
+  const res = await api.get<ApiResponse<ProfileResponse>>(endpoints.me);
+  return requireApiData(res.data.data, "Profile response did not include data.");
+}
+
+export async function updateMyProfile(payload: {
+  organizationId?: string;
+  fullName?: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  organizationName?: string;
+  organizationType?: string;
+  organizationCode?: string;
+  organizationAddress?: string;
+  licenseNumber?: string;
+  facilityType?: string;
+  storageCapacity?: string;
+  coldChainCapability?: string;
+}) {
+  const res = await api.put<ApiResponse<ProfileResponse>>(endpoints.myProfile, payload);
+  return requireApiData(res.data.data, "Profile update response did not include data.");
 }
 
 export async function createRoleRequest(payload: { requestedRole: string; note?: string }) {
@@ -503,6 +530,18 @@ export async function scanTransfer(payload: {
   receiverAddress?: string;
   batchId?: string;
   fromLocation?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: "C" | "F";
+  handlingNotes?: string;
 }) {
   const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.scanTransfer, payload);
   return requireApiData(res.data.data, "Scan transfer response did not include data.");
@@ -527,6 +566,18 @@ export async function syncWalletTransferCreate(payload: {
   batchId?: string;
   fromLocationHash?: string;
   toLocationHash?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: "C" | "F";
+  handlingNotes?: string;
 }) {
   const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.syncWalletTransferCreate, payload);
   return requireApiData(res.data.data, "Wallet transfer sync response did not include data.");

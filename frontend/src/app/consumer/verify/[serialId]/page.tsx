@@ -20,7 +20,7 @@ import { getProductStatusLabel } from "@/lib/status";
 import type { VerifyResult } from "@/lib/types";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { ContactFooter } from "@/components/layout/ContactFooter";
-import { SupplyChainDiagram } from "@/components/trace/SupplyChainDiagram";
+import { SupplyChainNodeGraph } from "@/components/trace/SupplyChainNodeGraph";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 interface PageProps {
@@ -28,6 +28,7 @@ interface PageProps {
 }
 
 type ViewState = "loading" | "success" | "duplicate" | "not_found" | "error";
+type VerifyTimelineItem = VerifyResult["timeline"][number];
 
 const copy = {
   en: {
@@ -477,7 +478,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
   if (!data) return null;
 
   const { product, batch, timeline, recallStatus, zkProofVerified } = data;
-  const rejectedTransfers = (timeline || []).filter((event: any) => {
+  const rejectedTransfers = (timeline || []).filter((event: VerifyTimelineItem) => {
     return (event.status === "REJECTED" || event.status === "RETURNED") && (event.rejectedReason || event.rejectionReason);
   });
 
@@ -533,7 +534,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
               <p className="font-bold">{text.rejectedTransferTitle}</p>
               <p className="mt-1 text-xs">{text.rejectedTransferText}</p>
               <div className="mt-2 space-y-2">
-                {rejectedTransfers.map((event: any, index) => (
+                {rejectedTransfers.map((event: VerifyTimelineItem, index) => (
                   <p key={event.id || event.txHash || index} className="rounded-md bg-white/70 px-2 py-1.5 text-xs dark:bg-zinc-950/40">
                     <span className="font-semibold">{text.rejectionReason}: </span>
                     <span className="whitespace-pre-wrap break-words">{event.rejectedReason || event.rejectionReason}</span>
@@ -550,7 +551,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
             <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">{text.timeline}</h2>
           </div>
 
-          <SupplyChainDiagram events={timeline || []} currentOwner={product?.currentOwner} language={language} emptyText={text.noTimeline} />
+          <SupplyChainNodeGraph nodes={data.supplyChainNodes} events={timeline || []} language={language} emptyText={text.noTimeline} />
         </div>
 
         <div className="flex justify-center gap-3">

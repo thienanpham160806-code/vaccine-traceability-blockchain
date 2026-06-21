@@ -57,6 +57,23 @@ function normalizeAddress(address?: string): string {
   return String(address || '').toLowerCase();
 }
 
+function buildTransferMetadata(body: any) {
+  return {
+    fromLocationName: body.fromLocationName || body.fromLocation || undefined,
+    toLocationName: body.toLocationName || undefined,
+    fromWarehouseName: body.fromWarehouseName || undefined,
+    toWarehouseName: body.toWarehouseName || undefined,
+    carrierName: body.carrierName || undefined,
+    vehicleId: body.vehicleId || undefined,
+    departedAt: body.departedAt,
+    arrivedAt: body.arrivedAt,
+    temperatureMinC: body.temperatureMinC,
+    temperatureMaxC: body.temperatureMaxC,
+    temperatureUnit: body.temperatureUnit || (body.temperatureMinC !== undefined || body.temperatureMaxC !== undefined ? 'C' : undefined),
+    handlingNotes: body.handlingNotes || undefined,
+  };
+}
+
 function requireReceiptEvent(receipt: any, eventName: string) {
   for (const log of receipt.logs || []) {
     try {
@@ -321,6 +338,7 @@ router.post(
     const senderAddress = contractClient.getRoleAddress(fromRole);
     const fromLoc = toBytes32(fromLocationHash || (fromLocation ? `location:${fromLocation}` : `from:${senderAddress}`));
     const toLoc = toBytes32(toLocationHash || `to:${receiverAddress}`);
+    const transferMetadata = buildTransferMetadata(req.body);
     const txHash = await contractClient.createTransferRequest(
       serialHash,
       receiverAddress,
@@ -340,6 +358,7 @@ router.post(
       toRole,
       fromLocationHash: fromLoc,
       toLocationHash: toLoc,
+      ...transferMetadata,
       status: 'PENDING',
       blockchainTx: txHash,
       createdAt: now,
@@ -356,6 +375,7 @@ router.post(
       status: 'PENDING',
       fromLocationHash: fromLoc,
       toLocationHash: toLoc,
+      ...transferMetadata,
       ipfsCid: ipfsResult?.cid,
       blockchainTx: txHash,
       createdAt: now,
@@ -448,6 +468,7 @@ router.post(
     const senderAddress = eventSender;
     const fromLoc = toBytes32(fromLocationHash || `from:${senderAddress}`);
     const toLoc = toBytes32(toLocationHash || `to:${receiverAddress}`);
+    const transferMetadata = buildTransferMetadata(req.body);
 
     if (!sameHex(String(event.args.fromLocationHash), fromLoc) || !sameHex(String(event.args.toLocationHash), toLoc)) {
       throw httpError(400, 'TX_LOCATION_MISMATCH', 'Transaction location hashes do not match request payload');
@@ -464,6 +485,7 @@ router.post(
       toRole,
       fromLocationHash: fromLoc,
       toLocationHash: toLoc,
+      ...transferMetadata,
       status: 'PENDING',
       blockchainTx: txHash,
       createdAt: now,
@@ -480,6 +502,7 @@ router.post(
       status: 'PENDING',
       fromLocationHash: fromLoc,
       toLocationHash: toLoc,
+      ...transferMetadata,
       ipfsCid: ipfsResult?.cid,
       blockchainTx: txHash,
       createdAt: now,

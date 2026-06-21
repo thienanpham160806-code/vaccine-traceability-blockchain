@@ -53,6 +53,43 @@ export type Product = {
   updatedAt?: number;
 };
 
+export type OrganizationProfile = {
+  id?: string;
+  name?: string;
+  type?: string;
+  code?: string;
+  address?: string;
+  walletAddress?: string;
+  licenseNumber?: string;
+  facilityType?: string;
+  storageCapacity?: string;
+  coldChainCapability?: string;
+  isActive?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+export type UserProfile = {
+  id?: string;
+  address: string;
+  walletAddress?: string;
+  role: UserRole | string;
+  roles?: string[];
+  organizationId?: string;
+  fullName?: string;
+  name?: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  createdAt?: number;
+  updatedAt?: number;
+};
+
+export type ProfileResponse = {
+  user: UserProfile;
+  organization: OrganizationProfile | null;
+};
+
 export type ApiResponse<T> = {
   success: boolean;
   data?: T;
@@ -103,6 +140,20 @@ export type TransferEvent = {
   rejectedReason?: string;
   rejectionReason?: string;
   rejectedAt?: number;
+  fromLocationHash?: string;
+  toLocationHash?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: "C" | "F";
+  handlingNotes?: string;
 };
 
 export type DashboardStats = {
@@ -150,8 +201,40 @@ export type VerifyResult = {
   product: Product;
   batch?: Batch;
   timeline: TransferEvent[];
+  supplyChainNodes?: SupplyChainNode[];
   recallStatus: boolean;
   zkProofVerified: boolean;
+};
+
+export type SupplyChainNode = {
+  id: string;
+  role: string;
+  walletAddress?: string;
+  organization?: OrganizationProfile | null;
+  organizationName?: string;
+  organizationCode?: string;
+  licenseNumber?: string;
+  addressOrRegion?: string;
+  facilityType?: string;
+  warehouseName?: string;
+  locationName?: string;
+  temperatureRange?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  status?: string;
+  transferId?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  handlingNotes?: string;
+  technicalDetails?: {
+    txHash?: string;
+    blockchainTx?: string;
+    ipfsCid?: string;
+    fromLocationHash?: string;
+    toLocationHash?: string;
+    fromAddress?: string;
+    toAddress?: string;
+  };
 };
 
 export type RiskFlag = {
@@ -199,6 +282,18 @@ export type TransferRecord = {
   status: TransferStatus;
   fromLocationHash?: string;
   toLocationHash?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: "C" | "F";
+  handlingNotes?: string;
   ipfsCid?: string;
   blockchainTx?: string;
   rejectedReason?: string;

@@ -76,6 +76,9 @@ export const allowedTransferRoutes: Record<(typeof transferInitiatorRoles)[numbe
 
 const initiatorRoleSchema = z.enum(transferInitiatorRoles);
 const receiverRoleSchema = z.enum(transferReceiverRoles);
+const optionalTransferText = (max: number, message: string) => z.string().trim().max(max, message).optional();
+const optionalTimestamp = z.number().int().min(0).optional();
+const optionalTemperature = z.number().min(-100, "Temperature is too low.").max(100, "Temperature is too high.").optional();
 
 export const transferScanFormSchema = z
   .object({
@@ -83,10 +86,36 @@ export const transferScanFormSchema = z
     fromRole: initiatorRoleSchema,
     toRole: receiverRoleSchema,
     fromLocation: z.string().trim().max(200).optional(),
+    fromLocationName: optionalTransferText(200, "From location is too long."),
+    toLocationName: optionalTransferText(200, "To location is too long."),
+    fromWarehouseName: optionalTransferText(200, "From warehouse is too long."),
+    toWarehouseName: optionalTransferText(200, "To warehouse is too long."),
+    carrierName: optionalTransferText(160, "Carrier name is too long."),
+    vehicleId: optionalTransferText(80, "Vehicle ID is too long."),
+    departedAt: optionalTimestamp,
+    arrivedAt: optionalTimestamp,
+    temperatureMinC: optionalTemperature,
+    temperatureMaxC: optionalTemperature,
+    temperatureUnit: z.enum(["C", "F"]).optional(),
+    handlingNotes: optionalTransferText(1000, "Handling notes are too long."),
   })
   .refine((value) => allowedTransferRoutes[value.fromRole].includes(value.toRole), {
     path: ["toRole"],
     message: "Vai trò gửi không được phép chuyển đến vai trò nhận này.",
+  })
+  .refine((value) => {
+    if (value.departedAt === undefined || value.arrivedAt === undefined) return true;
+    return value.arrivedAt >= value.departedAt;
+  }, {
+    path: ["arrivedAt"],
+    message: "Arrival time must be after departure time.",
+  })
+  .refine((value) => {
+    if (value.temperatureMinC === undefined || value.temperatureMaxC === undefined) return true;
+    return value.temperatureMaxC >= value.temperatureMinC;
+  }, {
+    path: ["temperatureMaxC"],
+    message: "Maximum temperature must be greater than or equal to minimum temperature.",
   });
 
 export const transferConfirmFormSchema = z.object({
