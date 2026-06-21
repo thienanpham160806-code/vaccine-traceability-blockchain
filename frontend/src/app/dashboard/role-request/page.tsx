@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
 import { Send } from "lucide-react";
+import { useAccount } from "wagmi";
 import { createRoleRequest, getApiErrorMessage } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
@@ -21,6 +22,7 @@ const requestableRoles: Array<Exclude<UserRole, "ADMIN" | "PUBLIC">> = [
 export default function RoleRequestPage() {
   const t = useTranslation();
   const { language } = useLanguage();
+  const { address: connectedAddress, isConnected } = useAccount();
   const [user] = useState(() => (typeof window === "undefined" ? null : getStoredUser()));
   const [requestedRole, setRequestedRole] = useState<(typeof requestableRoles)[number]>("DISTRIBUTOR");
   const [note, setNote] = useState("");
@@ -29,10 +31,23 @@ export default function RoleRequestPage() {
 
   const submit = async () => {
     if (isBusy) return;
+    if (!user?.address || !isConnected || !connectedAddress) {
+      const msg = t("Hãy kết nối lại MetaMask trước khi gửi yêu cầu cấp quyền.");
+      setMessage(msg);
+      toast.error(msg);
+      return;
+    }
+    if (connectedAddress.toLowerCase() !== user.address.toLowerCase()) {
+      const msg = t("Ví MetaMask đang chọn không khớp với phiên đăng nhập. Vui lòng đăng nhập lại bằng ví này.");
+      setMessage(msg);
+      toast.error(msg);
+      return;
+    }
+
     setIsBusy(true);
     setMessage(null);
     try {
-      await createRoleRequest({ requestedRole, note });
+      await createRoleRequest({ requestedRole, note, walletAddress: connectedAddress });
       setMessage(t("Đã gửi yêu cầu cấp quyền. Vui lòng chờ admin duyệt."));
       toast.success(t("Đã gửi yêu cầu cấp quyền."));
     } catch (err) {
@@ -97,7 +112,7 @@ export default function RoleRequestPage() {
 
           <button
             type="button"
-            disabled={isBusy || !user}
+            disabled={isBusy || !user || !isConnected || !connectedAddress}
             onClick={submit}
             className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
           >

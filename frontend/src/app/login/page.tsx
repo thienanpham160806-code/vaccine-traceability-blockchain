@@ -26,7 +26,7 @@ import {
   UserCog,
 } from "lucide-react";
 import { getApiErrorMessage, getDemoActors, getHealth, loginWithSignature, requestAuthNonce } from "@/lib/api";
-import { demoActors as fallbackActors, loginDemo, setSession } from "@/lib/auth";
+import { clearSession, demoActors as fallbackActors, loginDemo, setSession } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
@@ -186,7 +186,7 @@ export default function LoginPage() {
   const { address, isConnected } = useAccount();
   const { mutateAsync: connectAsync } = useConnect();
   const connectors = useConnectors();
-  const { disconnect } = useDisconnect();
+  const { disconnectAsync } = useDisconnect();
   const { signMessageAsync } = useSignMessage();
   const { language } = useLanguage();
   const t = useTranslation();
@@ -241,8 +241,7 @@ export default function LoginPage() {
     if (!metaMaskConnector && !injectedEthereum) throw new Error("MetaMask extension was not found.");
     if (isConnected) {
       addMetaMaskDiagnostic("Ngắt kết nối cũ", "pending");
-      disconnect();
-      await new Promise((resolve) => window.setTimeout(resolve, 150));
+      await disconnectAsync();
       addMetaMaskDiagnostic("Ngắt kết nối cũ", "ok");
     }
 
@@ -273,7 +272,10 @@ export default function LoginPage() {
   async function signMetaMaskMessage(walletAddress: string, message: string) {
     try {
       addMetaMaskDiagnostic("Ký bằng wagmi", "pending");
-      const signature = await signMessageAsync({ message });
+      const signature = await signMessageAsync({
+        message,
+        account: walletAddress as `0x${string}`,
+      });
       addMetaMaskDiagnostic("Ký bằng wagmi", "ok");
       return signature;
     } catch (err) {
@@ -304,6 +306,7 @@ export default function LoginPage() {
     setMetaMaskDiagnostics([]);
     setIsLoading(true);
     try {
+      clearSession();
       addMetaMaskDiagnostic("Bắt đầu đăng nhập MetaMask", "pending");
       const walletAddress = await connectWithMetaMask();
       addMetaMaskDiagnostic("Ví đã kết nối", "ok", walletAddress);
@@ -324,6 +327,9 @@ export default function LoginPage() {
       addMetaMaskDiagnostic("Yêu cầu ký message", "ok");
       addMetaMaskDiagnostic("Xác thực chữ ký với backend", "pending");
       const { token, user } = await loginWithSignature({ address: walletAddress, signature });
+      if (user.address.toLowerCase() !== walletAddress.toLowerCase()) {
+        throw new Error("Backend session address does not match the selected MetaMask account.");
+      }
       addMetaMaskDiagnostic("Xác thực chữ ký với backend", "ok", user.role);
       setSession(token, user, "wallet");
       router.push(user.role === "PUBLIC" ? "/dashboard/role-request" : "/dashboard");
