@@ -28,9 +28,9 @@ const transferLedgerEvents = new ethers.Interface([
   'event TransferRejected(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 reason)',
 ]);
 const allowedTransferRoutes: Record<string, string[]> = {
-  MANUFACTURER: ['IMPORTER', 'DISTRIBUTOR'],
+  MANUFACTURER: ['DISTRIBUTOR'],
   IMPORTER: ['DISTRIBUTOR'],
-  DISTRIBUTOR: ['DISTRIBUTOR', 'CLINIC', 'PHARMACY'],
+  DISTRIBUTOR: ['CLINIC', 'PHARMACY'],
 };
 const transferReceiverActionRoles = ['IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN'];
 
