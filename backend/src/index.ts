@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import config from './config/env';
 import { contractClient } from './contracts/client';
 import { eventListener } from './services/eventListener';
+import { initRouteCache } from './services/routeCache';
 import { Logger } from './utils/logger';
 import { errorHandler, requestLogger } from './middleware/auth';
 
@@ -40,7 +41,14 @@ Logger.info(`🔌 Port: ${PORT}`);
 
     if (contractClient.isInitialized()) {
       Logger.success('✅ Smart contracts initialized');
-      
+
+      // Load route matrix from contract
+      try {
+        await initRouteCache(contractClient.accessControl!);
+      } catch (routeError) {
+        Logger.warn('⚠️ Route cache failed to load, using empty cache', routeError);
+      }
+
       // Start event listener
       try {
         await eventListener.start();

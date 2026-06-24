@@ -67,11 +67,11 @@ export const bulkProductCsvSchema = z.object({
 });
 
 export const transferInitiatorRoles = ["MANUFACTURER", "IMPORTER", "DISTRIBUTOR"] as const;
-export const transferReceiverRoles = ["IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY"] as const;
+export const transferReceiverRoles = ["DISTRIBUTOR", "CLINIC", "PHARMACY"] as const;
 export const allowedTransferRoutes: Record<(typeof transferInitiatorRoles)[number], Array<(typeof transferReceiverRoles)[number]>> = {
-  MANUFACTURER: ["IMPORTER", "DISTRIBUTOR"],
+  MANUFACTURER: ["DISTRIBUTOR"],
   IMPORTER: ["DISTRIBUTOR"],
-  DISTRIBUTOR: ["DISTRIBUTOR", "CLINIC", "PHARMACY"],
+  DISTRIBUTOR: ["CLINIC", "PHARMACY"],
 };
 
 const initiatorRoleSchema = z.enum(transferInitiatorRoles);

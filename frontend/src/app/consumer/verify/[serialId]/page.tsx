@@ -342,7 +342,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
           return;
         }
 
-        const hasDuplicateScan = result.product.riskLevel === "HIGH" || result.product.riskLevel === "ALERT";
+        const hasDuplicateScan = result.product.riskLevel === "HIGH" || result.product.riskLevel === "MEDIUM";
         setData(result);
         setViewState(hasDuplicateScan && result.product.status === "FLAGGED" ? "duplicate" : "success");
       })
@@ -486,7 +486,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
 
   if (!data) return null;
 
-  const { product, batch, timeline, recallStatus, zkProofVerified } = data;
+  const { product, batch, timeline, recallStatus, zkProofVerified, onChainVerified, lastScan, risk } = data as any;
   const rejectedTransfers = (timeline || []).filter((event: VerifyTimelineItem) => {
     return (event.status === "REJECTED" || event.status === "RETURNED") && (event.rejectedReason || event.rejectionReason);
   });
@@ -532,6 +532,38 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
             </div>
           </div>
 
+          {/* Risk & on-chain verification */}
+          {(risk || onChainVerified !== undefined) ? (
+            <div className="flex flex-wrap gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+              {risk?.riskLevel ? (
+                <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                  risk.riskLevel === "CRITICAL" ? "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200" :
+                  risk.riskLevel === "HIGH"     ? "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-200" :
+                  risk.riskLevel === "MEDIUM"   ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200" :
+                                                  "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
+                }`}>
+                  {risk.riskLevel === "LOW" ? (language === "vi" ? "Bình thường" : "Normal") :
+                   risk.riskLevel === "MEDIUM" ? (language === "vi" ? "Cảnh báo" : "Medium") :
+                   risk.riskLevel === "HIGH" ? (language === "vi" ? "Rủi ro cao" : "High risk") :
+                   (language === "vi" ? "Nghiêm trọng" : "Critical")}
+                </span>
+              ) : null}
+              {onChainVerified ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+                  ✓ {language === "vi" ? "Đã xác thực blockchain" : "Blockchain verified"}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Last scan info */}
+          {lastScan?.timestamp ? (
+            <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <span className="font-semibold">{language === "vi" ? "Lần quét gần nhất: " : "Last scanned: "}</span>
+              {new Date(lastScan.timestamp).toLocaleString(language === "vi" ? "vi-VN" : "en-US")}
+            </div>
+          ) : null}
+
           {recallStatus ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
               {text.recallWarning}
@@ -543,7 +575,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
               <p className="font-bold">{text.rejectedTransferTitle}</p>
               <p className="mt-1 text-xs">{text.rejectedTransferText}</p>
               <div className="mt-2 space-y-2">
-                {rejectedTransfers.map((event: VerifyTimelineItem, index) => (
+                {rejectedTransfers.map((event: VerifyTimelineItem, index: number) => (
                   <p key={event.id || event.txHash || index} className="rounded-md bg-white/70 px-2 py-1.5 text-xs dark:bg-zinc-950/40">
                     <span className="font-semibold">{text.rejectionReason}: </span>
                     <span className="whitespace-pre-wrap break-words">{event.rejectedReason || event.rejectionReason}</span>

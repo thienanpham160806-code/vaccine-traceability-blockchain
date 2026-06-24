@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { db } from '../config/firebase';
 import { Logger } from '../utils/logger';
 import { CryptoUtils } from '../utils/crypto';
+import { contractClient } from '../contracts/client';
+import { assessRisk } from '../services/riskEngine';
 import {
   OrganizationProfile,
   PublicOrganizationProfile,
@@ -259,6 +261,48 @@ async function buildVerifyResult(lookupValue: string): Promise<VerifyResult | nu
   const organizations = Object.values(organizationsSnapshot.val() || {}) as OrganizationProfile[];
   const supplyChainNodes = buildSupplyChainNodes(timeline, users, organizations, product);
 
+  // On-chain verification
+  let onChainVerified = false;
+  let metadataHashMatch = false;
+  let onChainStatus: string | null = null;
+  let lastScan: { timestamp: number; locationHash: string } | null = null;
+  let risk = assessRisk(product, batch);
+
+  try {
+    if (contractClient.isInitialized() && lookupHash) {
+      const [onChain, rawLastScan] = await Promise.all([
+        contractClient.getProduct(lookupHash).catch(() => null),
+        contractClient.transferLedger?.lastScans(lookupHash).catch(() => null),
+      ]);
+
+      if (onChain?.exists) {
+        const fbHash  = String(product?.metadataHash || '').toLowerCase();
+        const ocHash  = String(onChain.metadataHash  || '').toLowerCase();
+        metadataHashMatch = fbHash !== '' && fbHash === ocHash;
+        onChainVerified   = metadataHashMatch;
+
+        const statusMap: Record<number, string> = {
+          0: 'REGISTERED', 1: 'VERIFIED', 2: 'IN_TRANSIT',
+          3: 'DELIVERED', 4: 'FLAGGED', 5: 'RECALLED',
+        };
+        onChainStatus = statusMap[Number(onChain.status)] ?? null;
+
+        if (onChainStatus) {
+          risk = assessRisk({ ...product, status: onChainStatus }, batch);
+        }
+      }
+
+      if (rawLastScan && Number(rawLastScan[0]) > 0) {
+        lastScan = {
+          timestamp:    Number(rawLastScan[0]) * 1000,
+          locationHash: String(rawLastScan[1]),
+        };
+      }
+    }
+  } catch {
+    // Non-blocking
+  }
+
   return {
     product,
     batch,
@@ -266,6 +310,11 @@ async function buildVerifyResult(lookupValue: string): Promise<VerifyResult | nu
     supplyChainNodes,
     recallStatus: batch?.recalledAt ? true : false,
     zkProofVerified: product?.zkpVerified || false,
+    onChainVerified,
+    metadataHashMatch,
+    onChainStatus,
+    lastScan,
+    risk,
   };
 }
 

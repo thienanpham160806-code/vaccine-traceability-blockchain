@@ -9,15 +9,15 @@ import type { RiskFlag } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const riskChip: Record<string, string> = {
-  SAFE: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  ALERT: "bg-amber-50 text-amber-700 border-amber-200",
+  LOW: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  MEDIUM: "bg-amber-50 text-amber-700 border-amber-200",
   HIGH: "bg-orange-50 text-orange-700 border-orange-200",
   CRITICAL: "bg-red-50 text-red-700 border-red-200",
 };
 
 const riskBorder: Record<string, string> = {
-  SAFE: "border-l-emerald-400",
-  ALERT: "border-l-amber-400",
+  LOW: "border-l-emerald-400",
+  MEDIUM: "border-l-amber-400",
   HIGH: "border-l-orange-400",
   CRITICAL: "border-l-red-500",
 };
@@ -135,14 +135,14 @@ export default function RiskDisputePage() {
                 <div
                   key={flag.id || flag.serialId}
                   className={`rounded-lg border border-l-4 border-zinc-200 p-3 ${
-                    riskBorder[flag.riskLevel ?? "ALERT"] ?? "border-l-zinc-400"
+                    riskBorder[flag.riskLevel ?? "MEDIUM"] ?? "border-l-zinc-400"
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <p className="break-all font-mono text-xs text-zinc-700">{flag.serialId}</p>
                     <span
                       className={`shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
-                        riskChip[flag.riskLevel ?? "ALERT"] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
+                        riskChip[flag.riskLevel ?? "MEDIUM"] ?? "bg-zinc-100 text-zinc-600 border-zinc-200"
                       }`}
                     >
                       {flag.riskLevel ? t(flag.riskLevel) : `${t("Mức")} ${flag.level}`}

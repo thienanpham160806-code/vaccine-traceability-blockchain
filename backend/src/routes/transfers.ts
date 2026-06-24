@@ -28,9 +28,9 @@ const transferLedgerEvents = new ethers.Interface([
   'event TransferRejected(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 reason)',
 ]);
 const allowedTransferRoutes: Record<string, string[]> = {
-  MANUFACTURER: ['IMPORTER', 'DISTRIBUTOR'],
+  MANUFACTURER: ['DISTRIBUTOR'],
   IMPORTER: ['DISTRIBUTOR'],
-  DISTRIBUTOR: ['DISTRIBUTOR', 'CLINIC', 'PHARMACY'],
+  DISTRIBUTOR: ['CLINIC', 'PHARMACY'],
 };
 const transferReceiverActionRoles = ['IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN'];
 
@@ -893,6 +893,8 @@ router.post(
       }),
       db.ref(`products/${serialHash}`).update({
         status: productRegistryStatusToProductStatus(Number(statusAfter)),
+        currentOwner: pendingTransfer.fromAddress,
+        ownerRole: pendingTransfer.fromRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).remove(),
@@ -985,6 +987,8 @@ router.post(
       }),
       db.ref(`products/${serialHash}`).update({
         status: productRegistryStatusToProductStatus(Number(statusAfter)),
+        currentOwner: pendingTransfer.fromAddress,
+        ownerRole: pendingTransfer.fromRole,
         updatedAt: now,
       }),
       db.ref(`pending-transfers/${serialHash}`).remove(),
@@ -998,6 +1002,59 @@ router.post(
       error: { code: error.code || 'WALLET_TRANSFER_REJECT_SYNC_ERROR', message: error.message || 'Failed to sync wallet reject' },
       timestamp: Date.now(),
     });
+  }
+  }
+);
+
+/**
+ * POST /transfers/:transferId/clear-stale
+ * Admin: clear a stale Firebase transfer whose on-chain pending transfer no longer exists.
+ * Resets product status to VERIFIED and restores ownership to the transfer's fromAddress.
+ */
+router.post(
+  '/:transferId/clear-stale',
+  verifyToken,
+  requireRole(['ADMIN']),
+  async (req: AuthRequest, res: Response) => {
+  try {
+    const { transferId } = req.params;
+    if (!transferId) {
+      return res.status(400).json({ success: false, error: { code: 'MISSING_TRANSFER_ID', message: 'transferId is required' } });
+    }
+
+    const snap = await db.ref(`transfers/${transferId}`).once('value');
+    if (!snap.exists()) {
+      return res.status(404).json({ success: false, error: { code: 'TRANSFER_NOT_FOUND', message: `Transfer ${transferId} not found in Firebase` } });
+    }
+
+    const transfer = snap.val() as TransferRecord;
+    if (transfer.status !== 'PENDING') {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'TRANSFER_NOT_PENDING', message: `Transfer ${transferId} is ${transfer.status}, not PENDING. Only PENDING transfers can be cleared.` },
+      });
+    }
+
+    const serialHash = toBytes32(transfer.serialId);
+    const onChainPending = await contractClient.getPendingTransfer(serialHash);
+    if (onChainPending.exists) {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'ON_CHAIN_PENDING_EXISTS', message: `Transfer ${transferId} still has an active on-chain pending transfer. Use reject endpoint instead.` },
+      });
+    }
+
+    const now = Date.now();
+    await Promise.all([
+      db.ref(`transfers/${transferId}`).update({ status: 'REJECTED', rejectedReason: 'Cleared by admin: stale Firebase transfer (no on-chain counterpart)', rejectedAt: now, updatedAt: now }),
+      db.ref(`products/${serialHash}`).update({ status: 'VERIFIED', currentOwner: transfer.fromAddress, ownerRole: transfer.fromRole, updatedAt: now }),
+      db.ref(`pending-transfers/${serialHash}`).remove(),
+    ]);
+
+    res.json({ success: true, data: { transferId, serialId: transfer.serialId, restoredOwner: transfer.fromAddress, restoredRole: transfer.fromRole } });
+  } catch (error: any) {
+    Logger.error('Clear stale transfer error', error);
+    res.status(500).json({ success: false, error: { code: 'CLEAR_STALE_ERROR', message: error.message || 'Failed to clear stale transfer' } });
   }
   }
 );

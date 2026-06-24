@@ -55,6 +55,7 @@ contract ProductRegistry {
     mapping(bytes32 => Product) private products;
     mapping(bytes32 => bytes32[]) private batchToSerials;
     mapping(bytes32 => bool) public recalledBatches;
+    mapping(bytes32 => bytes32) public batchRecallReasons;
 
     event ProductRegistered(
         bytes32 indexed serialID,
@@ -98,6 +99,11 @@ contract ProductRegistry {
         bytes32 indexed reason
     );
 
+    event ProductUnflagged(
+        bytes32 indexed serialID,
+        address indexed clearedBy
+    );
+
     constructor(address accessControlAddress) {
         require(accessControlAddress != address(0), "Invalid access control");
         accessControl = ISupplyChainAccessControl(accessControlAddress);
@@ -130,6 +136,11 @@ contract ProductRegistry {
     modifier onlyTransferLedger() {
         require(msg.sender == transferLedger, "Not transfer ledger");
         _;
+    }
+
+    function _isRecalled(bytes32 serialID) internal view returns (bool) {
+        Product storage p = products[serialID];
+        return p.status == Status.RECALLED || recalledBatches[p.batchHash];
     }
 
     function setTransferLedger(address newTransferLedger) external onlyAdmin {
@@ -300,22 +311,26 @@ function verifyProof(
         require(batchHash != bytes32(0), "Invalid batch");
         require(reasonHash != bytes32(0), "Invalid reason");
         require(!recalledBatches[batchHash], "Batch already recalled");
-
-        bytes32[] storage serials = batchToSerials[batchHash];
-        require(serials.length > 0, "Empty batch");
+        require(batchToSerials[batchHash].length > 0, "Empty batch");
 
         recalledBatches[batchHash] = true;
+        batchRecallReasons[batchHash] = reasonHash;
 
-        for (uint256 i = 0; i < serials.length; i++) {
-            Product storage product = products[serials[i]];
+        emit BatchRecalled(batchHash, reasonHash, batchToSerials[batchHash].length);
+    }
 
-            product.previousStatus = product.status;
-            product.status = Status.RECALLED;
-            product.riskLevel = RISK_CRITICAL;
-            product.flagReason = reasonHash;
-        }
+    function unflagProduct(bytes32 serialID) external onlyRecallAuthority {
+        require(products[serialID].exists, "Product not found");
 
-        emit BatchRecalled(batchHash, reasonHash, serials.length);
+        Product storage p = products[serialID];
+        require(p.status == Status.FLAGGED, "Not flagged");
+        require(!recalledBatches[p.batchHash], "Batch recalled");
+
+        p.status = p.previousStatus;
+        p.riskLevel = RISK_NONE;
+        p.flagReason = bytes32(0);
+
+        emit ProductUnflagged(serialID, msg.sender);
     }
 
     function markInTransit(bytes32 serialID) external onlyTransferLedger {
@@ -323,7 +338,7 @@ function verifyProof(
 
         Product storage product = products[serialID];
 
-        require(product.status != Status.RECALLED, "Product recalled");
+        require(!_isRecalled(serialID), "Product recalled");
         require(product.status != Status.FLAGGED, "Product flagged");
         require(
             product.status == Status.VERIFIED || product.status == Status.DELIVERED,
@@ -382,7 +397,7 @@ function verifyProof(
 
         Product storage product = products[serialID];
 
-        require(product.status != Status.RECALLED, "Product recalled");
+        require(!_isRecalled(serialID), "Product recalled");
 
         if (product.status != Status.FLAGGED) {
             product.previousStatus = product.status;
@@ -397,6 +412,7 @@ function verifyProof(
 
     function getStatus(bytes32 serialID) external view returns (Status) {
         require(products[serialID].exists, "Product not found");
+        if (recalledBatches[products[serialID].batchHash]) return Status.RECALLED;
         return products[serialID].status;
     }
 
@@ -407,7 +423,13 @@ function verifyProof(
 
     function getProduct(bytes32 serialID) external view returns (Product memory) {
         require(products[serialID].exists, "Product not found");
-        return products[serialID];
+        Product memory p = products[serialID];
+        if (recalledBatches[p.batchHash]) {
+            p.status = Status.RECALLED;
+            p.riskLevel = RISK_CRITICAL;
+            p.flagReason = batchRecallReasons[p.batchHash];
+        }
+        return p;
     }
 
     function getBatchSerials(

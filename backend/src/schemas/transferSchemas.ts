@@ -12,11 +12,11 @@ const serialId = z
   .regex(idPattern, 'serialId can only contain letters, numbers, dot, underscore, colon, or dash');
 
 const initiatorRole = z.enum(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR']);
-const receiverRole = z.enum(['IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY']);
+const receiverRole = z.enum(['DISTRIBUTOR', 'CLINIC', 'PHARMACY']);
 const allowedTransferRoutes: Record<z.infer<typeof initiatorRole>, Array<z.infer<typeof receiverRole>>> = {
-  MANUFACTURER: ['IMPORTER', 'DISTRIBUTOR'],
+  MANUFACTURER: ['DISTRIBUTOR'],
   IMPORTER: ['DISTRIBUTOR'],
-  DISTRIBUTOR: ['DISTRIBUTOR', 'CLINIC', 'PHARMACY'],
+  DISTRIBUTOR: ['CLINIC', 'PHARMACY'],
 };
 
 const optionalLocationHash = z

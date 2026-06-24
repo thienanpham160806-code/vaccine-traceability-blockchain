@@ -24,7 +24,7 @@ export type ProductStatus =
   | "RECALLED"
   | "INVALID";
 
-export type RiskLevel = "SAFE" | "ALERT" | "HIGH" | "CRITICAL";
+export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
 export type Product = {
   serialId: string;

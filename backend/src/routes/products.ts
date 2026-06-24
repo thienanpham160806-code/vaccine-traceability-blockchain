@@ -166,9 +166,9 @@ const TRANSFERABLE_PRODUCT_STATUSES = new Set([
 const TRANSFER_INITIATOR_ROLES = new Set(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR']);
 const INVENTORY_ROLES = new Set(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY']);
 const INVENTORY_TRANSFER_ROUTES: Record<string, string[]> = {
-  MANUFACTURER: ['IMPORTER', 'DISTRIBUTOR'],
+  MANUFACTURER: ['DISTRIBUTOR'],
   IMPORTER: ['DISTRIBUTOR'],
-  DISTRIBUTOR: ['DISTRIBUTOR', 'CLINIC', 'PHARMACY'],
+  DISTRIBUTOR: ['CLINIC', 'PHARMACY'],
   CLINIC: [],
   PHARMACY: [],
 };
@@ -996,11 +996,23 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       updatedAt: now,
     };
 
-    await Promise.all([
-      db.ref(`batches/${batchHash}`).update(batch),
-      db.ref(`products/${serialHash}`).set(product),
-      db.ref(`serial-index/${serialId}`).set(serialHash),
-    ]);
+    try {
+      await Promise.all([
+        db.ref(`batches/${batchHash}`).update(batch),
+        db.ref(`products/${serialHash}`).set(product),
+        db.ref(`serial-index/${serialId}`).set(serialHash),
+      ]);
+    } catch (firebaseError) {
+      Logger.error('Firebase write failed after on-chain registration', firebaseError);
+      return res.status(207).json({
+        success: false,
+        error: {
+          code: 'FIREBASE_WRITE_FAILED',
+          message: `Product was registered on-chain (txHash: ${txHash}) but Firebase sync failed. Use POST /products/sync-wallet-register with this txHash to retry.`,
+          txHash,
+        },
+      });
+    }
 
     res.json({
       success: true,
@@ -1557,6 +1569,50 @@ router.post(
         success: false,
         error: { code: 'REREGISTER_ERROR', message: getErrorMessage(error, 'Failed to re-register product on-chain') },
       });
+    }
+  }
+);
+
+/**
+ * POST /products/:serialId/unflag
+ * Clear FLAGGED status — accessible by MANUFACTURER or IMPORTER (recall authority role)
+ */
+router.post(
+  '/:serialId/unflag',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'RECALL_AUTHORITY']),
+  async (req: AuthRequest, res: Response) => {
+    const { serialId } = req.params;
+    try {
+      const serialHash = toBytes32(serialId);
+
+      const snap = await db.ref(`products/${serialHash}`).once('value');
+      if (!snap.exists()) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Product not found' } });
+      }
+
+      const product = snap.val();
+      if (product.status !== 'FLAGGED') {
+        return res.status(400).json({ success: false, error: { code: 'NOT_FLAGGED', message: 'Product is not flagged' } });
+      }
+
+      const signerRole = req.user?.role || 'RECALL_AUTHORITY';
+      const txHash = await contractClient.unflagProduct(serialHash, signerRole);
+
+      const now = Date.now();
+      const previousStatus = product.previousStatus || 'VERIFIED';
+      await db.ref(`products/${serialHash}`).update({
+        status: previousStatus,
+        riskLevel: 0,
+        flagReason: null,
+        blockchainTx: txHash,
+        updatedAt: now,
+      });
+
+      res.json({ success: true, data: { txHash, status: previousStatus } });
+    } catch (error) {
+      Logger.error('Unflag product error', error);
+      res.status(500).json({ success: false, error: { code: 'UNFLAG_ERROR', message: 'Failed to unflag product' } });
     }
   }
 );

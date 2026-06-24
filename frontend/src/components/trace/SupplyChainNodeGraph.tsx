@@ -62,6 +62,17 @@ function formatTemp(transfer: GraphTransfer) {
 function nodesFromTimeline(events: GraphTransfer[]): SupplyChainNode[] {
   const nodes: SupplyChainNode[] = [];
   for (const event of events || []) {
+    const isRejected = event.status === "REJECTED";
+    const commonTechDetails = {
+      txHash: event.txHash || event.blockchainTx,
+      blockchainTx: event.blockchainTx,
+      ipfsCid: event.ipfsCid,
+      fromLocationHash: event.fromLocationHash,
+      toLocationHash: event.toLocationHash,
+      fromAddress: event.fromAddress || event.sender,
+      toAddress: event.toAddress || event.receiver,
+    };
+
     nodes.push({
       id: `${event.id || event.blockchainTx || event.txHash || nodes.length}:from`,
       role: event.fromRole || event.from || "UNKNOWN",
@@ -75,39 +86,27 @@ function nodesFromTimeline(events: GraphTransfer[]): SupplyChainNode[] {
       carrierName: event.carrierName,
       vehicleId: event.vehicleId,
       handlingNotes: event.handlingNotes,
-      technicalDetails: {
-        txHash: event.txHash || event.blockchainTx,
-        blockchainTx: event.blockchainTx,
-        ipfsCid: event.ipfsCid,
-        fromLocationHash: event.fromLocationHash,
-        toLocationHash: event.toLocationHash,
-        fromAddress: event.fromAddress || event.sender,
-        toAddress: event.toAddress || event.receiver,
-      },
+      technicalDetails: commonTechDetails,
     });
-    nodes.push({
-      id: `${event.id || event.blockchainTx || event.txHash || nodes.length}:to`,
-      role: event.toRole || event.to || "UNKNOWN",
-      walletAddress: event.toAddress || event.receiver,
-      locationName: event.toLocationName,
-      warehouseName: event.toWarehouseName,
-      arrivedAt: event.arrivedAt || event.confirmedAt || event.updatedAt,
-      temperatureRange: formatTemp(event),
-      status: event.status,
-      transferId: event.id,
-      carrierName: event.carrierName,
-      vehicleId: event.vehicleId,
-      handlingNotes: event.handlingNotes,
-      technicalDetails: {
-        txHash: event.txHash || event.blockchainTx,
-        blockchainTx: event.blockchainTx,
-        ipfsCid: event.ipfsCid,
-        fromLocationHash: event.fromLocationHash,
-        toLocationHash: event.toLocationHash,
-        fromAddress: event.fromAddress || event.sender,
-        toAddress: event.toAddress || event.receiver,
-      },
-    });
+
+    // For REJECTED transfers, do not show the receiver node — custody never transferred
+    if (!isRejected) {
+      nodes.push({
+        id: `${event.id || event.blockchainTx || event.txHash || nodes.length}:to`,
+        role: event.toRole || event.to || "UNKNOWN",
+        walletAddress: event.toAddress || event.receiver,
+        locationName: event.toLocationName,
+        warehouseName: event.toWarehouseName,
+        arrivedAt: event.arrivedAt || event.confirmedAt || event.updatedAt,
+        temperatureRange: formatTemp(event),
+        status: event.status,
+        transferId: event.id,
+        carrierName: event.carrierName,
+        vehicleId: event.vehicleId,
+        handlingNotes: event.handlingNotes,
+        technicalDetails: commonTechDetails,
+      });
+    }
   }
   return nodes;
 }
@@ -151,12 +150,13 @@ export function SupplyChainNodeGraph({
           const organizationName = node.organizationName || node.organization?.name || shortValue(node.walletAddress);
           const detailItems = detailRows(node);
 
+          const isRejected = node.status === "REJECTED";
           return (
             <div key={node.id || index} className="flex items-stretch gap-3">
-              <article className="flex w-72 shrink-0 flex-col rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+              <article className={`flex w-72 shrink-0 flex-col rounded-lg border p-4 shadow-sm ${isRejected ? "border-dashed border-red-300 bg-red-50/60 dark:border-red-700/50 dark:bg-red-950/20 opacity-75" : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-[11px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-300">{roleLabel}</p>
+                    <p className={`text-[11px] font-bold uppercase tracking-wide ${isRejected ? "text-red-500 dark:text-red-400" : "text-blue-600 dark:text-blue-300"}`}>{roleLabel}</p>
                     <h3 className="mt-1 truncate text-sm font-bold text-zinc-950 dark:text-zinc-50">{organizationName}</h3>
                     {node.organizationCode || node.licenseNumber ? (
                       <p className="mt-1 truncate text-xs text-zinc-500 dark:text-zinc-400">
@@ -164,7 +164,7 @@ export function SupplyChainNodeGraph({
                       </p>
                     ) : null}
                   </div>
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200">
+                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isRejected ? "bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300" : "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-200"}`}>
                     <Building2 className="h-4 w-4" />
                   </span>
                 </div>
@@ -201,7 +201,7 @@ export function SupplyChainNodeGraph({
 
                 <div className="mt-4 flex flex-wrap gap-2">
                   {node.status ? (
-                    <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-[11px] font-semibold text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                    <span className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${isRejected ? "border-red-300 bg-red-100 text-red-700 dark:border-red-700 dark:bg-red-900/40 dark:text-red-300" : "border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"}`}>
                       {getTransferStatusLabel(node.status, language)}
                     </span>
                   ) : null}

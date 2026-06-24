@@ -9,7 +9,6 @@ contract SupplyChainAccessControl is AccessControl {
     bytes32 public constant DISTRIBUTOR_ROLE = keccak256("DISTRIBUTOR_ROLE");
     bytes32 public constant CLINIC_ROLE = keccak256("CLINIC_ROLE");
     bytes32 public constant PHARMACY_ROLE = keccak256("PHARMACY_ROLE");
-    bytes32 public constant AUDITOR_ROLE = keccak256("AUDITOR_ROLE");
     bytes32 public constant RECALL_AUTHORITY_ROLE = keccak256("RECALL_AUTHORITY_ROLE");
 
     mapping(bytes32 => mapping(bytes32 => bool)) private routeMatrix;
@@ -32,7 +31,6 @@ contract SupplyChainAccessControl is AccessControl {
             role == DISTRIBUTOR_ROLE ||
             role == CLINIC_ROLE ||
             role == PHARMACY_ROLE ||
-            role == AUDITOR_ROLE ||
             role == RECALL_AUTHORITY_ROLE;
     }
 
@@ -110,10 +108,10 @@ contract SupplyChainAccessControl is AccessControl {
     }
 
     function configureMvpRoutes() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _setRoute(MANUFACTURER_ROLE, IMPORTER_ROLE, true);
+        _setRoute(MANUFACTURER_ROLE, IMPORTER_ROLE, false);
         _setRoute(MANUFACTURER_ROLE, DISTRIBUTOR_ROLE, true);
         _setRoute(IMPORTER_ROLE, DISTRIBUTOR_ROLE, true);
-        _setRoute(DISTRIBUTOR_ROLE, DISTRIBUTOR_ROLE, true);
+        _setRoute(DISTRIBUTOR_ROLE, DISTRIBUTOR_ROLE, false);
         _setRoute(DISTRIBUTOR_ROLE, CLINIC_ROLE, true);
         _setRoute(DISTRIBUTOR_ROLE, PHARMACY_ROLE, true);
 

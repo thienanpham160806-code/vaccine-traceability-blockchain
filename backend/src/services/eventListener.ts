@@ -337,6 +337,8 @@ export class EventListener {
 
           await db.ref(`products/${serialHash}`).update({
             status: 'VERIFIED',
+            currentOwner: existing?.value.fromAddress || null,
+            ownerRole: existing?.value.fromRole || null,
             updatedAt: now,
           });
           Logger.success(`Synced transfer reject: ${serialID}`);

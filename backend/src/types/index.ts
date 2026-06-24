@@ -70,7 +70,7 @@ export type ProductStatus =
   | 'ADMINISTERED'
   | 'FLAGGED'
   | 'RECALLED';
-export type RiskLevel = 'SAFE' | 'ALERT' | 'HIGH' | 'CRITICAL';
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface Product {
   serialId: string;
@@ -201,6 +201,11 @@ export interface VerifyResult {
   supplyChainNodes: SupplyChainNode[];
   recallStatus: boolean;
   zkProofVerified: boolean;
+  onChainVerified?: boolean;
+  metadataHashMatch?: boolean;
+  onChainStatus?: string | null;
+  lastScan?: { timestamp: number; locationHash: string } | null;
+  risk?: { riskLevel: string; riskScore: number; triggeredRules: string[] };
 }
 
 export interface SupplyChainNode {

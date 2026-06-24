@@ -688,6 +688,21 @@ export class ContractClient {
     }
   }
 
+  async unflagProduct(
+    serialId: string,
+    signerRole: string = 'RECALL_AUTHORITY'
+  ): Promise<string> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
+    const tx = await registry.unflagProduct(serialId);
+    const receipt = await tx.wait();
+    Logger.success(`✅ Product unflagged. TX: ${receipt?.hash}`);
+    return receipt?.hash || tx.hash;
+  }
+
   /**
    * Recall batch on blockchain
    */
