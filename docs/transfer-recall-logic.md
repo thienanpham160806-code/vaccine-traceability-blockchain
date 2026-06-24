@@ -20,10 +20,9 @@ Firebase chỉ là lớp lưu dữ liệu để UI hiển thị nhanh hơn. Nế
 4. Trạng thái sản phẩm không được là `IN_TRANSIT`, `FLAGGED`, `RECALLED`.
 5. Role người gửi và người nhận phải được AccessControl cấp quyền.
 6. Route role phải hợp lệ, ví dụ:
-   - `MANUFACTURER -> IMPORTER`
    - `MANUFACTURER -> DISTRIBUTOR`
    - `IMPORTER -> DISTRIBUTOR`
-   - `DISTRIBUTOR -> DISTRIBUTOR | CLINIC | PHARMACY`
+   - `DISTRIBUTOR -> CLINIC | PHARMACY`
 
 Backend hiện kiểm tra sớm các điều kiện quan trọng trước khi gửi transaction:
 

@@ -389,7 +389,7 @@ router.get('/roles/:address', verifyToken, async (req: AuthRequest, res: Respons
  */
 router.post('/role-requests', verifyToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { requestedRole, note = '' } = req.body;
+    const { requestedRole, note = '', walletAddress } = req.body;
     const normalizedRequestedRole = String(requestedRole || '').toUpperCase();
     if (!req.user?.address) {
       return res.status(401).json({ success: false, error: { code: 'UNAUTHORIZED', message: 'User not authenticated' } });
@@ -402,6 +402,55 @@ router.post('/role-requests', verifyToken, async (req: AuthRequest, res: Respons
     }
 
     const address = normalizeAddress(req.user.address);
+    if (!walletAddress) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'MISSING_WALLET_ADDRESS', message: 'The connected MetaMask address is required.' },
+      });
+    }
+
+    let normalizedWalletAddress: string;
+    try {
+      normalizedWalletAddress = normalizeAddress(String(walletAddress));
+    } catch {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'INVALID_ADDRESS', message: 'Invalid connected wallet address.' },
+      });
+    }
+
+    if (normalizedWalletAddress !== address) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'WALLET_SESSION_MISMATCH',
+          message: 'The connected MetaMask account does not match the authenticated session. Sign in again with the selected account.',
+        },
+      });
+    }
+
+    const currentRoles = req.user.roles?.length ? req.user.roles : [req.user.role || 'PUBLIC'];
+    if (currentRoles.some((role) => role !== 'PUBLIC')) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'ROLE_ALREADY_ASSIGNED',
+          message: 'This wallet already has an operational role and cannot create a new-user role request.',
+        },
+      });
+    }
+
+    const existingChainRoles = await getOnChainUserRoles(address);
+    if (existingChainRoles.roles.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'ROLE_ALREADY_ASSIGNED',
+          message: 'This wallet already has an on-chain role and cannot create a new-user role request.',
+        },
+      });
+    }
+
     const now = Date.now();
     const existingSnapshot = await db.ref('role-requests').once('value');
     const existing = Object.values(existingSnapshot.val() || {}) as any[];
@@ -479,8 +528,57 @@ router.post('/role-requests/:id/approve', verifyToken, async (req: AuthRequest, 
     }
 
     const address = normalizeAddress(roleRequest.address);
+    if (address === normalizeAddress(req.user!.address)) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'SELF_APPROVAL_NOT_ALLOWED',
+          message: 'An administrator cannot approve a role request for the same wallet.',
+        },
+      });
+    }
+
+    const targetUserRef = db.ref(`users/${userKey(address)}`);
+    const targetUserSnapshot = await targetUserRef.once('value');
+    if (!targetUserSnapshot.exists()) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'ROLE_REQUEST_USER_NOT_FOUND',
+          message: 'The requesting wallet no longer has a valid user record.',
+        },
+      });
+    }
+
+    const targetUser = targetUserSnapshot.val() as User;
+    const targetRoles = targetUser.roles?.length ? targetUser.roles : [targetUser.role];
+    if (targetRoles.some((role) => role !== 'PUBLIC')) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'ROLE_REQUEST_TARGET_CHANGED',
+          message: 'The requesting wallet already has an operational role. Refresh the request list before approving.',
+        },
+      });
+    }
+
+    const existingChainRoles = await getOnChainUserRoles(address);
+    if (existingChainRoles.roles.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'ROLE_REQUEST_TARGET_CHANGED',
+          message: 'The requesting wallet already has an on-chain role. Refresh the request list before approving.',
+        },
+      });
+    }
+
     const txHash = await contractClient.grantUserRole(address, roleRequest.requestedRole, true);
     const chainRoles = await getOnChainUserRoles(address);
+    if (!chainRoles.roles.includes(roleRequest.requestedRole)) {
+      throw new Error(`Role grant verification failed for ${address}: ${roleRequest.requestedRole}`);
+    }
+
     const now = Date.now();
     const userRoles = chainRoles.roles.length ? chainRoles.roles : [roleRequest.requestedRole];
     const userUpdate = {
@@ -488,7 +586,7 @@ router.post('/role-requests/:id/approve', verifyToken, async (req: AuthRequest, 
       roles: userRoles,
       updatedAt: now,
     };
-    await db.ref(`users/${userKey(address)}`).update(userUpdate);
+    await targetUserRef.update(userUpdate);
 
     const updates = {
       status: 'APPROVED',

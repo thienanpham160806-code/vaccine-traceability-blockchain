@@ -237,6 +237,10 @@ export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
   const messages: Record<string, string> = {
     FORBIDDEN: "Bạn không có quyền thực hiện thao tác này.",
     ROLE_MISMATCH: message || "Vai trò hiện tại không khớp với thao tác này.",
+    WALLET_SESSION_MISMATCH: "Ví MetaMask đang chọn không khớp với phiên đăng nhập. Vui lòng đăng nhập lại bằng ví này.",
+    ROLE_ALREADY_ASSIGNED: "Ví này đã có quyền hoạt động và không thể gửi yêu cầu dành cho người dùng mới.",
+    SELF_APPROVAL_NOT_ALLOWED: "Ví quản trị không thể tự duyệt yêu cầu cấp quyền cho chính mình.",
+    ROLE_REQUEST_TARGET_CHANGED: "Trạng thái quyền của ví yêu cầu đã thay đổi. Hãy làm mới danh sách trước khi duyệt.",
     MISSING_TOKEN: "Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.",
     INVALID_TOKEN: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
     INVALID_ADDRESS: "Địa chỉ ví không hợp lệ.",
@@ -316,7 +320,7 @@ export async function updateMyProfile(payload: {
   return requireApiData(res.data.data, "Profile update response did not include data.");
 }
 
-export async function createRoleRequest(payload: { requestedRole: string; note?: string }) {
+export async function createRoleRequest(payload: { requestedRole: string; note?: string; walletAddress: string }) {
   const res = await api.post<ApiResponse<RoleRequest>>(endpoints.roleRequests, payload);
   return requireApiData(res.data.data, "Role request response did not include data.");
 }

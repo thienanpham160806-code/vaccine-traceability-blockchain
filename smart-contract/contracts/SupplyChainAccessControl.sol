@@ -108,6 +108,8 @@ contract SupplyChainAccessControl is AccessControl {
     }
 
     function configureMvpRoutes() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        // Domestic manufacturers send directly to distributors. Importers
+        // originate imported-product flows and also send to distributors.
         _setRoute(MANUFACTURER_ROLE, IMPORTER_ROLE, false);
         _setRoute(MANUFACTURER_ROLE, DISTRIBUTOR_ROLE, true);
         _setRoute(IMPORTER_ROLE, DISTRIBUTOR_ROLE, true);

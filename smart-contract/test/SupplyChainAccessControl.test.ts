@@ -237,15 +237,13 @@ describe("SupplyChainAccessControl", function () {
     expect(await contract.canReceiveTransfer(auditorRole)).to.equal(false);
   });
 
-  it("Should allow DISTRIBUTOR to DISTRIBUTOR route for intermediate warehouse flow", async function () {
+  it("Should keep DISTRIBUTOR to DISTRIBUTOR disabled", async function () {
     const { contract } = await deployFixture();
 
     const distributorRole = await contract.DISTRIBUTOR_ROLE();
 
-    await contract.setRoute(distributorRole, distributorRole, true);
-
     expect(await contract.isValidRoute(distributorRole, distributorRole)).to.equal(
-      true
+      false
     );
   });
 
@@ -281,9 +279,7 @@ describe("SupplyChainAccessControl", function () {
 
     await contract.configureMvpRoutes();
 
-    expect(await contract.isValidRoute(manufacturerRole, importerRole)).to.equal(
-      true
-    );
+    expect(await contract.isValidRoute(manufacturerRole, importerRole)).to.equal(false);
 
     expect(
       await contract.isValidRoute(manufacturerRole, distributorRole)
@@ -295,7 +291,7 @@ describe("SupplyChainAccessControl", function () {
 
     expect(
       await contract.isValidRoute(distributorRole, distributorRole)
-    ).to.equal(true);
+    ).to.equal(false);
 
     expect(await contract.isValidRoute(distributorRole, clinicRole)).to.equal(
       true

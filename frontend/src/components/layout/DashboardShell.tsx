@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useAccount } from "wagmi";
 import { Boxes, Home, ListChecks, QrCode, ShieldAlert, UserCheck } from "lucide-react";
-import { getStoredUser, SESSION_UPDATED_EVENT, type DemoUser } from "@/lib/auth";
+import { clearSession, getStoredUser, SESSION_UPDATED_EVENT, type DemoUser } from "@/lib/auth";
 import {
   canAccessDashboardPath,
   canViewInternalProducts,
@@ -72,6 +73,7 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const t = useTranslation();
+  const { address: connectedAddress } = useAccount();
   const [isReady] = useState(() => {
     if (typeof window === "undefined") return false;
     return Boolean(getStoredUser() && window.localStorage.getItem("demoToken"));
@@ -105,6 +107,17 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     window.addEventListener(SESSION_UPDATED_EVENT, handleSessionUpdate);
     return () => window.removeEventListener(SESSION_UPDATED_EVENT, handleSessionUpdate);
   }, []);
+
+  useEffect(() => {
+    if (
+      user?.authMode === "wallet" &&
+      connectedAddress &&
+      connectedAddress.toLowerCase() !== user.address.toLowerCase()
+    ) {
+      clearSession();
+      router.replace("/login?accountChanged=1");
+    }
+  }, [connectedAddress, router, user]);
 
   if (!isReady) {
     return (
