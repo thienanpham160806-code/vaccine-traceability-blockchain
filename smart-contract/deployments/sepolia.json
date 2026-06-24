@@ -1,12 +1,12 @@
 {
   "network": "sepolia",
   "deployer": "0xcd8E5cb88a3338970DfbfA914A98bC4a8dC0eeB6",
-  "deployedAt": "2026-06-01T10:07:13.447Z",
+  "deployedAt": "2026-06-24T02:38:37.352Z",
   "contracts": {
-    "supplyChainAccessControl": "0xfC3e6c7Ae9Fc30A4FF171Bd874Fc5DF3A1B8475e",
-    "importVerifier": "0xF3198dCd4def6e2ECBB0511D0cE78f048793eEb8",
-    "productRegistry": "0x98300bC1A46cBA45F28A6075A18934B0d160ef32",
-    "transferLedger": "0x6473f5830641b052e26383e6c1210c0989D87202"
+    "supplyChainAccessControl": "0x7Adb60A3F2393F68EBeC27774970408D41068De5",
+    "importVerifier": "0x59da47375eF85999C3F400CeEAd2E6503B411083",
+    "productRegistry": "0xf79Ad6CAf242871FCa98987d4745008226A47046",
+    "transferLedger": "0xf9Ae50f3FBC5c70e95D520e7C27cd47dDa1FC2DB"
   },
   "setup": {
     "transferLedgerLinked": true,

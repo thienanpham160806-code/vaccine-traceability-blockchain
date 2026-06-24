@@ -20,7 +20,8 @@ import { getProductStatusLabel } from "@/lib/status";
 import type { VerifyResult } from "@/lib/types";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { ContactFooter } from "@/components/layout/ContactFooter";
-import { SupplyChainDiagram } from "@/components/trace/SupplyChainDiagram";
+import { SupplyChainNodeGraph } from "@/components/trace/SupplyChainNodeGraph";
+import { LanguageFlag } from "@/components/ui/LanguageFlag";
 import { useLanguage } from "@/providers/LanguageProvider";
 
 interface PageProps {
@@ -28,6 +29,7 @@ interface PageProps {
 }
 
 type ViewState = "loading" | "success" | "duplicate" | "not_found" | "error";
+type VerifyTimelineItem = VerifyResult["timeline"][number];
 
 const copy = {
   en: {
@@ -185,6 +187,13 @@ function VerifyControls() {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
   const text = copy[language];
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const selectedTheme = mounted ? theme || "system" : "system";
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -194,7 +203,7 @@ function VerifyControls() {
       >
         {themeOptions.map((option) => {
           const Icon = option.icon;
-          const selected = (theme || "system") === option.value;
+          const selected = selectedTheme === option.value;
           return (
             <button
               key={option.value}
@@ -224,14 +233,15 @@ function VerifyControls() {
             key={item}
             type="button"
             onClick={() => setLanguage(item)}
-            className={`flex h-9 min-w-10 items-center justify-center gap-1 rounded-md px-2 transition ${
+            className={`flex h-9 min-w-14 items-center justify-center gap-1.5 rounded-md px-2 transition ${
               language === item
                 ? "bg-blue-600 text-white"
                 : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
             }`}
           >
             {language === item ? <Check className="h-3 w-3" /> : null}
-            {item.toUpperCase()}
+            <LanguageFlag language={item} />
+            <span>{item.toUpperCase()}</span>
           </button>
         ))}
       </div>
@@ -332,7 +342,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
           return;
         }
 
-        const hasDuplicateScan = result.product.riskLevel === "HIGH" || result.product.riskLevel === "ALERT";
+        const hasDuplicateScan = result.product.riskLevel === "HIGH" || result.product.riskLevel === "MEDIUM";
         setData(result);
         setViewState(hasDuplicateScan && result.product.status === "FLAGGED" ? "duplicate" : "success");
       })
@@ -476,8 +486,8 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
 
   if (!data) return null;
 
-  const { product, batch, timeline, recallStatus, zkProofVerified } = data;
-  const rejectedTransfers = (timeline || []).filter((event: any) => {
+  const { product, batch, timeline, recallStatus, zkProofVerified, onChainVerified, lastScan, risk } = data as any;
+  const rejectedTransfers = (timeline || []).filter((event: VerifyTimelineItem) => {
     return (event.status === "REJECTED" || event.status === "RETURNED") && (event.rejectedReason || event.rejectionReason);
   });
 
@@ -522,6 +532,38 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
             </div>
           </div>
 
+          {/* Risk & on-chain verification */}
+          {(risk || onChainVerified !== undefined) ? (
+            <div className="flex flex-wrap gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
+              {risk?.riskLevel ? (
+                <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                  risk.riskLevel === "CRITICAL" ? "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200" :
+                  risk.riskLevel === "HIGH"     ? "border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-800 dark:bg-orange-950/60 dark:text-orange-200" :
+                  risk.riskLevel === "MEDIUM"   ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-200" :
+                                                  "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200"
+                }`}>
+                  {risk.riskLevel === "LOW" ? (language === "vi" ? "Bình thường" : "Normal") :
+                   risk.riskLevel === "MEDIUM" ? (language === "vi" ? "Cảnh báo" : "Medium") :
+                   risk.riskLevel === "HIGH" ? (language === "vi" ? "Rủi ro cao" : "High risk") :
+                   (language === "vi" ? "Nghiêm trọng" : "Critical")}
+                </span>
+              ) : null}
+              {onChainVerified ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-200">
+                  ✓ {language === "vi" ? "Đã xác thực blockchain" : "Blockchain verified"}
+                </span>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Last scan info */}
+          {lastScan?.timestamp ? (
+            <div className="rounded-lg border border-zinc-100 bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <span className="font-semibold">{language === "vi" ? "Lần quét gần nhất: " : "Last scanned: "}</span>
+              {new Date(lastScan.timestamp).toLocaleString(language === "vi" ? "vi-VN" : "en-US")}
+            </div>
+          ) : null}
+
           {recallStatus ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
               {text.recallWarning}
@@ -533,7 +575,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
               <p className="font-bold">{text.rejectedTransferTitle}</p>
               <p className="mt-1 text-xs">{text.rejectedTransferText}</p>
               <div className="mt-2 space-y-2">
-                {rejectedTransfers.map((event: any, index) => (
+                {rejectedTransfers.map((event: VerifyTimelineItem, index: number) => (
                   <p key={event.id || event.txHash || index} className="rounded-md bg-white/70 px-2 py-1.5 text-xs dark:bg-zinc-950/40">
                     <span className="font-semibold">{text.rejectionReason}: </span>
                     <span className="whitespace-pre-wrap break-words">{event.rejectedReason || event.rejectionReason}</span>
@@ -550,7 +592,7 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
             <h2 className="text-sm font-bold uppercase tracking-wide text-zinc-700 dark:text-zinc-300">{text.timeline}</h2>
           </div>
 
-          <SupplyChainDiagram events={timeline || []} currentOwner={product?.currentOwner} language={language} emptyText={text.noTimeline} />
+          <SupplyChainNodeGraph nodes={data.supplyChainNodes} events={timeline || []} language={language} emptyText={text.noTimeline} />
         </div>
 
         <div className="flex justify-center gap-3">

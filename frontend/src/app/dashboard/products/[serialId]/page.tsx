@@ -5,11 +5,13 @@ import { use, useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import { getApiErrorMessage, getProductDetail, reregisterProduct, updateProduct } from "@/lib/api";
+import { getStoredUser } from "@/lib/auth";
 import type { ProductDetailResponse } from "@/lib/types";
 import { ProductStatusBadge, RiskLevelBadge } from "@/components/product/ProductStatusBadge";
 import { TransferTimeline } from "@/components/trace/TransferTimeline";
 import { DetailSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { canEditProductMetadata, canInitiateTransfer, canRegisterProducts } from "@/lib/role-access";
 import { getZodFieldErrors, productMetadataSchema } from "@/lib/validation";
 import { useLanguage } from "@/providers/LanguageProvider";
 
@@ -206,6 +208,11 @@ export default function ProductDetailPage({ params }: PageProps) {
   const txUrl = getTransactionUrl(txHash);
   const ipfsCid = batch?.ipfsCid || product.ipfsCid;
   const ipfsUrl = getIpfsUrl(ipfsCid);
+  const currentUser = getStoredUser();
+  const canReregisterRole = canRegisterProducts(currentUser);
+  const canReregisterOnChain = !blockchain.available && canReregisterRole;
+  const canTransfer = canInitiateTransfer(currentUser);
+  const canEdit = canEditProductMetadata(currentUser);
 
   return (
     <div className="space-y-6">
@@ -216,7 +223,7 @@ export default function ProductDetailPage({ params }: PageProps) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {!blockchain.available && (
+          {canReregisterOnChain && (
             <button
               type="button"
               disabled={isReregistering}
@@ -226,25 +233,29 @@ export default function ProductDetailPage({ params }: PageProps) {
               {isReregistering ? "Đang xử lý..." : "Đăng ký lại on-chain"}
             </button>
           )}
-          <Link
-            href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
-          >
-            Chuyển giao
-          </Link>
+          {canTransfer ? (
+            <Link
+              href={`/dashboard/transfers/create?serialId=${encodeURIComponent(product.serialId)}`}
+              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+            >
+              Chuyển giao
+            </Link>
+          ) : null}
           <Link
             href={`/consumer/verify/${encodeURIComponent(product.serialId)}`}
             className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
           >
             Xác minh
           </Link>
-          <button
-            className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
-            onClick={startEditing}
-            type="button"
-          >
-            Sửa metadata
-          </button>
+          {canEdit ? (
+            <button
+              className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"
+              onClick={startEditing}
+              type="button"
+            >
+              Sửa metadata
+            </button>
+          ) : null}
           <Link
             href="/dashboard/products"
             className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 shadow-sm transition hover:bg-zinc-50"

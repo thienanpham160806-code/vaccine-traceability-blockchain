@@ -1,5 +1,7 @@
 import { login } from "./api";
 
+export const SESSION_UPDATED_EVENT = "vaxitrust:session-updated";
+
 export const demoActors = [
   {
     role: "MANUFACTURER",
@@ -50,6 +52,7 @@ export function getStoredUser(): DemoUser | null {
 export function setSession(token: string, user: DemoUser, authMode: "demo" | "wallet" = "demo") {
   window.localStorage.setItem("demoToken", token);
   window.localStorage.setItem("demoUser", JSON.stringify({ ...user, authMode }));
+  window.dispatchEvent(new CustomEvent(SESSION_UPDATED_EVENT));
 }
 
 export function clearSession() {

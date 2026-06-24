@@ -7,140 +7,90 @@ async function main() {
   console.log("Network:", network.name);
 
   const [deployer] = await ethers.getSigners();
-
   console.log("Deployer:", deployer.address);
 
   const balance = await ethers.provider.getBalance(deployer.address);
   console.log("Deployer balance:", ethers.formatEther(balance), "ETH");
 
-  console.log("\n1. Deploying SupplyChainAccessControl...");
+  // Round 1: AccessControl + ImportVerifier in parallel (no dependencies)
+  console.log("\n[Round 1] Deploying SupplyChainAccessControl + DemoImportZKPVerifier in parallel...");
+  let nonce = await deployer.getNonce();
 
-  const AccessControlFactory = await ethers.getContractFactory(
-    "SupplyChainAccessControl"
-  );
+  const [AccessControlFactory, ImportVerifierFactory] = await Promise.all([
+    ethers.getContractFactory("SupplyChainAccessControl"),
+    ethers.getContractFactory("DemoImportZKPVerifier"),
+  ]);
 
-  const accessControl = await AccessControlFactory.deploy(deployer.address);
-  await accessControl.waitForDeployment();
+  const [accessControl, importVerifier] = await Promise.all([
+    AccessControlFactory.deploy(deployer.address, { nonce: nonce }),
+    ImportVerifierFactory.deploy({ nonce: nonce + 1 }),
+  ]);
+
+  await Promise.all([accessControl.waitForDeployment(), importVerifier.waitForDeployment()]);
 
   const accessControlAddress = await accessControl.getAddress();
-
-  console.log("SupplyChainAccessControl:", accessControlAddress);
-
-  console.log("\n2. Deploying DemoImportZKPVerifier...");
-
-  const ImportVerifierFactory = await ethers.getContractFactory(
-    "DemoImportZKPVerifier"
-  );
-
-  const importVerifier = await ImportVerifierFactory.deploy();
-  await importVerifier.waitForDeployment();
-
   const importVerifierAddress = await importVerifier.getAddress();
-
+  console.log("SupplyChainAccessControl:", accessControlAddress);
   console.log("DemoImportZKPVerifier:", importVerifierAddress);
 
-  console.log("\n3. Deploying ProductRegistry...");
+  // Round 2: ProductRegistry (needs accessControlAddress)
+  console.log("\n[Round 2] Deploying ProductRegistry...");
+  nonce = await deployer.getNonce();
 
-  const ProductRegistryFactory = await ethers.getContractFactory(
-    "ProductRegistry"
-  );
-
-  const productRegistry = await ProductRegistryFactory.deploy(
-    accessControlAddress
-  );
-
+  const ProductRegistryFactory = await ethers.getContractFactory("ProductRegistry");
+  const productRegistry = await ProductRegistryFactory.deploy(accessControlAddress, { nonce });
   await productRegistry.waitForDeployment();
 
   const productRegistryAddress = await productRegistry.getAddress();
-
   console.log("ProductRegistry:", productRegistryAddress);
 
-  console.log("\n4. Deploying TransferLedger...");
+  // Round 3: TransferLedger (needs productRegistryAddress + accessControlAddress)
+  console.log("\n[Round 3] Deploying TransferLedger...");
+  nonce = await deployer.getNonce();
 
-  const TransferLedgerFactory = await ethers.getContractFactory(
-    "TransferLedger"
-  );
-
+  const TransferLedgerFactory = await ethers.getContractFactory("TransferLedger");
   const transferLedger = await TransferLedgerFactory.deploy(
     productRegistryAddress,
-    accessControlAddress
+    accessControlAddress,
+    { nonce }
   );
-
   await transferLedger.waitForDeployment();
 
   const transferLedgerAddress = await transferLedger.getAddress();
-
   console.log("TransferLedger:", transferLedgerAddress);
 
-  console.log("\n5. Linking TransferLedger and ImportVerifier to ProductRegistry...");
+  // Round 4: 3 config txs in parallel
+  console.log("\n[Round 4] Linking + configuring routes in parallel...");
+  nonce = await deployer.getNonce();
 
-  const setLedgerTx = await productRegistry.setTransferLedger(
-    transferLedgerAddress
-  );
+  const [setLedgerTx, setImportVerifierTx, configureRoutesTx] = await Promise.all([
+    productRegistry.setTransferLedger(transferLedgerAddress, { nonce }),
+    productRegistry.setImportVerifier(importVerifierAddress, { nonce: nonce + 1 }),
+    accessControl.configureMvpRoutes({ nonce: nonce + 2 }),
+  ]);
 
-  await setLedgerTx.wait();
-
-  console.log("ProductRegistry linked with TransferLedger");
-
-  const setImportVerifierTx = await productRegistry.setImportVerifier(
-    importVerifierAddress
-  );
-
-  await setImportVerifierTx.wait();
-
-  console.log("ProductRegistry linked with DemoImportZKPVerifier");
-
-  console.log("\n6. Configuring MVP routes...");
-
-  const configureRoutesTx = await accessControl.configureMvpRoutes();
-  await configureRoutesTx.wait();
-
+  await Promise.all([setLedgerTx.wait(), setImportVerifierTx.wait(), configureRoutesTx.wait()]);
+  console.log("ProductRegistry linked with TransferLedger and ImportVerifier");
   console.log("MVP routes configured");
 
+  // Local dev: grant roles
   let localDemoRolesConfigured = false;
 
   if (network.name === "localhost" || network.name === "hardhat") {
-    console.log("\n7. Granting local demo roles...");
+    console.log("\n[Local] Granting demo roles...");
 
     const signers = await ethers.getSigners();
     const roleAssignments = [
-      {
-        label: "MANUFACTURER",
-        account: signers[0],
-        role: await accessControl.MANUFACTURER_ROLE(),
-      },
-      {
-        label: "IMPORTER",
-        account: signers[1],
-        role: await accessControl.IMPORTER_ROLE(),
-      },
-      {
-        label: "DISTRIBUTOR",
-        account: signers[2],
-        role: await accessControl.DISTRIBUTOR_ROLE(),
-      },
-      {
-        label: "CLINIC",
-        account: signers[3],
-        role: await accessControl.CLINIC_ROLE(),
-      },
-      {
-        label: "PHARMACY",
-        account: signers[4],
-        role: await accessControl.PHARMACY_ROLE(),
-      },
-      {
-        label: "RECALL_AUTHORITY",
-        account: signers[0],
-        role: await accessControl.RECALL_AUTHORITY_ROLE(),
-      },
+      { label: "MANUFACTURER",     account: signers[0], role: await accessControl.MANUFACTURER_ROLE() },
+      { label: "IMPORTER",         account: signers[1], role: await accessControl.IMPORTER_ROLE() },
+      { label: "DISTRIBUTOR",      account: signers[2], role: await accessControl.DISTRIBUTOR_ROLE() },
+      { label: "CLINIC",           account: signers[3], role: await accessControl.CLINIC_ROLE() },
+      { label: "PHARMACY",         account: signers[4], role: await accessControl.PHARMACY_ROLE() },
+      { label: "RECALL_AUTHORITY", account: signers[0], role: await accessControl.RECALL_AUTHORITY_ROLE() },
     ];
 
     for (const assignment of roleAssignments) {
-      const tx = await accessControl.grantUserRole(
-        assignment.account.address,
-        assignment.role
-      );
+      const tx = await accessControl.grantUserRole(assignment.account.address, assignment.role);
       await tx.wait();
       console.log(`${assignment.label}: ${assignment.account.address}`);
     }
@@ -167,23 +117,20 @@ async function main() {
   };
 
   const deploymentsDir = path.join(__dirname, "..", "deployments");
-
   if (!fs.existsSync(deploymentsDir)) {
     fs.mkdirSync(deploymentsDir, { recursive: true });
   }
 
   const outputPath = path.join(deploymentsDir, `${network.name}.json`);
-
   fs.writeFileSync(outputPath, JSON.stringify(deploymentInfo, null, 2));
 
   console.log("\nDeployment completed successfully.");
   console.log("Deployment info saved to:", outputPath);
-
   console.log("\nSummary:");
   console.log("SupplyChainAccessControl:", accessControlAddress);
-  console.log("ImportVerifier:", importVerifierAddress);
-  console.log("ProductRegistry:", productRegistryAddress);
-  console.log("TransferLedger:", transferLedgerAddress);
+  console.log("ImportVerifier:          ", importVerifierAddress);
+  console.log("ProductRegistry:         ", productRegistryAddress);
+  console.log("TransferLedger:          ", transferLedgerAddress);
 }
 
 main().catch((error) => {

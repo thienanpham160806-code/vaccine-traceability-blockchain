@@ -155,6 +155,143 @@ function requireString(value: unknown, fieldName: string): string {
   return value.trim();
 }
 
+const TRANSFERABLE_PRODUCT_STATUSES = new Set([
+  'REGISTERED',
+  'VERIFIED',
+  'DELIVERED',
+  'DELIVERED_TO_DISTRIBUTOR',
+  'DELIVERED_TO_CLINIC',
+  'DELIVERED_TO_PHARMACY',
+]);
+const TRANSFER_INITIATOR_ROLES = new Set(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR']);
+const INVENTORY_ROLES = new Set(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY']);
+const INVENTORY_TRANSFER_ROUTES: Record<string, string[]> = {
+  MANUFACTURER: ['DISTRIBUTOR'],
+  IMPORTER: ['DISTRIBUTOR'],
+  DISTRIBUTOR: ['CLINIC', 'PHARMACY'],
+  CLINIC: [],
+  PHARMACY: [],
+};
+
+/**
+ * GET /products/transferable
+ * Return products owned by the authenticated wallet and ready for a new transfer.
+ * ADMIN may inspect another operational role by passing ?role=...
+ */
+router.get(
+  '/transferable',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN']),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const requestedRole = String(req.query.role || req.user?.role || '').toUpperCase();
+      const ownerRole = req.user?.role === 'ADMIN' ? requestedRole : String(req.user?.role || '');
+
+      if (!INVENTORY_ROLES.has(ownerRole)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_OWNER_ROLE', message: `Role ${ownerRole || 'UNKNOWN'} does not own operational inventory.` },
+        });
+      }
+
+      const ownerAddress =
+        req.user?.role === 'ADMIN'
+          ? contractClient.getRoleAddress(ownerRole)
+          : String(req.user?.address || '');
+
+      if (!ownerAddress || !CryptoUtils.isValidAddress(ownerAddress)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_OWNER_ADDRESS', message: 'Authenticated profile does not have a valid wallet address.' },
+        });
+      }
+
+      const [productsSnapshot, transfersSnapshot] = await Promise.all([
+        db.ref('products').once('value'),
+        db.ref('transfers').once('value'),
+      ]);
+      const productEntries = Object.entries(productsSnapshot.val() || {}) as Array<[string, Product]>;
+      const transfers = Object.values(transfersSnapshot.val() || {}) as any[];
+      const latestConfirmedBySerial = new Map<string, any>();
+      const latestTransferBySerial = new Map<string, any>();
+
+      for (const transfer of transfers) {
+        if (!transfer?.serialId) continue;
+        const timestamp = transfer.confirmedAt || transfer.rejectedAt || transfer.returnedAt || transfer.updatedAt || transfer.createdAt || 0;
+        const latest = latestTransferBySerial.get(transfer.serialId);
+        const latestTimestamp =
+          latest?.confirmedAt || latest?.rejectedAt || latest?.returnedAt || latest?.updatedAt || latest?.createdAt || 0;
+        if (!latest || timestamp >= latestTimestamp) {
+          latestTransferBySerial.set(transfer.serialId, transfer);
+        }
+
+        if (transfer.status !== 'CONFIRMED') continue;
+
+        const current = latestConfirmedBySerial.get(transfer.serialId);
+        const currentTimestamp = current?.confirmedAt || current?.updatedAt || current?.createdAt || 0;
+        if (!current || timestamp >= currentTimestamp) {
+          latestConfirmedBySerial.set(transfer.serialId, transfer);
+        }
+      }
+
+      const normalizedOwner = normalizeAddress(ownerAddress);
+      const repairs: Promise<unknown>[] = [];
+      const items = productEntries.flatMap(([productKey, product]) => {
+        const latestTransfer = latestConfirmedBySerial.get(product.serialId);
+        const resolvedOwner = latestTransfer?.toAddress || product.currentOwner || '';
+        const resolvedRole =
+          latestTransfer?.toRole ||
+          product.ownerRole ||
+          (normalizeAddress(resolvedOwner) === normalizedOwner ? ownerRole : '');
+
+        if (
+          resolvedOwner &&
+          (normalizeAddress(product.currentOwner) !== normalizeAddress(resolvedOwner) ||
+            product.ownerRole !== resolvedRole)
+        ) {
+          repairs.push(
+            db.ref(`products/${productKey}`).update({
+              currentOwner: resolvedOwner,
+              ownerRole: resolvedRole || null,
+              updatedAt: Date.now(),
+            })
+          );
+        }
+
+        if (normalizeAddress(resolvedOwner) !== normalizedOwner) return [];
+        if (resolvedRole && resolvedRole !== ownerRole) return [];
+        if (latestTransferBySerial.get(product.serialId)?.status === 'PENDING') return [];
+        if (!TRANSFERABLE_PRODUCT_STATUSES.has(String(product.status))) return [];
+
+        return [{ ...product, currentOwner: resolvedOwner, ownerRole: resolvedRole || ownerRole }];
+      });
+
+      if (repairs.length > 0) {
+        await Promise.allSettled(repairs);
+      }
+
+      items.sort((a, b) => (b.updatedAt || b.createdAt || 0) - (a.updatedAt || a.createdAt || 0));
+      res.json({
+        success: true,
+        data: {
+          items,
+          total: items.length,
+          ownerAddress,
+          ownerRole,
+          canTransfer: TRANSFER_INITIATOR_ROLES.has(ownerRole),
+          allowedToRoles: INVENTORY_TRANSFER_ROUTES[ownerRole] || [],
+        },
+      });
+    } catch (error) {
+      Logger.error('Get transferable products error', error);
+      res.status(500).json({
+        success: false,
+        error: { code: 'GET_TRANSFERABLE_PRODUCTS_ERROR', message: getErrorMessage(error, 'Failed to fetch transferable products') },
+      });
+    }
+  }
+);
+
 /**
  * GET /products?search=&status=&manufacturer=&sort=&page=&pageSize=
  * List products with search, filter, sort, and pagination
@@ -165,6 +302,7 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
       search,
       status,
       manufacturer,
+      owner,
       batch,
       origin,
       sort = 'createdAt:desc',
@@ -176,6 +314,7 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
       search,
       status,
       manufacturer,
+      owner,
       batch,
       origin,
       sort,
@@ -192,6 +331,7 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
     const searchText = normalizeText(String(search || ''));
     const statusText = normalizeText(String(status || ''));
     const manufacturerText = normalizeText(String(manufacturer || ''));
+    const ownerText = normalizeAddress(String(owner || ''));
     const batchText = normalizeText(String(batch || ''));
     const originText = normalizeText(String(origin || ''));
 
@@ -226,6 +366,12 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
           normalizeText(product.manufacturerAddress).includes(manufacturerText)
         );
       });
+    }
+
+    if (ownerText) {
+      products = products.filter(
+        (product) => normalizeAddress(product.currentOwner) === ownerText
+      );
     }
 
     if (batchText) {
@@ -835,6 +981,7 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       manufacturerName,
       manufacturerAddress: batch.manufacturerAddress,
       currentOwner: contractClient.getRoleAddress(signerRole),
+      ownerRole: signerRole,
       status: 'VERIFIED',
       riskLevel: 'SAFE',
       expiryDate,
@@ -849,11 +996,23 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       updatedAt: now,
     };
 
-    await Promise.all([
-      db.ref(`batches/${batchHash}`).update(batch),
-      db.ref(`products/${serialHash}`).set(product),
-      db.ref(`serial-index/${serialId}`).set(serialHash),
-    ]);
+    try {
+      await Promise.all([
+        db.ref(`batches/${batchHash}`).update(batch),
+        db.ref(`products/${serialHash}`).set(product),
+        db.ref(`serial-index/${serialId}`).set(serialHash),
+      ]);
+    } catch (firebaseError) {
+      Logger.error('Firebase write failed after on-chain registration', firebaseError);
+      return res.status(207).json({
+        success: false,
+        error: {
+          code: 'FIREBASE_WRITE_FAILED',
+          message: `Product was registered on-chain (txHash: ${txHash}) but Firebase sync failed. Use POST /products/sync-wallet-register with this txHash to retry.`,
+          txHash,
+        },
+      });
+    }
 
     res.json({
       success: true,
@@ -1004,6 +1163,7 @@ router.post('/sync-wallet-register', verifyToken, validateRequest({ body: regist
       manufacturerName,
       manufacturerAddress: batch.manufacturerAddress,
       currentOwner: batch.manufacturerAddress,
+      ownerRole: origin === 'IMPORTED' ? 'IMPORTER' : 'MANUFACTURER',
       status: 'VERIFIED',
       riskLevel: 'SAFE',
       expiryDate,
@@ -1264,6 +1424,7 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           manufacturerName,
           manufacturerAddress: batch.manufacturerAddress,
           currentOwner: contractClient.getRoleAddress(signerRole),
+          ownerRole: signerRole,
           status: 'VERIFIED',
           riskLevel: 'SAFE',
           expiryDate,
@@ -1408,6 +1569,50 @@ router.post(
         success: false,
         error: { code: 'REREGISTER_ERROR', message: getErrorMessage(error, 'Failed to re-register product on-chain') },
       });
+    }
+  }
+);
+
+/**
+ * POST /products/:serialId/unflag
+ * Clear FLAGGED status — accessible by MANUFACTURER or IMPORTER (recall authority role)
+ */
+router.post(
+  '/:serialId/unflag',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'RECALL_AUTHORITY']),
+  async (req: AuthRequest, res: Response) => {
+    const { serialId } = req.params;
+    try {
+      const serialHash = toBytes32(serialId);
+
+      const snap = await db.ref(`products/${serialHash}`).once('value');
+      if (!snap.exists()) {
+        return res.status(404).json({ success: false, error: { code: 'NOT_FOUND', message: 'Product not found' } });
+      }
+
+      const product = snap.val();
+      if (product.status !== 'FLAGGED') {
+        return res.status(400).json({ success: false, error: { code: 'NOT_FLAGGED', message: 'Product is not flagged' } });
+      }
+
+      const signerRole = req.user?.role || 'RECALL_AUTHORITY';
+      const txHash = await contractClient.unflagProduct(serialHash, signerRole);
+
+      const now = Date.now();
+      const previousStatus = product.previousStatus || 'VERIFIED';
+      await db.ref(`products/${serialHash}`).update({
+        status: previousStatus,
+        riskLevel: 0,
+        flagReason: null,
+        blockchainTx: txHash,
+        updatedAt: now,
+      });
+
+      res.json({ success: true, data: { txHash, status: previousStatus } });
+    } catch (error) {
+      Logger.error('Unflag product error', error);
+      res.status(500).json({ success: false, error: { code: 'UNFLAG_ERROR', message: 'Failed to unflag product' } });
     }
   }
 );

@@ -7,6 +7,7 @@ import type {
   Product,
   ProductDetailResponse,
   ProductListResponse,
+  ProfileResponse,
   RecallRecord,
   RoleRequest,
   RiskFlag,
@@ -166,6 +167,9 @@ export const endpoints = {
   demoActors: "/auth/demo-actors",
   authNonce: "/auth/nonce",
   loginWithSignature: "/auth/login-with-signature",
+  me: "/auth/me",
+  myProfile: "/auth/me/profile",
+  authSession: "/auth/session",
   roleRequests: "/auth/role-requests",
   walletRoles: (address: string) => `/auth/roles/${encodeURIComponent(address)}`,
 
@@ -177,6 +181,7 @@ export const endpoints = {
   getBatchSerials: (batchId: string) => `/batches/${batchId}/serials`,
   createBatch: "/batches",
   registerProduct: "/products/register",
+  transferableProducts: "/products/transferable",
   syncWalletProductRegistration: "/products/sync-wallet-register",
   bulkRegisterProducts: "/products/bulk",
   getProducts: "/products",
@@ -204,15 +209,16 @@ export const endpoints = {
   addDisputeEvidence: (id: string) => `/disputes/${id}/evidence`,
 
   recalls: "/recalls",
+  syncWalletRecall: "/recalls/sync-wallet",
 };
 
 export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
   if (axios.isAxiosError(err)) {
     if (err.code === "ECONNABORTED") {
-      return `YÃªu cáº§u Ä‘áº¿n backend quÃ¡ thá»i gian. HÃ£y kiá»ƒm tra backend vÃ  RPC: ${apiBaseUrl}.`;
+      return `Backend phản hồi quá thời gian. Hãy kiểm tra backend và RPC: ${apiBaseUrl}.`;
     }
     if (!err.response) {
-      return `KhÃ´ng káº¿t ná»‘i Ä‘Æ°á»£c backend. HÃ£y kiá»ƒm tra cáº¥u hÃ¬nh NEXT_PUBLIC_API_URL: ${apiBaseUrl}.`;
+      return `Không kết nối được backend. Hãy kiểm tra cấu hình NEXT_PUBLIC_API_URL: ${apiBaseUrl}.`;
     }
   } else if (err instanceof Error && err.message) {
     return err.message;
@@ -229,18 +235,22 @@ export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
   const message = error.response.data?.error?.message || error.message;
   const details = error.response.data?.error?.details;
   const messages: Record<string, string> = {
-    FORBIDDEN: "Báº¡n khÃ´ng cÃ³ quyá»n thá»±c hiá»‡n thao tÃ¡c nÃ y.",
-    ROLE_MISMATCH: message || "Vai trÃ² hiá»‡n táº¡i khÃ´ng khá»›p vá»›i thao tÃ¡c nÃ y.",
-    MISSING_TOKEN: "PhiÃªn Ä‘Äƒng nháº­p khÃ´ng há»£p lá»‡. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.",
-    INVALID_TOKEN: "PhiÃªn Ä‘Äƒng nháº­p Ä‘Ã£ háº¿t háº¡n. Vui lÃ²ng Ä‘Äƒng nháº­p láº¡i.",
-    INVALID_ADDRESS: "Äá»‹a chá»‰ vÃ­ khÃ´ng há»£p lá»‡.",
-    INVALID_SERIAL_ID: "Serial chá»‰ Ä‘Æ°á»£c dÃ¹ng chá»¯, sá»‘, dáº¥u gáº¡ch ngang hoáº·c gáº¡ch dÆ°á»›i.",
-    INVALID_BATCH_ID: "MÃ£ lÃ´ chá»‰ Ä‘Æ°á»£c dÃ¹ng chá»¯, sá»‘, dáº¥u gáº¡ch ngang hoáº·c gáº¡ch dÆ°á»›i.",
+    FORBIDDEN: "Bạn không có quyền thực hiện thao tác này.",
+    ROLE_MISMATCH: message || "Vai trò hiện tại không khớp với thao tác này.",
+    WALLET_SESSION_MISMATCH: "Ví MetaMask đang chọn không khớp với phiên đăng nhập. Vui lòng đăng nhập lại bằng ví này.",
+    ROLE_ALREADY_ASSIGNED: "Ví này đã có quyền hoạt động và không thể gửi yêu cầu dành cho người dùng mới.",
+    SELF_APPROVAL_NOT_ALLOWED: "Ví quản trị không thể tự duyệt yêu cầu cấp quyền cho chính mình.",
+    ROLE_REQUEST_TARGET_CHANGED: "Trạng thái quyền của ví yêu cầu đã thay đổi. Hãy làm mới danh sách trước khi duyệt.",
+    MISSING_TOKEN: "Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.",
+    INVALID_TOKEN: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
+    INVALID_ADDRESS: "Địa chỉ ví không hợp lệ.",
+    INVALID_SERIAL_ID: "Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
+    INVALID_BATCH_ID: "Mã lô chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
   };
 
   if (code === "VALIDATION_ERROR" && Array.isArray(details) && details.length > 0) {
     return details
-      .map((detail) => `${detail.path || "field"}: ${detail.message || "khÃ´ng há»£p lá»‡"}`)
+      .map((detail) => `${detail.path || "field"}: ${detail.message || "không hợp lệ"}`)
       .join("; ");
   }
 
@@ -276,12 +286,41 @@ export async function loginWithSignature(payload: { address: string; signature: 
   return requireApiData(res.data.data, "Login response did not include data.");
 }
 
+export async function refreshAuthSession() {
+  const res = await api.get<ApiResponse<LoginResponse>>(endpoints.authSession);
+  return requireApiData(res.data.data, "Session refresh response did not include data.");
+}
+
 export async function getWalletRoles(address: string) {
   const res = await api.get<ApiResponse<WalletRoleInfo>>(endpoints.walletRoles(address));
   return requireApiData(res.data.data, "Wallet roles response did not include data.");
 }
 
-export async function createRoleRequest(payload: { requestedRole: string; note?: string }) {
+export async function getMyProfile() {
+  const res = await api.get<ApiResponse<ProfileResponse>>(endpoints.me);
+  return requireApiData(res.data.data, "Profile response did not include data.");
+}
+
+export async function updateMyProfile(payload: {
+  organizationId?: string;
+  fullName?: string;
+  title?: string;
+  email?: string;
+  phone?: string;
+  organizationName?: string;
+  organizationType?: string;
+  organizationCode?: string;
+  organizationAddress?: string;
+  licenseNumber?: string;
+  facilityType?: string;
+  storageCapacity?: string;
+  coldChainCapability?: string;
+}) {
+  const res = await api.put<ApiResponse<ProfileResponse>>(endpoints.myProfile, payload);
+  return requireApiData(res.data.data, "Profile update response did not include data.");
+}
+
+export async function createRoleRequest(payload: { requestedRole: string; note?: string; walletAddress: string }) {
   const res = await api.post<ApiResponse<RoleRequest>>(endpoints.roleRequests, payload);
   return requireApiData(res.data.data, "Role request response did not include data.");
 }
@@ -336,6 +375,7 @@ export async function getProducts(params?: {
   search?: string;
   status?: string;
   manufacturer?: string;
+  owner?: string;
   batch?: string;
   origin?: "MANUFACTURED" | "IMPORTED";
   sort?: string;
@@ -503,6 +543,18 @@ export async function scanTransfer(payload: {
   receiverAddress?: string;
   batchId?: string;
   fromLocation?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: "C" | "F";
+  handlingNotes?: string;
 }) {
   const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.scanTransfer, payload);
   return requireApiData(res.data.data, "Scan transfer response did not include data.");
@@ -527,6 +579,18 @@ export async function syncWalletTransferCreate(payload: {
   batchId?: string;
   fromLocationHash?: string;
   toLocationHash?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: "C" | "F";
+  handlingNotes?: string;
 }) {
   const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.syncWalletTransferCreate, payload);
   return requireApiData(res.data.data, "Wallet transfer sync response did not include data.");
@@ -571,6 +635,28 @@ export async function getRecalls() {
 export async function createRecall(payload: { batchHash: string; reason: string; serials: string[] }) {
   const res = await api.post<ApiResponse<RecallRecord>>(endpoints.recalls, payload);
   return requireApiData(res.data.data, "Create recall response did not include data.");
+}
+
+export async function getTransferableProducts(role?: string) {
+  const res = await api.get<
+    ApiResponse<{
+      items: Product[];
+      total: number;
+      ownerAddress: string;
+      ownerRole: string;
+      canTransfer: boolean;
+      allowedToRoles: string[];
+    }>
+  >(endpoints.transferableProducts, {
+    params: role ? { role } : undefined,
+  });
+
+  return requireApiData(res.data.data, "Transferable product response did not include data.");
+}
+
+export async function syncWalletRecall(payload: { batchHash: string; reason: string; serials: string[]; txHash: string }) {
+  const res = await api.post<ApiResponse<RecallRecord>>(endpoints.syncWalletRecall, payload);
+  return requireApiData(res.data.data, "Wallet recall sync response did not include data.");
 }
 
 export async function getDisputes() {

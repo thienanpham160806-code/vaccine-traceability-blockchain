@@ -26,11 +26,12 @@ import {
   UserCog,
 } from "lucide-react";
 import { getApiErrorMessage, getDemoActors, getHealth, loginWithSignature, requestAuthNonce } from "@/lib/api";
-import { demoActors as fallbackActors, loginDemo, setSession } from "@/lib/auth";
+import { clearSession, demoActors as fallbackActors, loginDemo, setSession } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { ContactFooter } from "@/components/layout/ContactFooter";
+import { LanguageFlag } from "@/components/ui/LanguageFlag";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 type ActiveTab = "login" | "verify";
@@ -53,10 +54,6 @@ const themeOptions = [
   { value: "system", label: "Hệ thống", icon: Monitor },
 ] as const;
 
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}...${address.slice(-4)}`;
-}
-
 type EthereumProvider = {
   request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
 };
@@ -76,13 +73,20 @@ function PreferenceControls() {
   const { theme, setTheme } = useTheme();
   const { language, setLanguage } = useLanguage();
   const t = useTranslation();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const selectedTheme = mounted ? theme || "system" : "system";
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
       <div className="flex rounded-lg border border-zinc-200 bg-white/80 p-1 shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
         {themeOptions.map((option) => {
           const Icon = option.icon;
-          const selected = (theme || "light") === option.value;
+          const selected = selectedTheme === option.value;
           return (
             <button
               key={option.value}
@@ -106,12 +110,13 @@ function PreferenceControls() {
             key={item}
             type="button"
             onClick={() => setLanguage(item)}
-            className={`flex h-9 min-w-10 items-center justify-center gap-1 rounded-md px-2 transition ${
+            className={`flex h-9 min-w-14 items-center justify-center gap-1.5 rounded-md px-2 transition ${
               language === item ? "bg-blue-600 text-white" : "text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-100"
             }`}
           >
             {language === item ? <Check className="h-3 w-3" /> : null}
-            {item.toUpperCase()}
+            <LanguageFlag language={item} />
+            <span>{item.toUpperCase()}</span>
           </button>
         ))}
       </div>
@@ -181,7 +186,7 @@ export default function LoginPage() {
   const { address, isConnected } = useAccount();
   const { mutateAsync: connectAsync } = useConnect();
   const connectors = useConnectors();
-  const { disconnect } = useDisconnect();
+  const { disconnectAsync } = useDisconnect();
   const { signMessageAsync } = useSignMessage();
   const { language } = useLanguage();
   const t = useTranslation();
@@ -236,8 +241,7 @@ export default function LoginPage() {
     if (!metaMaskConnector && !injectedEthereum) throw new Error("MetaMask extension was not found.");
     if (isConnected) {
       addMetaMaskDiagnostic("Ngắt kết nối cũ", "pending");
-      disconnect();
-      await new Promise((resolve) => window.setTimeout(resolve, 150));
+      await disconnectAsync();
       addMetaMaskDiagnostic("Ngắt kết nối cũ", "ok");
     }
 
@@ -268,7 +272,10 @@ export default function LoginPage() {
   async function signMetaMaskMessage(walletAddress: string, message: string) {
     try {
       addMetaMaskDiagnostic("Ký bằng wagmi", "pending");
-      const signature = await signMessageAsync({ message });
+      const signature = await signMessageAsync({
+        message,
+        account: walletAddress as `0x${string}`,
+      });
       addMetaMaskDiagnostic("Ký bằng wagmi", "ok");
       return signature;
     } catch (err) {
@@ -299,6 +306,7 @@ export default function LoginPage() {
     setMetaMaskDiagnostics([]);
     setIsLoading(true);
     try {
+      clearSession();
       addMetaMaskDiagnostic("Bắt đầu đăng nhập MetaMask", "pending");
       const walletAddress = await connectWithMetaMask();
       addMetaMaskDiagnostic("Ví đã kết nối", "ok", walletAddress);
@@ -319,6 +327,9 @@ export default function LoginPage() {
       addMetaMaskDiagnostic("Yêu cầu ký message", "ok");
       addMetaMaskDiagnostic("Xác thực chữ ký với backend", "pending");
       const { token, user } = await loginWithSignature({ address: walletAddress, signature });
+      if (user.address.toLowerCase() !== walletAddress.toLowerCase()) {
+        throw new Error("Backend session address does not match the selected MetaMask account.");
+      }
       addMetaMaskDiagnostic("Xác thực chữ ký với backend", "ok", user.role);
       setSession(token, user, "wallet");
       router.push(user.role === "PUBLIC" ? "/dashboard/role-request" : "/dashboard");
@@ -347,8 +358,8 @@ export default function LoginPage() {
     }
   }
 
-  function goVerify(value = serialId) {
-    const parsed = parseVaxiTrustQr(value);
+  function goVerify(value = serialId, source: "manual" | "scan" = "manual") {
+    const parsed = parseVaxiTrustQr(value, { source });
     if (!parsed.valid) {
       setScanError(parsed.reason);
       return;
@@ -365,7 +376,6 @@ export default function LoginPage() {
           <VaxiTrustLogo className="h-12 w-12" iconClassName="h-7 w-7" showWordmark wordmarkClassName="text-2xl" />
           <div className="flex w-full flex-wrap items-center justify-start gap-2 sm:w-auto sm:justify-end">
             <PreferenceControls />
-            {address ? <span className="rounded-lg border border-zinc-200 bg-white/80 px-3 py-2 font-mono text-xs text-zinc-500 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-400">{shortAddress(address)}</span> : null}
           </div>
         </header>
 
@@ -481,7 +491,7 @@ export default function LoginPage() {
                     <Scanner
                       onScan={(detectedCodes) => {
                         const value = detectedCodes[0]?.rawValue;
-                        if (value) goVerify(value);
+                        if (value) goVerify(value, "scan");
                       }}
                       onError={(err) => setScanError(String(err))}
                     />

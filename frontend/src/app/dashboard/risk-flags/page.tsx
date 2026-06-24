@@ -9,15 +9,15 @@ import type { RiskFlag } from "@/lib/types";
 import { useTranslation } from "@/providers/LanguageProvider";
 
 const riskChip: Record<string, string> = {
-  SAFE: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  ALERT: "bg-amber-50 text-amber-700 border-amber-200",
+  LOW: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  MEDIUM: "bg-amber-50 text-amber-700 border-amber-200",
   HIGH: "bg-orange-50 text-orange-700 border-orange-200",
   CRITICAL: "bg-red-50 text-red-700 border-red-200",
 };
 
 const riskBorder: Record<string, string> = {
-  SAFE: "border-l-emerald-400",
-  ALERT: "border-l-amber-400",
+  LOW: "border-l-emerald-400",
+  MEDIUM: "border-l-amber-400",
   HIGH: "border-l-orange-400",
   CRITICAL: "border-l-red-500",
 };
@@ -120,7 +120,7 @@ export default function RiskFlagsPage() {
           ) : (
             openFlags.map((flag, index) => {
               const id = getFlagId(flag, index);
-              const level = flag.riskLevel || "ALERT";
+              const level = flag.riskLevel || "MEDIUM";
 
               return (
                 <article className={`rounded-lg border border-l-4 border-zinc-200 p-4 ${riskBorder[level]}`} key={id}>

@@ -307,12 +307,6 @@ contract TransferLedger {
             block.timestamp - previousScan.timestamp < DOUBLE_SCAN_WINDOW &&
             previousScan.locationHash != newLocationHash
         ) {
-            productRegistry.flagProductFromLedger(
-                serialID,
-                RISK_HIGH,
-                REASON_DOUBLE_SCAN
-            );
-
             emit DoubleScanDetected(
                 serialID,
                 previousScan.locationHash,
@@ -320,8 +314,6 @@ contract TransferLedger {
                 previousScan.timestamp,
                 block.timestamp
             );
-
-            revert("Double scan detected");
         }
     }
 }

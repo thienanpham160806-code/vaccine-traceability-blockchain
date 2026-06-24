@@ -25,6 +25,10 @@ type TimelineEvent = (TransferEvent | TransferRecord) & {
   txHash?: string;
   dispute?: string;
   riskReason?: string;
+  rejectedReason?: string;
+  rejectionReason?: string;
+  rejectReason?: string;
+  reason?: string;
   confirmedAt?: number;
   rejectedAt?: number;
   updatedAt?: number;
@@ -50,7 +54,7 @@ function getIcon(status?: string) {
   return Clock;
 }
 
-function getRejectionReason(event: any) {
+function getRejectionReason(event: TimelineEvent) {
   return event?.rejectedReason || event?.rejectionReason || event?.rejectReason || event?.reason || "";
 }
 

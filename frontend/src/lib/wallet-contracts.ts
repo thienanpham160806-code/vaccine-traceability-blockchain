@@ -14,6 +14,16 @@ export const productRegistryAbi = [
     ],
     outputs: [],
   },
+  {
+    type: "function",
+    name: "recallBatch",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "batchHash", type: "bytes32" },
+      { name: "reasonHash", type: "bytes32" },
+    ],
+    outputs: [],
+  },
 ] as const;
 
 export const transferLedgerAbi = [

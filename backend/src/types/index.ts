@@ -13,12 +13,48 @@ export type UserRole =
 export interface User {
   id: string;
   address: string;
+  walletAddress?: string;
   role: UserRole;
   roles?: UserRole[];
   name?: string;
+  fullName?: string;
+  title?: string;
   email?: string;
+  phone?: string;
+  organizationId?: string;
   createdAt: number;
   updatedAt: number;
+}
+
+export interface OrganizationProfile {
+  id: string;
+  name: string;
+  type: UserRole | string;
+  code?: string;
+  address?: string;
+  walletAddress?: string;
+  licenseNumber?: string;
+  contactEmail?: string;
+  contactPhone?: string;
+  facilityType?: string;
+  storageCapacity?: string;
+  coldChainCapability?: string;
+  isActive?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export interface PublicOrganizationProfile {
+  id?: string;
+  name?: string;
+  type?: UserRole | string;
+  code?: string;
+  address?: string;
+  licenseNumber?: string;
+  facilityType?: string;
+  storageCapacity?: string;
+  coldChainCapability?: string;
+  isActive?: boolean;
 }
 
 // ============= Product & Batch =============
@@ -34,7 +70,7 @@ export type ProductStatus =
   | 'ADMINISTERED'
   | 'FLAGGED'
   | 'RECALLED';
-export type RiskLevel = 'SAFE' | 'ALERT' | 'HIGH' | 'CRITICAL';
+export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface Product {
   serialId: string;
@@ -44,6 +80,7 @@ export interface Product {
   manufacturerName: string;
   manufacturerAddress: string;
   currentOwner: string;
+  ownerRole?: UserRole;
   status: ProductStatus;
   riskLevel: RiskLevel;
   expiryDate: string;
@@ -99,7 +136,20 @@ export interface TransferRecord {
   status: TransferStatus;
   fromLocationHash?: string;
   toLocationHash?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: 'C' | 'F';
+  handlingNotes?: string;
   ipfsCid?: string;
+  blockchainTx?: string;
   rejectedReason?: string;
   confirmedAt?: number;
   rejectedAt?: number;
@@ -148,8 +198,45 @@ export interface VerifyResult {
   product: Product;
   batch: Batch;
   timeline: TransferRecord[];
+  supplyChainNodes: SupplyChainNode[];
   recallStatus: boolean;
   zkProofVerified: boolean;
+  onChainVerified?: boolean;
+  metadataHashMatch?: boolean;
+  onChainStatus?: string | null;
+  lastScan?: { timestamp: number; locationHash: string } | null;
+  risk?: { riskLevel: string; riskScore: number; triggeredRules: string[] };
+}
+
+export interface SupplyChainNode {
+  id: string;
+  role: UserRole | string;
+  walletAddress?: string;
+  organization?: PublicOrganizationProfile | null;
+  organizationName?: string;
+  organizationCode?: string;
+  licenseNumber?: string;
+  addressOrRegion?: string;
+  facilityType?: string;
+  warehouseName?: string;
+  locationName?: string;
+  temperatureRange?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  status?: string;
+  transferId?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  handlingNotes?: string;
+  technicalDetails: {
+    txHash?: string;
+    blockchainTx?: string;
+    ipfsCid?: string;
+    fromLocationHash?: string;
+    toLocationHash?: string;
+    fromAddress?: string;
+    toAddress?: string;
+  };
 }
 
 // ============= Risk & Alerts =============
@@ -219,6 +306,18 @@ export interface TransferScanRequest {
   receiverAddress: string;
   fromLocationHash?: string;
   toLocationHash?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: 'C' | 'F';
+  handlingNotes?: string;
 }
 
 export interface TransferConfirmRequest {

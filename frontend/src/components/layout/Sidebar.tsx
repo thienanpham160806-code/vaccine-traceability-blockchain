@@ -20,15 +20,27 @@ import {
   Sun,
   Truck,
   UserCheck,
+  UserCircle,
   UserCog,
 } from "lucide-react";
-import { clearSession, getStoredUser, type DemoUser } from "@/lib/auth";
+import { clearSession, getStoredUser, SESSION_UPDATED_EVENT, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
+import { LanguageFlag } from "@/components/ui/LanguageFlag";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import {
+  canManageRecall,
+  canManageRoles,
+  canViewInternalProducts,
+  canViewOperationalRisk,
+  canViewTransfers,
+  isEndUserRole,
+  isPublicUser,
+} from "@/lib/role-access";
 
 const menuItems = [
+  { title: "Profile", href: "/dashboard/profile", icon: UserCircle },
   { title: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
   { title: "Sản phẩm và lô", href: "/dashboard/products", icon: ClipboardList },
   { title: "Chuyển giao", href: "/dashboard/transfers", icon: Truck },
@@ -67,8 +79,23 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
   const [lookupValue, setLookupValue] = useState("");
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const [mounted, setMounted] = useState(false);
+  const [user, setUser] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const settingsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const syncUser = () => setUser(getStoredUser());
+    window.addEventListener(SESSION_UPDATED_EVENT, syncUser);
+    window.addEventListener("storage", syncUser);
+    return () => {
+      window.removeEventListener(SESSION_UPDATED_EVENT, syncUser);
+      window.removeEventListener("storage", syncUser);
+    };
+  }, []);
 
   useEffect(() => {
     if (!settingsOpen) return;
@@ -100,16 +127,24 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
     setLookupValue("");
   };
 
-  const visibleMenuItems = menuItems.filter((item) => {
-    const role = user?.role;
-    if (item.href === "/dashboard/recall") return role === "RECALL_AUTHORITY" || role === "ADMIN";
-    return true;
-  });
+  const visibleMenuItems = menuItems
+    .filter((item) => {
+      if (item.href === "/dashboard/products") return canViewInternalProducts(user);
+      if (item.href === "/dashboard/transfers") return canViewTransfers(user);
+      if (item.href === "/dashboard/risk-dispute") return canViewOperationalRisk(user);
+      if (item.href === "/dashboard/recall") return canManageRecall(user);
+      return true;
+    })
+    .map((item) =>
+      item.href === "/dashboard/transfers" && isEndUserRole(user)
+        ? { ...item, title: "Lô chờ nhận" }
+        : item
+    );
   const extraMenuItems = [
-    ...(user?.role === "PUBLIC" ? [{ title: "Yêu cầu role", href: "/dashboard/role-request", icon: UserCheck }] : []),
-    ...(user?.role === "ADMIN" || user?.roles?.includes("ADMIN") ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
-    ...(user?.role === "RECALL_AUTHORITY" || user?.roles?.includes("RECALL_AUTHORITY") ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
+    ...(isPublicUser(user) ? [{ title: "Yêu cầu role", href: "/dashboard/role-request", icon: UserCheck }] : []),
+    ...(canManageRoles(user) ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
   ];
+  const selectedTheme = mounted ? theme || "system" : "system";
 
   return (
     <aside className={`${mobile ? "flex h-full w-72" : "hidden h-screen w-64 shrink-0 lg:flex"} min-h-0 flex-col border-r border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950`}>
@@ -228,7 +263,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
               <p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-widest text-zinc-500">{t("Giao diện")}</p>
               {themeOptions.map((option) => {
                 const Icon = option.icon;
-                const selected = (theme || "system") === option.value;
+                const selected = selectedTheme === option.value;
                 return (
                   <button key={option.value} className={`flex min-h-10 w-full items-center gap-2 rounded-lg px-2 text-sm ${selected ? "bg-blue-600/15 text-blue-400" : "text-zinc-700 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"}`} onClick={() => setTheme(option.value)} type="button">
                     <Icon className="h-4 w-4" />
@@ -244,10 +279,11 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
                     key={option.value}
                     type="button"
                     onClick={() => setLanguage(option.value)}
-                    className={`flex h-11 items-center justify-center rounded-lg border px-2 text-sm font-semibold ${language === option.value ? "border-blue-500 bg-blue-600/15 text-blue-700 dark:text-blue-100" : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"}`}
+                    className={`flex h-11 items-center justify-center gap-1.5 rounded-lg border px-2 text-sm font-semibold ${language === option.value ? "border-blue-500 bg-blue-600/15 text-blue-700 dark:text-blue-100" : "border-zinc-200 bg-white text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"}`}
                   >
                     {language === option.value ? <Check className="mr-1 h-3.5 w-3.5" /> : null}
-                    {option.label}
+                    <LanguageFlag language={option.value} />
+                    <span>{option.label}</span>
                   </button>
                 ))}
               </div>
