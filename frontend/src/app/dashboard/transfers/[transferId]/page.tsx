@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, XCircle } from "lucide-react";
-import { confirmTransfer, getApiErrorMessage, getTransfer, rejectTransfer, syncWalletTransferConfirm, syncWalletTransferReject } from "@/lib/api";
+import { clearStaleTransfer, confirmTransfer, getApiErrorMessage, getTransfer, rejectTransfer, syncWalletTransferConfirm, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { TransferRecord } from "@/lib/types";
@@ -75,6 +75,7 @@ export default function TransferDetailPage({ params }: PageProps) {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [staleTransferDetected, setStaleTransferDetected] = useState(false);
   const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
 
   const { data: transfer, isLoading } = useQuery<TransferRecord | undefined>({
@@ -87,6 +88,7 @@ export default function TransferDetailPage({ params }: PageProps) {
     setBusy(true);
     setActionError(null);
     setActionSuccess(null);
+    setStaleTransferDetected(false);
     try {
       let result;
       if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
@@ -120,6 +122,7 @@ export default function TransferDetailPage({ params }: PageProps) {
     setBusy(true);
     setActionError(null);
     setActionSuccess(null);
+    setStaleTransferDetected(false);
     try {
       let result;
       if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
@@ -144,7 +147,29 @@ export default function TransferDetailPage({ params }: PageProps) {
       qc.invalidateQueries({ queryKey: ["transfer", decoded] });
       qc.invalidateQueries({ queryKey: ["transfers"] });
     } catch (err: unknown) {
+      const code = (err as { response?: { data?: { error?: { code?: string } } } })?.response?.data?.error?.code;
+      if (code === "ON_CHAIN_PENDING_TRANSFER_NOT_FOUND") {
+        setStaleTransferDetected(true);
+      }
       setActionError(getApiErrorMessage(err, "Từ chối thất bại."));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleClearStale = async () => {
+    if (!transfer || busy) return;
+    setBusy(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      const result = await clearStaleTransfer(transfer.id);
+      setActionSuccess(`Đã dọn lệnh stale. Quyền sở hữu trả về ${result.restoredRole}.`);
+      setStaleTransferDetected(false);
+      qc.invalidateQueries({ queryKey: ["transfer", decoded] });
+      qc.invalidateQueries({ queryKey: ["transfers"] });
+    } catch (err: unknown) {
+      setActionError(getApiErrorMessage(err, "Không thể dọn lệnh stale."));
     } finally {
       setBusy(false);
     }
@@ -239,6 +264,20 @@ export default function TransferDetailPage({ params }: PageProps) {
 
           {actionSuccess && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{actionSuccess}</div>}
           {actionError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{actionError}</div>}
+          {staleTransferDetected && assignedRoles.has("ADMIN") ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+              <p className="font-bold">Lệnh này bị lệch Firebase và smart contract.</p>
+              <p className="mt-1">Contract hiện tại không còn pending transfer cho serial này, nên không thể từ chối on-chain. Admin có thể dọn lệnh stale để trả sản phẩm về bên gửi và gỡ trạng thái chờ.</p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={handleClearStale}
+                className="mt-3 rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                Dọn lệnh stale
+              </button>
+            </div>
+          ) : null}
 
           {showRejectForm ? (
             <div className="space-y-3">

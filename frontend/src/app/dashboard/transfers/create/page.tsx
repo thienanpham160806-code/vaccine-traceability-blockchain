@@ -38,6 +38,8 @@ const inputCls =
   "w-full rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100";
 const safeIdPattern = /^[A-Za-z0-9._:-]{3,128}$/;
 const safeIdMessage = "Chỉ dùng chữ, số, dấu chấm, gạch dưới, dấu hai chấm hoặc gạch ngang.";
+const batchLikePattern = /^BATCH[-_:]/i;
+const batchLikeSerialMessage = "Vui lòng chọn serial sản phẩm bên trong lô, không dùng mã lô để chuyển giao.";
 
 function optionalNumber(value: string) {
   const trimmed = value.trim();
@@ -90,6 +92,10 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function normalizeAddress(address?: string) {
   return String(address || "").trim().toLowerCase();
+}
+
+function isBatchLikeSerial(value: string) {
+  return batchLikePattern.test(value.trim());
 }
 
 function groupProductsByBatch(products: Product[]) {
@@ -152,6 +158,10 @@ function TransferList() {
     setBusy(true);
     setError(null);
     try {
+      if (isBatchLikeSerial(serialId)) {
+        setError(tLabel(batchLikeSerialMessage));
+        return;
+      }
       const parsed = transferConfirmFormSchema.safeParse({ serialId });
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
@@ -192,6 +202,10 @@ function TransferList() {
     setBusy(true);
     setError(null);
     try {
+      if (isBatchLikeSerial(serialId)) {
+        setError(tLabel(batchLikeSerialMessage));
+        return;
+      }
       const parsed = transferRejectFormSchema.safeParse({ serialId, rejectionReason: rejectReason });
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
@@ -426,6 +440,10 @@ export default function ScanTransferPage() {
       setError(t(safeIdMessage));
       return;
     }
+    if (isBatchLikeSerial(serialId)) {
+      setError(t(batchLikeSerialMessage));
+      return;
+    }
     const transferPayload = compactPayload({
       serialId: serialId.trim(),
       fromRole,
@@ -506,6 +524,10 @@ export default function ScanTransferPage() {
     if (!serialId.trim() || isBusy) return;
     if (!safeIdPattern.test(serialId.trim())) {
       setError(t(safeIdMessage));
+      return;
+    }
+    if (isBatchLikeSerial(serialId)) {
+      setError(t(batchLikeSerialMessage));
       return;
     }
     setIsBusy(true);

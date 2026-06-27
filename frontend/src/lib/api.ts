@@ -193,6 +193,7 @@ export const endpoints = {
   scanTransfer: "/transfers/scan",
   confirmTransfer: "/transfers/confirm",
   rejectTransfer: "/transfers/reject",
+  clearStaleTransfer: (transferId: string) => `/transfers/${encodeURIComponent(transferId)}/clear-stale`,
   syncWalletTransferCreate: "/transfers/sync-wallet-create",
   syncWalletTransferConfirm: "/transfers/sync-wallet-confirm",
   syncWalletTransferReject: "/transfers/sync-wallet-reject",
@@ -246,6 +247,8 @@ export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
     INVALID_ADDRESS: "Địa chỉ ví không hợp lệ.",
     INVALID_SERIAL_ID: "Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
     INVALID_BATCH_ID: "Mã lô chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
+    ON_CHAIN_PENDING_TRANSFER_NOT_FOUND:
+      "Lệnh này còn pending trong Firebase nhưng không còn pending trên smart contract hiện tại. Admin cần dọn lệnh stale hoặc tạo lại lệnh chuyển bằng serial sản phẩm.",
   };
 
   if (code === "VALIDATION_ERROR" && Array.isArray(details) && details.length > 0) {
@@ -568,6 +571,13 @@ export async function confirmTransfer(serialId: string) {
 export async function rejectTransfer(serialId: string, rejectionReason: string) {
   const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.rejectTransfer, { serialId, rejectionReason });
   return requireApiData(res.data.data, "Reject transfer response did not include data.");
+}
+
+export async function clearStaleTransfer(transferId: string) {
+  const res = await api.post<ApiResponse<{ transferId: string; serialId: string; restoredOwner: string; restoredRole: string }>>(
+    endpoints.clearStaleTransfer(transferId)
+  );
+  return requireApiData(res.data.data, "Clear stale transfer response did not include data.");
 }
 
 export async function syncWalletTransferCreate(payload: {

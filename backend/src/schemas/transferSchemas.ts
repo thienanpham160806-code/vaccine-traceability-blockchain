@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const idPattern = /^[A-Za-z0-9._:-]+$/;
+const batchLikePattern = /^BATCH[-_:]/i;
 const ethAddressPattern = /^0x[a-fA-F0-9]{40}$/;
 const bytes32Pattern = /^0x[a-fA-F0-9]{64}$/;
 
@@ -9,7 +10,10 @@ const serialId = z
   .trim()
   .min(3, 'serialId is required')
   .max(128, 'serialId is too long')
-  .regex(idPattern, 'serialId can only contain letters, numbers, dot, underscore, colon, or dash');
+  .regex(idPattern, 'serialId can only contain letters, numbers, dot, underscore, colon, or dash')
+  .refine((value) => !batchLikePattern.test(value), {
+    message: 'serialId must be a product serial, not a batch code. Select a serial inside the batch before transferring.',
+  });
 
 const initiatorRole = z.enum(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR']);
 const receiverRole = z.enum(['DISTRIBUTOR', 'CLINIC', 'PHARMACY']);

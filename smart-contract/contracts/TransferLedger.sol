@@ -83,6 +83,8 @@ contract TransferLedger {
     IProductRegistry public productRegistry;
     ISupplyChainAccessControl public accessControl;
 
+    // TransferLedger tracks one product serial per pending transfer.
+    // Batch-level moves must be expanded by the backend into serial-level requests.
     mapping(bytes32 => PendingTransfer) public pendingTransfers;
     mapping(bytes32 => TransferRecord[]) private transferHistory;
     mapping(bytes32 => LastScan) public lastScans;
@@ -132,6 +134,7 @@ contract TransferLedger {
         bytes32 fromLocationHash,
         bytes32 toLocationHash
     ) external {
+        // serialID is ProductRegistry.serialID. It must not be a batch hash.
         require(serialID != bytes32(0), "Invalid serial");
         require(receiver != address(0), "Invalid receiver");
         require(receiver != msg.sender, "Receiver cannot be sender");
