@@ -959,6 +959,10 @@ router.post(
     const event = requireReceiptEvent(receipt, 'TransferRejected');
     const reasonHash = toBytes32(rejectionReason);
 
+    if (!authenticatedUserHasRole(req, 'ADMIN') && !sameHex(receipt.from, pendingTransfer.toAddress)) {
+      throw httpError(403, 'TX_SENDER_MISMATCH', 'Transaction was not signed by the pending transfer receiver');
+    }
+
     if (!sameHex(String(event.args.serialID), serialHash)) {
       throw httpError(400, 'TX_SERIAL_MISMATCH', 'Transaction serial does not match request payload');
     }

@@ -125,6 +125,7 @@ function TransferList() {
   const qc = useQueryClient();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
+  const { address: connectedAddress } = useAccount();
   const { data: allTransfers = [], isLoading } = useQuery<TransferRecord[]>({
     queryKey: ["transfers"],
     queryFn: getTransfers,
@@ -161,6 +162,9 @@ function TransferList() {
       const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
       const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer?.toAddress);
       if (shouldUseWallet) {
+        if (!normalizeAddress(connectedAddress) || normalizeAddress(connectedAddress) !== normalizeAddress(transfer?.toAddress)) {
+          throw new Error(tLabel("MetaMask đang chọn sai ví. Hãy chuyển sang ví nhận lệnh trước khi xác nhận."));
+        }
         if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
         if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ xác nhận."));
         const txHash = await writeContractAsync({
@@ -198,6 +202,9 @@ function TransferList() {
       const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
       const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer?.toAddress);
       if (shouldUseWallet) {
+        if (!normalizeAddress(connectedAddress) || normalizeAddress(connectedAddress) !== normalizeAddress(transfer?.toAddress)) {
+          throw new Error(tLabel("MetaMask đang chọn sai ví. Hãy chuyển sang ví nhận lệnh trước khi từ chối."));
+        }
         if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
         if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ từ chối."));
         const txHash = await writeContractAsync({

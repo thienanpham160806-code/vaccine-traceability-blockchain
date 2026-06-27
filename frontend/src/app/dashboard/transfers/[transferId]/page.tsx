@@ -3,7 +3,7 @@
 import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { usePublicClient, useWriteContract } from "wagmi";
+import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, XCircle } from "lucide-react";
 import { confirmTransfer, getApiErrorMessage, getTransfer, rejectTransfer, syncWalletTransferConfirm, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
@@ -66,6 +66,7 @@ export default function TransferDetailPage({ params }: PageProps) {
   const { transferId } = use(params);
   const decoded = decodeURIComponent(transferId);
   const qc = useQueryClient();
+  const { address: connectedAddress } = useAccount();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
 
@@ -89,6 +90,9 @@ export default function TransferDetailPage({ params }: PageProps) {
     try {
       let result;
       if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
+        if (!sameAddress(connectedAddress, transfer.toAddress)) {
+          throw new Error("MetaMask đang chọn sai ví. Hãy chuyển sang ví nhận lệnh trước khi xác nhận.");
+        }
         if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
         const txHash = await writeContractAsync({
           address: getTransferLedgerAddress(),
@@ -119,6 +123,9 @@ export default function TransferDetailPage({ params }: PageProps) {
     try {
       let result;
       if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
+        if (!sameAddress(connectedAddress, transfer.toAddress)) {
+          throw new Error("MetaMask đang chọn sai ví. Hãy chuyển sang ví nhận lệnh trước khi từ chối.");
+        }
         if (!publicClient) throw new Error("Chua san sang ket noi Sepolia.");
         const txHash = await writeContractAsync({
           address: getTransferLedgerAddress(),
