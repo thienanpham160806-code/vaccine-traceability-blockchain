@@ -38,7 +38,7 @@ const pageTitles: Record<string, PageMeta> = {
   "/dashboard/products": { title: "Sản phẩm", sub: "Danh sách serial đã đăng ký" },
   "/dashboard/transfers": { title: "Lệnh chuyển", sub: "Quản lý yêu cầu chuyển giao" },
   "/dashboard/transfers/create": { title: "Tạo lệnh chuyển", sub: "Tạo yêu cầu bàn giao" },
-  "/dashboard/risk-dispute": { title: "Rủi ro & tranh chấp", sub: "Theo dõi cảnh báo và khiếu nại" },
+  "/dashboard/risk-dispute": { title: "Rủi ro & khiếu nại", sub: "Theo dõi cảnh báo, tranh chấp và thu hồi" },
   "/dashboard/risk-flags": {
     title: "Cảnh báo rủi ro",
     sub: "Theo dõi tín hiệu bất thường",
@@ -67,6 +67,7 @@ const pageTitles: Record<string, PageMeta> = {
   "/dashboard/scan": { title: "Quét QR", sub: "Tra cứu QR và serial" },
   "/dashboard/role-request": { title: "Yêu cầu role", sub: "Đăng ký quyền MetaMask" },
   "/dashboard/admin/roles": { title: "Duyệt role", sub: "Quản trị quyền ví MetaMask" },
+  "/dashboard/admin/archived": { title: "Dữ liệu đã ẩn", sub: "Audit serial và batch bị ẩn mềm khỏi web" },
 };
 
 function withDefaultBreadcrumb(meta: PageMeta): PageMeta {

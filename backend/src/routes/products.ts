@@ -10,6 +10,12 @@ import { QRCodeGenerator } from '../utils/qr';
 import { Logger } from '../utils/logger';
 import { Batch, Product } from '../types';
 import { txQueue } from '../services/txQueue';
+import {
+  decorateProduct,
+  getVisibilityContext,
+  productVisibleTo,
+  transferVisibleTo,
+} from '../services/visibility';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
 import {
@@ -148,6 +154,20 @@ function parsePositiveInt(value: unknown, fallback: number): number {
   return Math.floor(parsed);
 }
 
+function mergeBatchRecord(existing: any, incoming: Batch, addedQuantity: number): Batch {
+  if (!existing) return incoming;
+
+  const existingQuantity = parsePositiveInt(existing.quantity, 0);
+  return {
+    ...incoming,
+    ...existing,
+    quantity: existingQuantity + parsePositiveInt(addedQuantity, 1),
+    updatedAt: incoming.updatedAt,
+    metadataHash: existing.metadataHash || incoming.metadataHash,
+    ipfsCid: existing.ipfsCid || incoming.ipfsCid,
+  };
+}
+
 function requireString(value: unknown, fieldName: string): string {
   if (typeof value !== 'string' || value.trim() === '') {
     throw new Error(`${fieldName} is required`);
@@ -173,6 +193,10 @@ const INVENTORY_TRANSFER_ROUTES: Record<string, string[]> = {
   CLINIC: [],
   PHARMACY: [],
 };
+
+function canCreateOnChainTransfer(status: number): boolean {
+  return status === 1 || status === 3;
+}
 
 /**
  * GET /products/transferable
@@ -237,35 +261,70 @@ router.get(
 
       const normalizedOwner = normalizeAddress(ownerAddress);
       const repairs: Promise<unknown>[] = [];
-      const items = productEntries.flatMap(([productKey, product]) => {
+      const checkedItems = await Promise.all(productEntries.map(async ([productKey, product]) => {
+        const serialHash = CryptoUtils.isValidHash(productKey) ? productKey : toBytes32(product.serialId || productKey);
         const latestTransfer = latestConfirmedBySerial.get(product.serialId);
-        const resolvedOwner = latestTransfer?.toAddress || product.currentOwner || '';
-        const resolvedRole =
+        const firebaseOwner = latestTransfer?.toAddress || product.currentOwner || '';
+        const firebaseRole =
           latestTransfer?.toRole ||
           product.ownerRole ||
-          (normalizeAddress(resolvedOwner) === normalizedOwner ? ownerRole : '');
+          (normalizeAddress(firebaseOwner) === normalizedOwner ? ownerRole : '');
+        const normalizedStatus = String(product.status || '').toUpperCase();
+
+        if (product.archivedAt || ['RECALLED', 'INVALID', 'ARCHIVED'].includes(normalizedStatus)) return null;
+        if (['OWNER_MISMATCH', 'STATUS_MISMATCH', 'STALE_PENDING'].includes(String((product as any).syncStatus || '').toUpperCase())) return null;
+        if (latestTransferBySerial.get(product.serialId)?.status === 'PENDING') return null;
+        if (!TRANSFERABLE_PRODUCT_STATUSES.has(String(product.status))) return null;
+
+        let existsOnChain = false;
+        try {
+          existsOnChain = contractClient.isInitialized() ? await contractClient.productExists(serialHash) : false;
+        } catch {
+          existsOnChain = false;
+        }
+
+        if (!existsOnChain) {
+          repairs.push(db.ref(`products/${productKey}`).update({ syncStatus: 'FIREBASE_ONLY', updatedAt: Date.now() }));
+          return null;
+        }
+
+        const [chainOwner, chainStatus, chainPending] = await Promise.all([
+          contractClient.getCurrentOwner(serialHash),
+          contractClient.getProductStatus(serialHash),
+          contractClient.getPendingTransfer(serialHash),
+        ]);
+
+        if (chainPending?.exists) return null;
+        if (normalizeAddress(chainOwner) !== normalizedOwner) {
+          if (normalizeAddress(firebaseOwner) === normalizedOwner) {
+            repairs.push(db.ref(`products/${productKey}`).update({ syncStatus: 'OWNER_MISMATCH', updatedAt: Date.now() }));
+          }
+          return null;
+        }
+        if (!canCreateOnChainTransfer(Number(chainStatus))) {
+          repairs.push(db.ref(`products/${productKey}`).update({ syncStatus: 'STATUS_MISMATCH', updatedAt: Date.now() }));
+          return null;
+        }
 
         if (
-          resolvedOwner &&
-          (normalizeAddress(product.currentOwner) !== normalizeAddress(resolvedOwner) ||
-            product.ownerRole !== resolvedRole)
+          normalizeAddress(product.currentOwner) !== normalizeAddress(chainOwner) ||
+          product.ownerRole !== ownerRole ||
+          (product as any).syncStatus !== 'OK'
         ) {
           repairs.push(
             db.ref(`products/${productKey}`).update({
-              currentOwner: resolvedOwner,
-              ownerRole: resolvedRole || null,
+              currentOwner: chainOwner,
+              ownerRole,
+              syncStatus: 'OK',
               updatedAt: Date.now(),
             })
           );
         }
 
-        if (normalizeAddress(resolvedOwner) !== normalizedOwner) return [];
-        if (resolvedRole && resolvedRole !== ownerRole) return [];
-        if (latestTransferBySerial.get(product.serialId)?.status === 'PENDING') return [];
-        if (!TRANSFERABLE_PRODUCT_STATUSES.has(String(product.status))) return [];
-
-        return [{ ...product, currentOwner: resolvedOwner, ownerRole: resolvedRole || ownerRole }];
-      });
+        if (firebaseRole && firebaseRole !== ownerRole && normalizeAddress(firebaseOwner) === normalizedOwner) return null;
+        return { ...product, currentOwner: chainOwner, ownerRole, syncStatus: 'OK' };
+      }));
+      const items = checkedItems.filter(Boolean) as Product[];
 
       if (repairs.length > 0) {
         await Promise.allSettled(repairs);
@@ -310,6 +369,7 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
       page: rawPage,
       pageSize: rawPageSize,
     } = req.query;
+    const visibility = getVisibilityContext(req);
 
     Logger.info('Fetching products list', {
       search,
@@ -319,15 +379,20 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
       batch,
       origin,
       sort,
+      scope: visibility.scope,
       page: rawPage,
       pageSize: rawPageSize,
     });
 
-    const productsRef = db.ref('products');
-    const snapshot = await productsRef.once('value');
+    const [snapshot, transfersSnapshot] = await Promise.all([
+      db.ref('products').once('value'),
+      db.ref('transfers').once('value'),
+    ]);
     const productsData = snapshot.val() || {};
+    const transfers = Object.values(transfersSnapshot.val() || {}) as any[];
 
-    let products: Product[] = Object.values(productsData);
+    let products: any[] = Object.values(productsData).map((product) => decorateProduct(product, transfers));
+    products = products.filter((product) => productVisibleTo(product, visibility));
 
     const searchText = normalizeText(String(search || ''));
     const statusText = normalizeText(String(status || ''));
@@ -441,6 +506,7 @@ router.get('/', validateRequest({ query: productListQuerySchema }), async (req: 
         total,
         page,
         pageSize,
+        scope: visibility.scope,
       },
     });
   } catch (error) {
@@ -507,6 +573,22 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
       }
     }
     const timeline = Array.from(timelineMap.values());
+    const visibility = getVisibilityContext(req);
+    const decoratedProduct = decorateProduct(product, timeline);
+    const canViewDetail =
+      productVisibleTo(decoratedProduct, visibility) ||
+      timeline.some((transfer) => transferVisibleTo(transfer, visibility));
+
+    if (!canViewDetail) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You can only view products owned by or transferred through your role.',
+        },
+        timestamp: Date.now(),
+      });
+    }
 
     const riskFlagMap = new Map<string, any>();
     for (const snap of [riskFlagsBySerial, riskFlagsByHash]) {
@@ -531,6 +613,7 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
       status: string;
       transferHistory: any[];
       available: boolean;
+      syncStatus?: string;
     } = {
       serialHash,
       txHash: product.blockchainTx,
@@ -538,6 +621,7 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
       status: String(product.status),
       transferHistory: [] as any[],
       available: false,
+      syncStatus: decoratedProduct.syncStatus,
     };
 
     if (contractClient.isInitialized()) {
@@ -554,6 +638,10 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
           transferHistory,
           available: true,
         };
+
+        if (!sameHex(chainProduct.currentOwner, product.currentOwner)) {
+          blockchain.syncStatus = 'OWNER_MISMATCH';
+        }
       } catch (chainError) {
         Logger.warn('Could not load product detail from blockchain', chainError);
       }
@@ -562,7 +650,10 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
     res.json({
       success: true,
       data: {
-        product,
+        product: {
+          ...decoratedProduct,
+          syncStatus: blockchain.syncStatus || decoratedProduct.syncStatus,
+        },
         batch,
         timeline,
         riskFlags,
@@ -586,7 +677,12 @@ router.get('/:serialId/detail', validateRequest({ params: productParamsSchema })
  * PUT /products/:serialId
  * Update editable off-chain product metadata only
  */
-router.put('/:serialId', validateRequest({ params: productParamsSchema, body: updateProductSchema }), async (req: Request, res: Response) => {
+router.put(
+  '/:serialId',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'ADMIN']),
+  validateRequest({ params: productParamsSchema, body: updateProductSchema }),
+  async (req: AuthRequest, res: Response) => {
   try {
     const { serialId } = req.params;
     const {
@@ -618,6 +714,19 @@ router.put('/:serialId', validateRequest({ params: productParamsSchema, body: up
     }
 
     const existingProduct = productSnapshot.val() as Product;
+    const ctx = getVisibilityContext(req);
+    const transfersSnapshot = await db.ref('transfers').once('value');
+    const decoratedProduct = decorateProduct(existingProduct, Object.values(transfersSnapshot.val() || {}) as any[]);
+
+    if (!productVisibleTo(decoratedProduct, ctx)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You can only update products related to your role or wallet.',
+        },
+      });
+    }
     const updates: Partial<Product> = {};
 
     if (productName !== undefined) {
@@ -749,7 +858,8 @@ router.put('/:serialId', validateRequest({ params: productParamsSchema, body: up
       },
     });
   }
-});
+  }
+);
 
 /**
  * GET /products/:serialId
@@ -780,10 +890,23 @@ router.get('/:serialId', validateRequest({ params: productParamsSchema }), async
     }
 
     const product = snapshot.val() as Product;
+    const ctx = getVisibilityContext(req);
+    const transfersSnapshot = await db.ref('transfers').once('value');
+    const decoratedProduct = decorateProduct(product, Object.values(transfersSnapshot.val() || {}) as any[]);
+
+    if (!productVisibleTo(decoratedProduct, ctx)) {
+      return res.status(403).json({
+        success: false,
+        error: {
+          code: 'FORBIDDEN',
+          message: 'You can only view products related to your role or wallet.',
+        },
+      });
+    }
 
     res.json({
       success: true,
-      data: product,
+      data: decoratedProduct,
     });
   } catch (error) {
     Logger.error('Get product error', error);
@@ -861,6 +984,18 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
     const batchHash = isImported
       ? importZkpService.batchNoToBytes32(batchQR)
       : (rawBatchHash ? toBytes32(rawBatchHash) : toBytes32(batchQR));
+    const existingBatchSnapshot = await db.ref(`batches/${batchHash}`).once('value');
+    const existingBatch = existingBatchSnapshot.val();
+    if (existingBatch?.archivedAt || ['ARCHIVED', 'INVALID'].includes(String(existingBatch?.status || '').toUpperCase())) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'BATCH_ARCHIVED',
+          message: `Batch ${batchQR} is archived or invalidated. Choose another batch or create a new one.`,
+        },
+        timestamp: Date.now(),
+      });
+    }
     const metadataPayload = {
       serialId,
       serialHash,
@@ -962,7 +1097,7 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
     });
 
     const now = Date.now();
-    const batch: Batch = {
+    const batch: Batch = mergeBatchRecord(existingBatch, {
       id: batchQR,
       batchHash,
       batchQR,
@@ -979,7 +1114,7 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       ...(approvedImportRoot ? { approvedImportRoot } : {}),
       createdAt: now,
       updatedAt: now,
-    };
+    }, quantity);
 
     const product: Product = {
       serialId,
@@ -1084,6 +1219,14 @@ router.post('/sync-wallet-register', verifyToken, validateRequest({ body: regist
     const serialHash = toBytes32(serialId);
     const batchQR = batchId || QRCodeGenerator.generateBatchId();
     const batchHash = rawBatchHash ? toBytes32(rawBatchHash) : toBytes32(batchQR);
+    const existingBatchSnapshot = await db.ref(`batches/${batchHash}`).once('value');
+    const existingBatch = existingBatchSnapshot.val();
+    if (existingBatch?.archivedAt || ['ARCHIVED', 'INVALID'].includes(String(existingBatch?.status || '').toUpperCase())) {
+      return res.status(409).json({
+        success: false,
+        error: { code: 'BATCH_ARCHIVED', message: `Batch ${batchQR} is archived or invalidated. Choose another batch or create a new one.` },
+      });
+    }
     const receipt = await requireSuccessfulTx(txHash, contractClient.productRegistry?.target as string);
     const event = requireProductRegistryEvent(receipt, 'ProductRegistered');
     const eventOwner = String(event.args.owner);
@@ -1146,7 +1289,7 @@ router.post('/sync-wallet-register', verifyToken, validateRequest({ body: regist
     });
 
     const now = Date.now();
-    const batch: Batch = {
+    const batch: Batch = mergeBatchRecord(existingBatch, {
       id: batchQR,
       batchHash,
       batchQR,
@@ -1160,7 +1303,7 @@ router.post('/sync-wallet-register', verifyToken, validateRequest({ body: regist
       ipfsCid: ipfsResult?.cid,
       createdAt: now,
       updatedAt: now,
-    };
+    }, quantity);
 
     const product: Product = {
       serialId,
@@ -1319,6 +1462,11 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           : typeof rawProduct?.batchHash === 'string' && rawProduct.batchHash.trim()
             ? toBytes32(rawProduct.batchHash)
             : toBytes32(batchQR);
+        const existingBatchSnapshot = await db.ref(`batches/${batchHash}`).once('value');
+        const existingBatch = existingBatchSnapshot.val();
+        if (existingBatch?.archivedAt || ['ARCHIVED', 'INVALID'].includes(String(existingBatch?.status || '').toUpperCase())) {
+          throw new Error(`Batch ${batchQR} is archived or invalidated`);
+        }
         const importDocHash =
           typeof rawProduct?.importDocHash === 'string' && rawProduct.importDocHash.trim()
             ? toBytes32(rawProduct.importDocHash)
@@ -1405,7 +1553,7 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           );
         }
         const now = Date.now();
-        const batch: Batch = {
+        const batch: Batch = mergeBatchRecord(existingBatch, {
           id: batchQR,
           batchHash,
           batchQR,
@@ -1422,7 +1570,7 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           ...(approvedImportRoot ? { approvedImportRoot } : {}),
           createdAt: now,
           updatedAt: now,
-        };
+        }, quantity);
         const product: Product = {
           serialId,
           batchId: batchQR,
@@ -1505,6 +1653,108 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
  * Re-register a Firebase-only product on the current chain.
  * Needed when products were originally registered on a local node or an old deployment
  * but the backend now points to a new contract. Requires MANUFACTURER, IMPORTER, or ADMIN role.
+ */
+router.post(
+  '/:serialId/administer',
+  verifyToken,
+  requireRole(['CLINIC', 'PHARMACY', 'ADMIN', 'RECALL_AUTHORITY']),
+  validateRequest({ params: productParamsSchema }),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { serialId } = req.params;
+      const decodedSerialId = decodeURIComponent(serialId).trim();
+      const serialHash = toBytes32(decodedSerialId);
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+
+      let productKey = serialHash;
+      let snapshot = await db.ref(`products/${productKey}`).once('value');
+      if (!snapshot.exists()) {
+        productKey = decodedSerialId;
+        snapshot = await db.ref(`products/${productKey}`).once('value');
+      }
+      if (!snapshot.exists()) {
+        const indexSnapshot = await db.ref(`serial-index/${decodedSerialId}`).once('value');
+        const indexedKey = indexSnapshot.val();
+        if (indexedKey) {
+          productKey = indexedKey;
+          snapshot = await db.ref(`products/${productKey}`).once('value');
+        }
+      }
+
+      if (!snapshot.exists()) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'PRODUCT_NOT_FOUND', message: `Product ${decodedSerialId} not found` },
+        });
+      }
+
+      const product = snapshot.val() as Product & Record<string, any>;
+      const status = String(product.status || '').toUpperCase();
+      if (['RECALLED', 'INVALID', 'ARCHIVED'].includes(status) || product.archivedAt) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'PRODUCT_NOT_ACTIVE', message: `Product ${decodedSerialId} cannot be marked administered from status ${status}.` },
+        });
+      }
+      if (status === 'ADMINISTERED') {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'ALREADY_ADMINISTERED', message: `Product ${decodedSerialId} is already administered.` },
+        });
+      }
+
+      const role = req.user?.role || '';
+      const isAdminAuthority = role === 'ADMIN' || role === 'RECALL_AUTHORITY';
+      const roleOwnsProduct = ['CLINIC', 'PHARMACY'].includes(role) && product.ownerRole === role;
+      const addressOwnsProduct = normalizeAddress(product.currentOwner) === normalizeAddress(req.user?.address);
+      if (!isAdminAuthority && !roleOwnsProduct && !addressOwnsProduct) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'NOT_PRODUCT_OWNER', message: 'Only the owning clinic/pharmacy or admin authority can mark this serial as administered.' },
+        });
+      }
+
+      const now = Date.now();
+      const auditId = `ADMINISTERED-${serialHash}-${now}`;
+      const updates = {
+        status: 'ADMINISTERED',
+        administeredAt: now,
+        administeredBy: req.user?.address || 'dashboard-user',
+        administeredByRole: role,
+        administeredReason: reason,
+        administeredAuditId: auditId,
+        updatedAt: now,
+      };
+      await db.ref().update({
+        [`products/${productKey}`]: { ...product, ...updates },
+        [`administered-products/${auditId}`]: {
+          id: auditId,
+          serialId: product.serialId || decodedSerialId,
+          serialHash,
+          batchId: product.batchId,
+          batchHash: product.batchHash,
+          actor: req.user?.address || 'dashboard-user',
+          actorRole: role,
+          reason,
+          createdAt: now,
+        },
+      });
+
+      res.json({ success: true, data: { product: { ...product, ...updates }, auditId } });
+    } catch (error) {
+      Logger.error('Administer product error', error);
+      res.status(500).json({
+        success: false,
+        error: { code: 'ADMINISTER_PRODUCT_ERROR', message: getErrorMessage(error, 'Failed to mark product as administered') },
+      });
+    }
+  }
+);
+
+/**
+ * POST /products/:serialId/administer
+ * Soft-lock a serial after it has been administered. This is Firebase/audit only
+ * because the current contract has no ADMINISTERED enum.
  */
 router.post(
   '/:serialId/reregister',

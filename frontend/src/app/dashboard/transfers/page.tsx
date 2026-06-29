@@ -10,7 +10,7 @@ import { translateRole } from "@/lib/i18n";
 import { getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { TransferRecord, TransferStatus } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
-import { canInitiateTransfer, hasAnyRole, isEndUserRole } from "@/lib/role-access";
+import { canInitiateTransfer, canViewAllScope, isEndUserRole } from "@/lib/role-access";
 
 const statusOptions: Array<TransferStatus | "ALL"> = ["ALL", "PENDING", "CONFIRMED", "REJECTED", "RETURNED"];
 
@@ -116,35 +116,18 @@ export default function TransfersPage() {
     }
     return "ALL";
   });
+  const canToggleAll = canViewAllScope(user);
+  const [scope, setScope] = useState<"mine" | "all">("mine");
 
   const { data: transfers = [], isLoading } = useQuery<TransferRecord[]>({
-    queryKey: ["transfers"],
-    queryFn: getTransfers,
+    queryKey: ["transfers", scope],
+    queryFn: () => getTransfers({ scope }),
     staleTime: 20_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: false,
   });
 
-  const roleTransfers = useMemo(() => {
-    if (!user) return [];
-    if (hasAnyRole(user, ["ADMIN", "AUDITOR", "RECALL_AUTHORITY"])) return transfers;
-
-    if (isEndUserRole(user)) {
-      return transfers.filter(
-        (transfer) =>
-          transfer.toRole === user.role ||
-          transfer.toAddress?.toLowerCase() === user.address.toLowerCase()
-      );
-    }
-
-    return transfers.filter(
-      (transfer) =>
-        transfer.fromRole === user.role ||
-        transfer.toRole === user.role ||
-        transfer.fromAddress?.toLowerCase() === user.address.toLowerCase() ||
-        transfer.toAddress?.toLowerCase() === user.address.toLowerCase()
-    );
-  }, [transfers, user]);
+  const roleTransfers = transfers;
 
   const filtered = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
@@ -206,6 +189,24 @@ export default function TransfersPage() {
           <p className="text-xs text-zinc-500">{t("Cần vai trò của bạn")}</p>
         </div>
       </div>
+
+      {canToggleAll ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm dark:border-blue-500/20 dark:bg-blue-500/10">
+          <span className="font-semibold text-blue-800 dark:text-blue-100">{t("Phạm vi hiển thị")}</span>
+          <div className="flex rounded-lg border border-blue-200 bg-white p-1 dark:border-blue-500/30 dark:bg-zinc-950">
+            {(["mine", "all"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setScope(option)}
+                className={`min-h-8 rounded-md px-3 text-xs font-bold ${scope === option ? "bg-blue-600 text-white" : "text-blue-700 hover:bg-blue-50 dark:text-blue-200 dark:hover:bg-blue-500/10"}`}
+              >
+                {option === "mine" ? t("Của tôi") : t("Toàn hệ thống")}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <div className="rounded-lg border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
         <div className="grid gap-3 lg:grid-cols-[1fr_auto]">

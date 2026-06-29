@@ -288,7 +288,9 @@ async function buildVerifyResult(lookupValue: string): Promise<VerifyResult | nu
         onChainStatus = statusMap[Number(onChain.status)] ?? null;
 
         if (onChainStatus) {
-          risk = assessRisk({ ...product, status: onChainStatus }, batch);
+          const firebaseStatus = String(product?.status || '').toUpperCase();
+          const effectiveStatus = firebaseStatus === 'ADMINISTERED' ? firebaseStatus : onChainStatus;
+          risk = assessRisk({ ...product, status: effectiveStatus }, batch);
         }
       }
 

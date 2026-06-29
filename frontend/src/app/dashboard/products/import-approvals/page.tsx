@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Download, FileUp, RefreshCw, UploadCloud } from "lucide-react";
 import { approveImportDocuments, getApiErrorMessage, getImportApprovals } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
+import { ActionSpinner } from "@/components/ui/ActionSpinner";
 import { useTranslation } from "@/providers/LanguageProvider";
 
 const headers = ["docId", "importerLicense", "manufacturerId", "batchNo", "documentExpiryDate", "salt", "regulatorCertificateId"];
@@ -210,8 +211,8 @@ export default function ImportApprovalsPage() {
 
           <textarea className="mt-4 min-h-[320px] w-full rounded-md border border-zinc-300 bg-zinc-950 p-4 font-mono text-xs text-zinc-100 outline-none focus:border-blue-400 dark:border-zinc-700" value={csvText} onChange={(event) => setCsvText(event.target.value)} spellCheck={false} />
           {error ? <p className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-200">{error}</p> : null}
-          <button type="button" onClick={submit} disabled={!canApprove || isSubmitting || documents.length === 0} className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
-            {isSubmitting ? t("Đang xử lý...") : `${t("Duyệt")} ${documents.length} ${t("chứng từ")}`}
+          <button type="button" onClick={submit} disabled={!canApprove || isSubmitting || documents.length === 0} className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+            {isSubmitting ? <ActionSpinner label={t("Đang xử lý...")} /> : `${t("Duyệt")} ${documents.length} ${t("chứng từ")}`}
           </button>
         </section>
 

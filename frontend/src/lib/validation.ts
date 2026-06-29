@@ -85,6 +85,7 @@ export const transferScanFormSchema = z
     serialId: z.string().trim().min(3, "Serial ID phải có ít nhất 3 ký tự.").max(128).regex(idPattern, idMessage),
     fromRole: initiatorRoleSchema,
     toRole: receiverRoleSchema,
+    batchId: z.string().trim().max(128).regex(idPattern, idMessage).optional(),
     fromLocation: z.string().trim().max(200).optional(),
     fromLocationName: optionalTransferText(200, "From location is too long."),
     toLocationName: optionalTransferText(200, "To location is too long."),
@@ -102,6 +103,10 @@ export const transferScanFormSchema = z
   .refine((value) => allowedTransferRoutes[value.fromRole].includes(value.toRole), {
     path: ["toRole"],
     message: "Vai trò gửi không được phép chuyển đến vai trò nhận này.",
+  })
+  .refine((value) => !value.batchId || value.serialId.toLowerCase() !== value.batchId.toLowerCase(), {
+    path: ["serialId"],
+    message: "Vui lòng chọn serial sản phẩm bên trong lô, không dùng mã lô để chuyển giao.",
   })
   .refine((value) => {
     if (value.departedAt === undefined || value.arrivedAt === undefined) return true;

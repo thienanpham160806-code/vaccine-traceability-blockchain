@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { CheckCircle2, Download, FileSpreadsheet, RefreshCw, UploadCloud, XCircle } from "lucide-react";
 import { bulkRegisterProducts, getApiErrorMessage } from "@/lib/api";
 import { bulkProductCsvSchema } from "@/lib/validation";
+import { ActionSpinner } from "@/components/ui/ActionSpinner";
 import { useTranslation } from "@/providers/LanguageProvider";
 
 const csvHeaders = [
@@ -369,7 +370,7 @@ export default function BulkRegisterProductsPage() {
             onClick={submit}
             type="button"
           >
-            {isSubmitting ? t("Đang đăng ký...") : `${t("Đăng ký")} ${parsedProducts.length} ${t("sản phẩm")}`}
+            {isSubmitting ? <ActionSpinner label={t("Đang đăng ký...")} /> : `${t("Đăng ký")} ${parsedProducts.length} ${t("sản phẩm")}`}
           </button>
         </section>
 

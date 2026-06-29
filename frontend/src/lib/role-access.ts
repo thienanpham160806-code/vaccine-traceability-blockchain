@@ -1,7 +1,8 @@
 import type { DemoUser } from "./auth";
 
-const transferInitiators = new Set(["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "ADMIN"]);
-const transferReceivers = new Set(["IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY", "ADMIN"]);
+const adminAuthorityRoles = new Set(["ADMIN", "RECALL_AUTHORITY"]);
+const transferInitiators = new Set(["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "ADMIN", "RECALL_AUTHORITY"]);
+const transferReceivers = new Set(["IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY", "ADMIN", "RECALL_AUTHORITY"]);
 const productRegistrars = new Set(["MANUFACTURER", "IMPORTER", "ADMIN"]);
 const endUserRoles = new Set(["CLINIC", "PHARMACY"]);
 
@@ -12,6 +13,10 @@ function userRoles(user: DemoUser | null | undefined) {
 export function hasAnyRole(user: DemoUser | null | undefined, roles: Iterable<string>) {
   const assignedRoles = userRoles(user);
   return Array.from(roles).some((role) => assignedRoles.has(role));
+}
+
+export function isAdminAuthority(user: DemoUser | null | undefined) {
+  return hasAnyRole(user, adminAuthorityRoles);
 }
 
 export function isPublicUser(user: DemoUser | null | undefined) {
@@ -45,15 +50,23 @@ export function canRegisterProducts(user: DemoUser | null | undefined) {
 }
 
 export function canApproveImports(user: DemoUser | null | undefined) {
-  return hasAnyRole(user, ["ADMIN", "RECALL_AUTHORITY"]);
+  return isAdminAuthority(user);
 }
 
 export function canManageRecall(user: DemoUser | null | undefined) {
-  return hasAnyRole(user, ["ADMIN", "RECALL_AUTHORITY"]);
+  return isAdminAuthority(user);
 }
 
 export function canManageRoles(user: DemoUser | null | undefined) {
-  return hasAnyRole(user, ["ADMIN", "RECALL_AUTHORITY"]);
+  return isAdminAuthority(user);
+}
+
+export function canManageArchivedData(user: DemoUser | null | undefined) {
+  return isAdminAuthority(user);
+}
+
+export function canViewAllScope(user: DemoUser | null | undefined) {
+  return hasAnyRole(user, ["ADMIN", "AUDITOR", "RECALL_AUTHORITY"]);
 }
 
 export function canEditProductMetadata(user: DemoUser | null | undefined) {
@@ -75,6 +88,7 @@ export function canAccessDashboardPath(user: DemoUser | null | undefined, pathna
   if (pathname === "/dashboard/role-request") return isPublicUser(user);
 
   if (pathname.startsWith("/dashboard/admin/roles")) return canManageRoles(user);
+  if (pathname.startsWith("/dashboard/admin/archived")) return canManageArchivedData(user);
   if (pathname.startsWith("/dashboard/recall")) return canManageRecall(user);
   if (pathname.startsWith("/dashboard/products/import-approvals")) return canApproveImports(user);
   if (

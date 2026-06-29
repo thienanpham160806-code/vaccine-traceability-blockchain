@@ -4,13 +4,14 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
-import { ArrowLeft, ArrowRight, CheckCircle2, ExternalLink, XCircle } from "lucide-react";
-import { clearStaleTransfer, confirmTransfer, getApiErrorMessage, getTransfer, rejectTransfer, syncWalletTransferConfirm, syncWalletTransferReject } from "@/lib/api";
+import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Clock, ExternalLink, XCircle } from "lucide-react";
+import { clearStaleTransfer, confirmBatchShellTransfer, confirmTransfer, getApiErrorMessage, getTransfer, rejectBatchShellTransfer, rejectTransfer, syncWalletTransferConfirm, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { TransferRecord } from "@/lib/types";
 import { getTransferLedgerAddress, toBytes32, transferLedgerAbi } from "@/lib/wallet-contracts";
-import { canInitiateTransfer, isEndUserRole } from "@/lib/role-access";
+import { canInitiateTransfer, isAdminAuthority, isEndUserRole } from "@/lib/role-access";
+import { ActionSpinner } from "@/components/ui/ActionSpinner";
 
 interface PageProps {
   params: Promise<{ transferId: string }>;
@@ -43,6 +44,47 @@ function TxLink({ hash }: { hash?: string }) {
   );
 }
 
+type ActionNotice = {
+  tone: "success" | "error" | "warning";
+  title: string;
+  description: string;
+  txHash?: string;
+  meta?: Array<{ label: string; value?: string | null }>;
+};
+
+function ActionNoticeCard({ notice }: { notice: ActionNotice }) {
+  const styles = {
+    success: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    error: "border-red-200 bg-red-50 text-red-800",
+    warning: "border-amber-200 bg-amber-50 text-amber-800",
+  }[notice.tone];
+  const Icon = notice.tone === "success" ? CheckCircle2 : notice.tone === "warning" ? Clock : AlertTriangle;
+  const meta = (notice.meta || []).filter((item) => item.value);
+
+  return (
+    <div className={`rounded-xl border p-4 text-sm shadow-sm ${styles}`}>
+      <div className="flex items-start gap-3">
+        <Icon className="mt-0.5 h-5 w-5 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <p className="font-bold">{notice.title}</p>
+          <p className="mt-1 text-xs leading-5 opacity-90">{notice.description}</p>
+          {meta.length > 0 ? (
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {meta.map((item) => (
+                <div key={item.label} className="rounded-lg bg-white/60 px-3 py-2">
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-widest opacity-60">{item.label}</p>
+                  <p className="mt-0.5 break-all font-mono text-xs font-semibold">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          {notice.txHash ? <div className="mt-3"><TxLink hash={notice.txHash} /></div> : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function IpfsLink({ cid }: { cid?: string }) {
   if (!cid) return null;
   return (
@@ -62,6 +104,23 @@ function sameAddress(left?: string, right?: string) {
   return String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
 }
 
+function isBatchLikeSerial(value?: string) {
+  return /^BATCH[-_:]/i.test(String(value || "").trim());
+}
+
+function actionResultMeta(result: { txHash?: string; jobId?: string; transferId?: string; serialId?: string }, transfer: TransferRecord) {
+  return [
+    { label: transfer.offChainOnly ? "Batch" : "Serial", value: transfer.offChainOnly ? transfer.batchId : result.serialId || transfer.serialId },
+    { label: "Lô", value: transfer.batchId },
+    { label: "Job ID", value: result.jobId },
+    { label: "Transfer ID", value: result.transferId || transfer.id },
+  ];
+}
+
+function isBatchShellTransfer(transfer: TransferRecord) {
+  return !!(transfer.offChainOnly || transfer.transferMode === "OFF_CHAIN_BATCH_CUSTODY" || transfer.mode === "OFF_CHAIN_BATCH_CUSTODY");
+}
+
 export default function TransferDetailPage({ params }: PageProps) {
   const { transferId } = use(params);
   const decoded = decodeURIComponent(transferId);
@@ -73,8 +132,7 @@ export default function TransferDetailPage({ params }: PageProps) {
   const [rejectReason, setRejectReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   const [staleTransferDetected, setStaleTransferDetected] = useState(false);
   const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
 
@@ -86,12 +144,14 @@ export default function TransferDetailPage({ params }: PageProps) {
   const handleConfirm = async () => {
     if (!transfer || busy) return;
     setBusy(true);
-    setActionError(null);
-    setActionSuccess(null);
+    setActionNotice(null);
     setStaleTransferDetected(false);
     try {
       let result;
-      if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
+      if (isBatchShellTransfer(transfer)) {
+        const updated = await confirmBatchShellTransfer(transfer.id);
+        result = { transferId: updated.id, serialId: updated.serialId };
+      } else if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
         if (!sameAddress(connectedAddress, transfer.toAddress)) {
           throw new Error("MetaMask đang chọn sai ví. Hãy chuyển sang ví nhận lệnh trước khi xác nhận.");
         }
@@ -107,11 +167,26 @@ export default function TransferDetailPage({ params }: PageProps) {
       } else {
         result = await confirmTransfer(transfer.serialId);
       }
-      setActionSuccess(`Đã xác nhận. TX: ${result.txHash}`);
+      setActionNotice({
+        tone: "success",
+        title: result.txHash ? "Đã xác nhận giao hàng" : "Đã gửi yêu cầu xác nhận",
+        description: result.txHash
+          ? "Lệnh chuyển đã được xác nhận và quyền sở hữu sẽ được đồng bộ về web."
+          : isBatchShellTransfer(transfer)
+            ? "Lệnh chuyển đã được xác nhận thành công."
+            : "Backend đã đưa lệnh xác nhận vào hàng đợi. Trạng thái sẽ tự cập nhật khi hoàn tất.",
+        txHash: result.txHash,
+        meta: actionResultMeta(result, transfer),
+      });
       qc.invalidateQueries({ queryKey: ["transfer", decoded] });
       qc.invalidateQueries({ queryKey: ["transfers"] });
     } catch (err: unknown) {
-      setActionError(getApiErrorMessage(err, "Xác nhận thất bại."));
+      setActionNotice({
+        tone: "error",
+        title: "Không thể xác nhận giao hàng",
+        description: getApiErrorMessage(err, "Xác nhận thất bại."),
+        meta: [{ label: isBatchShellTransfer(transfer) ? "Batch" : "Serial", value: isBatchShellTransfer(transfer) ? transfer.batchId : transfer.serialId }, { label: "Lô", value: transfer.batchId }],
+      });
     } finally {
       setBusy(false);
     }
@@ -120,12 +195,14 @@ export default function TransferDetailPage({ params }: PageProps) {
   const handleReject = async () => {
     if (!transfer || !rejectReason.trim() || busy) return;
     setBusy(true);
-    setActionError(null);
-    setActionSuccess(null);
+    setActionNotice(null);
     setStaleTransferDetected(false);
     try {
       let result;
-      if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
+      if (isBatchShellTransfer(transfer)) {
+        const updated = await rejectBatchShellTransfer(transfer.id, rejectReason.trim());
+        result = { transferId: updated.id, serialId: updated.serialId };
+      } else if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
         if (!sameAddress(connectedAddress, transfer.toAddress)) {
           throw new Error("MetaMask đang chọn sai ví. Hãy chuyển sang ví nhận lệnh trước khi từ chối.");
         }
@@ -141,7 +218,20 @@ export default function TransferDetailPage({ params }: PageProps) {
       } else {
         result = await rejectTransfer(transfer.serialId, rejectReason.trim());
       }
-      setActionSuccess(`Đã từ chối on-chain. TX: ${result.txHash}`);
+      setActionNotice({
+        tone: "success",
+        title: result.txHash ? "Đã từ chối lệnh chuyển" : "Đã gửi yêu cầu từ chối",
+        description: result.txHash
+          ? "Lệnh chuyển đã bị từ chối và sản phẩm sẽ được trả về bên gửi."
+          : isBatchShellTransfer(transfer)
+            ? "Lệnh chuyển đã bị từ chối."
+            : "Backend đã đưa yêu cầu từ chối vào hàng đợi. Trạng thái sẽ tự cập nhật khi hoàn tất.",
+        txHash: result.txHash,
+        meta: [
+          ...actionResultMeta(result, transfer),
+          { label: "Lý do", value: rejectReason.trim() },
+        ],
+      });
       setShowRejectForm(false);
       setRejectReason("");
       qc.invalidateQueries({ queryKey: ["transfer", decoded] });
@@ -151,7 +241,12 @@ export default function TransferDetailPage({ params }: PageProps) {
       if (code === "ON_CHAIN_PENDING_TRANSFER_NOT_FOUND") {
         setStaleTransferDetected(true);
       }
-      setActionError(getApiErrorMessage(err, "Từ chối thất bại."));
+      setActionNotice({
+        tone: "error",
+        title: "Không thể từ chối lệnh chuyển",
+        description: getApiErrorMessage(err, "Từ chối thất bại."),
+        meta: [{ label: isBatchShellTransfer(transfer) ? "Batch" : "Serial", value: isBatchShellTransfer(transfer) ? transfer.batchId : transfer.serialId }, { label: "Lô", value: transfer.batchId }],
+      });
     } finally {
       setBusy(false);
     }
@@ -160,16 +255,28 @@ export default function TransferDetailPage({ params }: PageProps) {
   const handleClearStale = async () => {
     if (!transfer || busy) return;
     setBusy(true);
-    setActionError(null);
-    setActionSuccess(null);
+    setActionNotice(null);
     try {
       const result = await clearStaleTransfer(transfer.id);
-      setActionSuccess(`Đã dọn lệnh stale. Quyền sở hữu trả về ${result.restoredRole}.`);
+      setActionNotice({
+        tone: "success",
+        title: "Đã dọn lệnh stale",
+        description: "Firebase đã được đưa về trạng thái nhất quán để lệnh lỗi không còn chặn thao tác tiếp theo.",
+        meta: [
+          { label: "Serial", value: result.serialId },
+          { label: "Quyền sở hữu trả về", value: result.restoredRole },
+          { label: "Transfer ID", value: result.transferId },
+        ],
+      });
       setStaleTransferDetected(false);
       qc.invalidateQueries({ queryKey: ["transfer", decoded] });
       qc.invalidateQueries({ queryKey: ["transfers"] });
     } catch (err: unknown) {
-      setActionError(getApiErrorMessage(err, "Không thể dọn lệnh stale."));
+      setActionNotice({
+        tone: "error",
+        title: "Không thể dọn lệnh stale",
+        description: getApiErrorMessage(err, "Không thể dọn lệnh stale."),
+      });
     } finally {
       setBusy(false);
     }
@@ -201,9 +308,10 @@ export default function TransferDetailPage({ params }: PageProps) {
   const assignedRoles = new Set([user?.role, ...(user?.roles || [])].filter(Boolean));
   const canAct =
     transfer.status === "PENDING" &&
-    (assignedRoles.has(transfer.toRole) || assignedRoles.has("ADMIN"));
+    (assignedRoles.has(transfer.toRole) || isAdminAuthority(user));
   const canCreateTransfer = canInitiateTransfer(user);
   const endUser = isEndUserRole(user);
+  const batchShell = isBatchShellTransfer(transfer);
 
   return (
     <div className="max-w-3xl space-y-5 pb-20 lg:pb-0">
@@ -216,8 +324,8 @@ export default function TransferDetailPage({ params }: PageProps) {
           {getTransferStatusLabel(transfer.status)}
         </span>
         <div>
-          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">Serial ID</p>
-          <p className="font-mono text-sm font-semibold text-zinc-800">{transfer.serialId}</p>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">{batchShell ? "Batch ID" : "Serial ID"}</p>
+          <p className="font-mono text-sm font-semibold text-zinc-800">{batchShell ? transfer.batchId : transfer.serialId}</p>
         </div>
       </div>
 
@@ -262,9 +370,8 @@ export default function TransferDetailPage({ params }: PageProps) {
         <div className="space-y-4 rounded-lg border border-zinc-200 bg-white p-5 shadow-sm">
           <h2 className="border-b border-zinc-100 pb-3 font-bold text-zinc-900">Thao tác</h2>
 
-          {actionSuccess && <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700">{actionSuccess}</div>}
-          {actionError && <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{actionError}</div>}
-          {staleTransferDetected && assignedRoles.has("ADMIN") ? (
+          {actionNotice ? <ActionNoticeCard notice={actionNotice} /> : null}
+          {staleTransferDetected && isAdminAuthority(user) ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
               <p className="font-bold">Lệnh này bị lệch Firebase và smart contract.</p>
               <p className="mt-1">Contract hiện tại không còn pending transfer cho serial này, nên không thể từ chối on-chain. Admin có thể dọn lệnh stale để trả sản phẩm về bên gửi và gỡ trạng thái chờ.</p>
@@ -289,7 +396,7 @@ export default function TransferDetailPage({ params }: PageProps) {
               />
               <div className="flex flex-wrap gap-2">
                 <button disabled={busy || !rejectReason.trim()} onClick={handleReject} className="flex min-h-10 items-center gap-1.5 rounded-lg bg-red-600 px-4 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50">
-                  <XCircle className="h-4 w-4" /> Xác nhận từ chối
+                  {busy ? <ActionSpinner label="Đang xử lý..." /> : <><XCircle className="h-4 w-4" /> Xác nhận từ chối</>}
                 </button>
                 <button onClick={() => { setShowRejectForm(false); setRejectReason(""); }} className="min-h-10 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-600 hover:bg-zinc-50">
                   Hủy
@@ -299,10 +406,10 @@ export default function TransferDetailPage({ params }: PageProps) {
           ) : (
             <div className="flex flex-wrap gap-2">
               <button disabled={busy} onClick={handleConfirm} className="flex min-h-10 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
-                <CheckCircle2 className="h-4 w-4" /> Xác nhận giao hàng
+                {busy ? <ActionSpinner label="Đang xử lý..." /> : <><CheckCircle2 className="h-4 w-4" /> Xác nhận giao hàng</>}
               </button>
               <button disabled={busy} onClick={() => setShowRejectForm(true)} className="flex min-h-10 items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-4 text-sm font-bold text-red-700 hover:bg-red-100 disabled:opacity-50">
-                <XCircle className="h-4 w-4" /> Từ chối lệnh
+                {busy ? <ActionSpinner label="Đang xử lý..." /> : <><XCircle className="h-4 w-4" /> Từ chối lệnh</>}
               </button>
             </div>
           )}
@@ -316,15 +423,17 @@ export default function TransferDetailPage({ params }: PageProps) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Link href={`/dashboard/verify/${encodeURIComponent(transfer.serialId)}`} className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
-          <ExternalLink className="h-3.5 w-3.5" /> Xác minh sản phẩm
-        </Link>
+        {!batchShell ? (
+          <Link href={`/dashboard/verify/${encodeURIComponent(transfer.serialId)}`} className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
+            <ExternalLink className="h-3.5 w-3.5" /> Xác minh sản phẩm
+          </Link>
+        ) : null}
         <Link href="/dashboard/transfers" className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
           <ArrowLeft className="h-3.5 w-3.5" /> {endUser ? "Lô chờ nhận" : "Tất cả lệnh"}
         </Link>
         {canCreateTransfer ? (
           <Link
-            href={`/dashboard/transfers/create?serialId=${encodeURIComponent(transfer.serialId)}`}
+            href={batchShell ? `/dashboard/transfers/create?batchId=${encodeURIComponent(transfer.batchId || "")}&autoSelect=all` : `/dashboard/transfers/create?serialId=${encodeURIComponent(transfer.serialId)}`}
             className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
           >
             <ArrowRight className="h-3.5 w-3.5" /> Tạo lệnh chuyển

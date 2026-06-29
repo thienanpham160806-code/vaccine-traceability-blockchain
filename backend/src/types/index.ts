@@ -69,7 +69,9 @@ export type ProductStatus =
   | 'DELIVERED_TO_PHARMACY'
   | 'ADMINISTERED'
   | 'FLAGGED'
-  | 'RECALLED';
+  | 'RECALLED'
+  | 'INVALID'
+  | 'ARCHIVED';
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
 
 export interface Product {
@@ -96,6 +98,17 @@ export interface Product {
   ipfsCid?: string;
   qrImage?: string;
   notes?: string;
+  archivedAt?: number;
+  archivedBy?: string;
+  archiveReason?: string;
+  invalidatedAt?: number;
+  invalidatedBy?: string;
+  invalidationReason?: string;
+  administeredAt?: number;
+  administeredBy?: string;
+  administeredByRole?: string;
+  administeredReason?: string;
+  administeredAuditId?: string;
   registeredAt?: number;
 
   createdAt: number;
@@ -118,6 +131,10 @@ export interface Batch {
   importDocCommitment?: string;
   approvedImportRoot?: string;
   recalledAt?: number;
+  currentOwner?: string;
+  ownerRole?: UserRole;
+  pendingBatchTransferId?: string | null;
+  custodyStatus?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -134,6 +151,11 @@ export interface TransferRecord {
   fromRole: UserRole;
   toRole: UserRole;
   status: TransferStatus;
+  mode?: 'SERIAL_ON_CHAIN' | 'BULK_SERIAL_ON_CHAIN' | 'OFF_CHAIN_BATCH_CUSTODY';
+  transferMode?: 'SERIAL_ON_CHAIN' | 'BULK_SERIAL_ON_CHAIN' | 'OFF_CHAIN_BATCH_CUSTODY';
+  batchHash?: string;
+  offChainOnly?: boolean;
+  reasonNote?: string;
   fromLocationHash?: string;
   toLocationHash?: string;
   fromLocationName?: string;

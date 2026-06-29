@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePublicClient, useWriteContract } from "wagmi";
 import { AlertTriangle, CheckSquare, RefreshCw, RotateCcw, ShieldAlert, Square } from "lucide-react";
-import { createRecall, getApiErrorMessage, getBatches, getRecalls, getRiskFlags, syncWalletRecall } from "@/lib/api";
+import { createRecall, getApiErrorMessage, getBatches, getBatchSerials, getRecalls, getRiskFlags, syncWalletRecall } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
-import type { Batch, RecallRecord, RiskFlag } from "@/lib/types";
+import { canViewAllScope } from "@/lib/role-access";
+import type { Batch, Product, RecallRecord, RiskFlag } from "@/lib/types";
 import { getProductRegistryAddress, productRegistryAbi, toBytes32 } from "@/lib/wallet-contracts";
+import { ActionSpinner } from "@/components/ui/ActionSpinner";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
 const inputCls =
@@ -86,7 +89,7 @@ function FlaggedBatchesSection({
 
   const { data: batches = [], isLoading: batchesLoading } = useQuery<Batch[]>({
     queryKey: ["batches"],
-    queryFn: getBatches,
+    queryFn: () => getBatches({ scope: "mine" }),
   });
 
   const batchMap = Object.fromEntries(batches.map((b) => [b.id, b]));
@@ -195,6 +198,7 @@ function FlaggedBatchesSection({
 export default function RecallPage() {
   const qc = useQueryClient();
   const t = useTranslation();
+  const searchParams = useSearchParams();
   const publicClient = usePublicClient();
   const { writeContractAsync } = useWriteContract();
   const { data: recalls = [], isLoading } = useQuery<RecallRecord[]>({
@@ -208,10 +212,46 @@ export default function RecallPage() {
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [prefilledFromDispute, setPrefilledFromDispute] = useState(false);
+  const [user] = useState(() => (typeof window === "undefined" ? null : getStoredUser()));
+
+  const { data: batchSerials = [], isLoading: serialsLoading } = useQuery<Product[]>({
+    queryKey: ["recall-batch-serials", batchHash, canViewAllScope(user) ? "all" : "mine"],
+    queryFn: () => getBatchSerials(batchHash.trim(), { scope: canViewAllScope(user) ? "all" : "mine" }),
+    enabled: Boolean(batchHash.trim()),
+  });
+
+  useEffect(() => {
+    const queryBatch = searchParams.get("batchId");
+    if (!queryBatch) return;
+    setBatchHash(queryBatch);
+    setReason(searchParams.get("reason") || "");
+    setSerials("");
+    setPrefilledFromDispute(Boolean(searchParams.get("fromDispute")));
+    setError(null);
+    setSuccess(null);
+  }, [searchParams]);
+
+  const selectedSerials = new Set(serials.split(",").map((item) => item.trim()).filter(Boolean));
+  const validBatchSerials = batchSerials.filter((product) =>
+    product.serialId &&
+    !product.archivedAt &&
+    !["ARCHIVED", "INVALID", "RECALLED"].includes(String(product.status || "").toUpperCase())
+  );
+  const setSerialList = (items: string[]) => {
+    setSerials(Array.from(new Set(items.map((item) => item.trim()).filter(Boolean))).join(", "));
+  };
+  const toggleSerial = (serialId: string) => {
+    const next = new Set(selectedSerials);
+    if (next.has(serialId)) next.delete(serialId);
+    else next.add(serialId);
+    setSerialList(Array.from(next));
+  };
 
   const handlePrefill = (hash: string, serialList: string[]) => {
     setBatchHash(hash);
     setSerials(serialList.join(", "));
+    setPrefilledFromDispute(false);
     setError(null);
     setSuccess(null);
   };
@@ -295,6 +335,66 @@ export default function RecallPage() {
                   placeholder="VCN-001, VCN-002, VCN-003"
                 />
               </Field>
+              {prefilledFromDispute ? (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+                  Đã điền batch và lý do từ khiếu nại. Hãy chọn serial cần thu hồi trước khi phát lệnh.
+                </div>
+              ) : null}
+              {batchHash.trim() ? (
+                <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs font-bold text-zinc-700">Serial trong batch</p>
+                      <p className="text-[11px] text-zinc-500">
+                        {serialsLoading ? "Đang tải serial..." : `${validBatchSerials.length} serial hợp lệ, đã chọn ${selectedSerials.size}`}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setSerialList(validBatchSerials.map((product) => product.serialId))}
+                        disabled={validBatchSerials.length === 0}
+                        className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-100 disabled:opacity-50"
+                      >
+                        Chọn tất cả
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSerialList([])}
+                        disabled={selectedSerials.size === 0}
+                        className="rounded-lg border border-zinc-200 bg-white px-2.5 py-1.5 text-xs font-bold text-zinc-700 hover:bg-zinc-100 disabled:opacity-50"
+                      >
+                        Bỏ chọn
+                      </button>
+                    </div>
+                  </div>
+                  {validBatchSerials.length > 0 ? (
+                    <div className="flex max-h-32 flex-wrap gap-2 overflow-y-auto">
+                      {validBatchSerials.map((product) => {
+                        const selected = selectedSerials.has(product.serialId);
+                        return (
+                          <button
+                            key={product.serialId}
+                            type="button"
+                            onClick={() => toggleSerial(product.serialId)}
+                            className={`rounded-full border px-3 py-1.5 font-mono text-[11px] font-bold ${
+                              selected
+                                ? "border-red-300 bg-red-100 text-red-700"
+                                : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-100"
+                            }`}
+                          >
+                            {product.serialId}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-zinc-400">
+                      Không tìm thấy serial hợp lệ trong batch này, hoặc batch đã bị ẩn/thu hồi.
+                    </p>
+                  )}
+                </div>
+              ) : null}
             </div>
 
             {error && (
@@ -313,8 +413,7 @@ export default function RecallPage() {
               disabled={isBusy || !batchHash.trim() || !reason.trim() || !serials.trim()}
               className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
             >
-              <AlertTriangle className="h-4 w-4" />
-              {isBusy ? t("Đang xử lý...") : t("Thu hồi lô hàng")}
+              {isBusy ? <ActionSpinner label={t("Đang xử lý...")} /> : <><AlertTriangle className="h-4 w-4" />{t("Thu hồi lô hàng")}</>}
             </button>
           </div>
 

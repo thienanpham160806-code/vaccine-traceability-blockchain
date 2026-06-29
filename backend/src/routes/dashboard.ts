@@ -2,6 +2,15 @@ import { Router, Request, Response } from 'express';
 import { db } from '../config/firebase';
 import { Logger } from '../utils/logger';
 import { DashboardActivity, DashboardStats } from '../types';
+import {
+  batchVisibleTo,
+  decorateProduct,
+  getVisibilityContext,
+  productVisibleTo,
+  recallVisibleTo,
+  riskVisibleTo,
+  transferVisibleTo,
+} from '../services/visibility';
 
 const router = Router();
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -133,28 +142,39 @@ router.get('/overview', async (req: Request, res: Response) => {
     ]);
 
     const batches = asRecord(batchesSnapshot.val());
-    const products = asRecord(productsSnapshot.val());
-    const transfers = asRecord(transfersSnapshot.val());
-    const riskFlags = asRecord(riskFlagsSnapshot.val());
-    const recalls = asRecord(recallsSnapshot.val());
+    const allProducts = Object.values(asRecord(productsSnapshot.val()));
+    const allTransfers = Object.values(asRecord(transfersSnapshot.val()));
+    const ctx = getVisibilityContext(req);
+    const visibleProducts = allProducts
+      .map((product) => decorateProduct(product, allTransfers))
+      .filter((product) => productVisibleTo(product, ctx));
+    const visibleTransfers = allTransfers.filter((transfer) => transferVisibleTo(transfer, ctx));
+    const productBySerial = new Map<string, any>();
+    visibleProducts.forEach((product: any) => {
+      if (product.serialId) productBySerial.set(String(product.serialId), product);
+      if (product.serialHash) productBySerial.set(String(product.serialHash), product);
+    });
+    const visibleRiskFlags = Object.values(asRecord(riskFlagsSnapshot.val())).filter((risk) => riskVisibleTo(risk, ctx, productBySerial));
+    const visibleRecalls = Object.values(asRecord(recallsSnapshot.val())).filter((recall) => recallVisibleTo(recall, ctx, visibleProducts));
+    const visibleBatches = Object.values(batches).filter((batch) => ctx.scope === 'all' || batchVisibleTo(batch, visibleProducts));
 
-    const totalBatches = Object.keys(batches).length;
-    const totalProducts = Object.keys(products).length;
+    const totalBatches = visibleBatches.length;
+    const totalProducts = visibleProducts.length;
     const totalSerials = totalProducts || Object.values(batches).reduce((sum: number, batch: any) => {
       const quantity = Number(batch?.quantity);
       return sum + (Number.isFinite(quantity) && quantity > 0 ? quantity : 1);
     }, 0);
-    const pendingTransfers = Object.values(transfers).filter(
+    const pendingTransfers = visibleTransfers.filter(
       (transfer: any) => transfer.status === 'PENDING'
     ).length;
-    const riskAlerts = Object.keys(riskFlags).length;
-    const recalledFromBatches = Object.values(batches).filter((batch: any) => Boolean(batch?.recalledAt)).length;
-    const recalledBatches = Math.max(Object.keys(recalls).length, recalledFromBatches);
+    const riskAlerts = visibleRiskFlags.length;
+    const recalledFromBatches = visibleBatches.filter((batch: any) => Boolean(batch?.recalledAt)).length;
+    const recalledBatches = Math.max(visibleRecalls.length, recalledFromBatches);
     const last7DaysTrend = makeTrend([
-      ...Object.values(products),
-      ...Object.values(transfers),
-      ...Object.values(riskFlags),
-      ...Object.values(recalls),
+      ...visibleProducts,
+      ...visibleTransfers,
+      ...visibleRiskFlags,
+      ...visibleRecalls,
     ]);
 
     const stats: DashboardStats = {
@@ -205,12 +225,26 @@ router.get('/recent-activity', async (req: Request, res: Response) => {
     const transfers = asRecord(transfersSnapshot.val());
     const riskFlags = asRecord(riskFlagsSnapshot.val());
     const recalls = asRecord(recallsSnapshot.val());
+    const ctx = getVisibilityContext(req);
+    const visibleProducts = Object.entries(products)
+      .filter(([, product]) => productVisibleTo(product, ctx));
+    const visibleTransfers = Object.entries(transfers)
+      .filter(([, transfer]) => transferVisibleTo(transfer, ctx));
+    const productBySerial = new Map<string, any>();
+    visibleProducts.forEach(([, product]: [string, any]) => {
+      if (product.serialId) productBySerial.set(String(product.serialId), product);
+      if (product.serialHash) productBySerial.set(String(product.serialHash), product);
+    });
+    const visibleRiskFlags = Object.entries(riskFlags)
+      .filter(([, risk]) => riskVisibleTo(risk, ctx, productBySerial));
+    const visibleRecalls = Object.entries(recalls)
+      .filter(([, recall]) => recallVisibleTo(recall, ctx, visibleProducts.map(([, product]) => product)));
 
     const activities: DashboardActivity[] = [
-      ...Object.entries(products).map(([key, product]) => recentProductActivity(key, product)),
-      ...Object.entries(transfers).map(([key, transfer]) => recentTransferActivity(key, transfer)),
-      ...Object.entries(riskFlags).map(([key, risk]) => recentRiskActivity(key, risk)),
-      ...Object.entries(recalls).map(([key, recall]) => recentRecallActivity(key, recall)),
+      ...visibleProducts.map(([key, product]) => recentProductActivity(key, product)),
+      ...visibleTransfers.map(([key, transfer]) => recentTransferActivity(key, transfer)),
+      ...visibleRiskFlags.map(([key, risk]) => recentRiskActivity(key, risk)),
+      ...visibleRecalls.map(([key, recall]) => recentRecallActivity(key, recall)),
     ]
       .filter((activity) => activity.timestamp > 0)
       .sort((a, b) => b.timestamp - a.timestamp)

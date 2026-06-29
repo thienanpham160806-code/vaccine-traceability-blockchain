@@ -26,6 +26,7 @@ import {
   canInitiateTransfer,
   canManageRecall,
   canRegisterProducts,
+  canViewAllScope,
   canViewInternalProducts,
   canViewTransfers,
   isEndUserRole,
@@ -157,6 +158,8 @@ export default function DashboardPage() {
   const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const t = useTranslation();
   const { language } = useLanguage();
+  const canToggleAll = canViewAllScope(user);
+  const [scope, setScope] = useState<"mine" | "all">("mine");
 
   const { data: health } = useQuery({
     queryKey: ["health"],
@@ -165,14 +168,14 @@ export default function DashboardPage() {
   });
 
   const { data: stats } = useQuery({
-    queryKey: ["dashboard-overview"],
-    queryFn: getDashboardOverview,
+    queryKey: ["dashboard-overview", scope],
+    queryFn: () => getDashboardOverview(scope),
     staleTime: 15_000,
   });
 
   const { data: activity = [] } = useQuery<DashboardActivity[]>({
-    queryKey: ["dashboard-recent-activity"],
-    queryFn: () => getDashboardRecentActivity(10),
+    queryKey: ["dashboard-recent-activity", scope],
+    queryFn: () => getDashboardRecentActivity(10, scope),
     staleTime: 15_000,
   });
 
@@ -229,6 +232,24 @@ export default function DashboardPage() {
       </div>
 
       {!publicUser ? (
+        <>
+        {canToggleAll ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm dark:border-blue-500/20 dark:bg-blue-500/10">
+            <span className="font-semibold text-blue-800 dark:text-blue-100">{t("Phạm vi hiển thị")}</span>
+            <div className="flex rounded-lg border border-blue-200 bg-white p-1 dark:border-blue-500/30 dark:bg-zinc-950">
+              {(["mine", "all"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setScope(option)}
+                  className={`min-h-8 rounded-md px-3 text-xs font-bold ${scope === option ? "bg-blue-600 text-white" : "text-blue-700 hover:bg-blue-50 dark:text-blue-200 dark:hover:bg-blue-500/10"}`}
+                >
+                  {option === "mine" ? t("Của tôi") : t("Toàn hệ thống")}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
           <StatCard label={t("Lô hàng")} value={stats?.totalBatches ?? "-"} icon={Boxes} tone="bg-blue-50 text-blue-600" />
           <StatCard label={t("Sản phẩm")} value={stats?.totalProducts ?? stats?.totalSerials ?? "-"} icon={Activity} tone="bg-emerald-50 text-emerald-600" />
@@ -236,6 +257,7 @@ export default function DashboardPage() {
           <StatCard label={t("Cảnh báo rủi ro")} value={stats?.riskAlerts ?? "-"} icon={ShieldAlert} tone="bg-red-50 text-red-600" />
           <StatCard label={t("Lô đã thu hồi")} value={stats?.recalledBatches ?? 0} icon={RotateCcw} tone="bg-zinc-100 text-zinc-600" hint={`${trendTotal} / ${t("7 ngày")}`} />
         </div>
+        </>
       ) : null}
 
       <div className="grid gap-3 sm:grid-cols-3">

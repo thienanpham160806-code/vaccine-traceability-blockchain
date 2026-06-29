@@ -366,6 +366,32 @@ export class ContractClient {
     return txHash;
   }
 
+  async isValidRoute(fromRole: string, toRole: string): Promise<boolean> {
+    if (!this.accessControl) {
+      throw new Error('AccessControl contract not initialized');
+    }
+
+    return this.accessControl.isValidRoute(
+      this.roleNameToBytes32(fromRole),
+      this.roleNameToBytes32(toRole)
+    );
+  }
+
+  async setTransferRoute(fromRole: string, toRole: string, allowed: boolean, signerRole: string = 'admin'): Promise<string> {
+    if (!this.accessControl) {
+      throw new Error('AccessControl contract not initialized');
+    }
+
+    const accessControl = this.accessControl.connect(this.getSigner(signerRole)) as ethers.Contract;
+    const tx = await accessControl.setRoute(
+      this.roleNameToBytes32(fromRole),
+      this.roleNameToBytes32(toRole),
+      allowed
+    );
+    const receipt = await tx.wait();
+    return receipt?.hash || tx.hash;
+  }
+
   /**
    * Register product on blockchain
    */

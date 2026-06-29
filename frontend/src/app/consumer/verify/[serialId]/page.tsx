@@ -511,6 +511,14 @@ export default function ConsumerVerifyPage({ params }: PageProps) {
             <StatusBadge status={product?.status ?? "UNKNOWN"} recalled={recallStatus ?? false} language={language} />
           </div>
 
+          {String(product?.status || "").toUpperCase() === "ADMINISTERED" ? (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800 dark:border-red-800 dark:bg-red-950/60 dark:text-red-200">
+              {language === "vi"
+                ? "Serial này đã được xác nhận là đã tiêm. Không sử dụng QR này cho vaccine khác."
+                : "This serial has already been administered. Do not trust this QR on another vaccine."}
+            </div>
+          ) : null}
+
           <div className="grid gap-4 border-t border-zinc-200 pt-4 text-sm dark:border-zinc-800 sm:grid-cols-2">
             <div>
               <p className="text-xs text-zinc-500">{text.product}</p>

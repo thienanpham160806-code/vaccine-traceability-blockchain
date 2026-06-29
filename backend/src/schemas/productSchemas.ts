@@ -56,6 +56,7 @@ export const productListQuerySchema = z.object({
   manufacturer: optionalTrimmedString('manufacturer', 120),
   owner: optionalTrimmedString('owner', 80),
   batch: optionalTrimmedString('batch', 128),
+  scope: z.enum(['mine', 'all']).optional(),
   origin: z.enum(['MANUFACTURED', 'IMPORTED']).optional(),
   sort: z
     .string()

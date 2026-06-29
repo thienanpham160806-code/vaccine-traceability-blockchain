@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Save, UserCircle } from "lucide-react";
+import { Building2, Save, UserCircle, Wand2 } from "lucide-react";
 import { getApiErrorMessage, getMyProfile, updateMyProfile } from "@/lib/api";
 import { translateRole } from "@/lib/i18n";
 import type { ProfileResponse } from "@/lib/types";
@@ -38,6 +38,116 @@ const emptyForm: ProfileForm = {
   storageCapacity: "",
   coldChainCapability: "",
 };
+
+const demoProfiles: Record<string, ProfileForm> = {
+  MANUFACTURER: {
+    fullName: "Nguyen Minh An",
+    title: "Production QA Manager",
+    email: "qa.manufacturer@vaxitrust.demo",
+    phone: "+84 28 7300 1001",
+    organizationName: "VaxiTrust Manufacturing",
+    organizationCode: "MFR-DEMO-01",
+    organizationAddress: "Khu cong nghe cao, TP.HCM",
+    licenseNumber: "MFG-VAC-2026-001",
+    facilityType: "Nha may san xuat vaccine",
+    storageCapacity: "120,000 lieu, 2-8C",
+    coldChainCapability: "Kho lanh 2-8C, logger nhiet do lien tuc, canh bao lech nguong.",
+  },
+  IMPORTER: {
+    fullName: "Le Hoang Nam",
+    title: "Import Compliance Lead",
+    email: "importer@vaxitrust.demo",
+    phone: "+84 24 7300 2002",
+    organizationName: "VaxiTrust Import Co.",
+    organizationCode: "IMP-DEMO-01",
+    organizationAddress: "Cang ICD My Dinh, Ha Noi",
+    licenseNumber: "IMP-VAC-2026-002",
+    facilityType: "Don vi nhap khau vaccine",
+    storageCapacity: "80,000 lieu, kho tam 2-8C",
+    coldChainCapability: "Nhan hang container lanh, doi chieu chung tu, giam sat nhiet do khi thong quan.",
+  },
+  DISTRIBUTOR: {
+    fullName: "Tran Quoc Bao",
+    title: "Distribution Operations Lead",
+    email: "ops.distributor@vaxitrust.demo",
+    phone: "+84 28 7300 3003",
+    organizationName: "VaxiTrust Distribution Hub",
+    organizationCode: "DST-DEMO-01",
+    organizationAddress: "Kho trung tam Binh Duong",
+    licenseNumber: "DST-VAC-2026-003",
+    facilityType: "Kho phan phoi cold chain",
+    storageCapacity: "60,000 lieu, 2-8C",
+    coldChainCapability: "Xe lanh, thung van chuyen dat chuan, bien ban giao nhan theo serial.",
+  },
+  CLINIC: {
+    fullName: "Pham Thu Ha",
+    title: "Clinic Vaccine Coordinator",
+    email: "clinic@vaxitrust.demo",
+    phone: "+84 28 7300 4004",
+    organizationName: "VaxiTrust Clinic District 1",
+    organizationCode: "CLC-DEMO-01",
+    organizationAddress: "Quan 1, TP.HCM",
+    licenseNumber: "CLC-VAC-2026-004",
+    facilityType: "Phong kham tiem chung",
+    storageCapacity: "5,000 lieu, tu lanh 2-8C",
+    coldChainCapability: "Tu lanh vaccine rieng, kiem tra nhiet do moi ca truc.",
+  },
+  PHARMACY: {
+    fullName: "Vo Gia Huy",
+    title: "Pharmacy Branch Manager",
+    email: "pharmacy@vaxitrust.demo",
+    phone: "+84 28 7300 5005",
+    organizationName: "VaxiTrust Pharmacy",
+    organizationCode: "PHA-DEMO-01",
+    organizationAddress: "Thu Duc, TP.HCM",
+    licenseNumber: "PHA-VAC-2026-005",
+    facilityType: "Nha thuoc co bao quan lanh",
+    storageCapacity: "1,500 lieu, 2-8C",
+    coldChainCapability: "Tu lanh y te, ghi nhan nhiet do va doi soat nhan hang theo ngay.",
+  },
+  ADMIN: {
+    fullName: "Admin Operator",
+    title: "System Administrator",
+    email: "admin@vaxitrust.demo",
+    phone: "+84 28 7300 9000",
+    organizationName: "VaxiTrust Admin Console",
+    organizationCode: "ADM-DEMO",
+    organizationAddress: "Blockchain operations center",
+    licenseNumber: "SYS-ADMIN-2026",
+    facilityType: "Quan tri he thong",
+    storageCapacity: "N/A",
+    coldChainCapability: "Quan tri du lieu, RBAC, audit va an mem ban ghi loi.",
+  },
+  RECALL_AUTHORITY: {
+    fullName: "Recall Authority Officer",
+    title: "Recall Review Officer",
+    email: "recall@vaxitrust.demo",
+    phone: "+84 24 7300 9100",
+    organizationName: "National Recall Authority",
+    organizationCode: "RCL-DEMO",
+    organizationAddress: "Ha Noi",
+    licenseNumber: "RCL-AUTH-2026",
+    facilityType: "Co quan thu hoi",
+    storageCapacity: "N/A",
+    coldChainCapability: "Xu ly canh bao, khieu nai va phat lenh thu hoi theo batch/serial.",
+  },
+};
+
+function demoProfileForRole(role: string): ProfileForm {
+  return demoProfiles[role] || {
+    fullName: "Demo User",
+    title: "Supply Chain Operator",
+    email: "user@vaxitrust.demo",
+    phone: "+84 28 7300 0000",
+    organizationName: "VaxiTrust Demo Organization",
+    organizationCode: `${role || "PUBLIC"}-DEMO`,
+    organizationAddress: "Vietnam",
+    licenseNumber: "DEMO-LICENSE",
+    facilityType: "Demo facility",
+    storageCapacity: "Demo capacity",
+    coldChainCapability: "Demo cold chain capability.",
+  };
+}
 
 function formFromProfile(data?: ProfileResponse): ProfileForm {
   if (!data) return emptyForm;
@@ -120,6 +230,19 @@ export default function ProfilePage() {
           <p className="mt-0.5 font-mono text-zinc-500">{address ? `${address.slice(0, 8)}...${address.slice(-6)}` : "N/A"}</p>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => {
+          setFormOverride(demoProfileForRole(role));
+          setMessage(t("Đã điền dữ liệu demo. Bạn có thể chỉnh lại rồi bấm lưu."));
+          setError(null);
+        }}
+        className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 text-sm font-bold text-blue-700 hover:bg-blue-100"
+      >
+        <Wand2 className="h-4 w-4" />
+        Điền demo cho role này
+      </button>
 
       {message ? <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">{message}</p> : null}
       {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700">{error}</p> : null}

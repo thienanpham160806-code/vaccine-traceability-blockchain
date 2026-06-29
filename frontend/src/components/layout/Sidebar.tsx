@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import {
+  Archive,
   Check,
   ClipboardList,
   HelpCircle,
@@ -14,6 +15,7 @@ import {
   Moon,
   QrCode,
   RotateCcw,
+  Scale,
   Search,
   Settings,
   ShieldAlert,
@@ -30,6 +32,7 @@ import { VaxiTrustLogo } from "@/components/brand/VaxiTrustLogo";
 import { LanguageFlag } from "@/components/ui/LanguageFlag";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import {
+  canManageArchivedData,
   canManageRecall,
   canManageRoles,
   canViewInternalProducts,
@@ -45,6 +48,7 @@ const menuItems = [
   { title: "Sản phẩm và lô", href: "/dashboard/products", icon: ClipboardList },
   { title: "Chuyển giao", href: "/dashboard/transfers", icon: Truck },
   { title: "Rủi ro & tranh chấp", href: "/dashboard/risk-dispute", icon: ShieldAlert },
+  { title: "Khiếu nại", href: "/dashboard/disputes", icon: Scale },
   { title: "Thu hồi", href: "/dashboard/recall", icon: RotateCcw },
 ];
 
@@ -132,6 +136,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
       if (item.href === "/dashboard/products") return canViewInternalProducts(user);
       if (item.href === "/dashboard/transfers") return canViewTransfers(user);
       if (item.href === "/dashboard/risk-dispute") return canViewOperationalRisk(user);
+      if (item.href === "/dashboard/disputes") return false;
       if (item.href === "/dashboard/recall") return canManageRecall(user);
       return true;
     })
@@ -144,6 +149,9 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
     ...(isPublicUser(user) ? [{ title: "Yêu cầu role", href: "/dashboard/role-request", icon: UserCheck }] : []),
     ...(canManageRoles(user) ? [{ title: "Duyệt role", href: "/dashboard/admin/roles", icon: UserCog }] : []),
   ];
+  if (canManageArchivedData(user)) {
+    extraMenuItems.push({ title: "Dữ liệu đã ẩn", href: "/dashboard/admin/archived", icon: Archive });
+  }
   const selectedTheme = mounted ? theme || "system" : "system";
 
   return (

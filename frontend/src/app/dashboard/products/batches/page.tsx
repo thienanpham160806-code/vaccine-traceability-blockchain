@@ -3,21 +3,36 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { ArrowRight, Boxes, Clock, RefreshCw, Truck } from "lucide-react";
-import { getBatches, getProducts, getTransfers } from "@/lib/api";
+import { archiveProducts, getApiErrorMessage, getBatches, getTransfers } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import type { Batch, TransferRecord } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
-import { canRegisterProducts, isEndUserRole } from "@/lib/role-access";
+import { canInitiateTransfer, canRegisterProducts, canViewAllScope, isAdminAuthority } from "@/lib/role-access";
 
-function BatchRow({ batch, t }: { batch: Batch; t: (key: string) => string }) {
+function BatchRow({
+  batch,
+  canArchive,
+  canTransfer,
+  onArchive,
+  t,
+}: {
+  batch: Batch;
+  canArchive: boolean;
+  canTransfer: boolean;
+  onArchive: (batch: Batch) => void;
+  t: (key: string) => string;
+}) {
   const isRecalled = !!batch.recalledAt;
   const originLabel = batch.origin === "IMPORTED" ? t("Nhập khẩu") : t("Sản xuất");
+  const batchKey = batch.id || batch.batchHash;
+  const canTransferBatch = canTransfer && !isRecalled && !batch.archivedAt && (batch.visibleSerialCount ?? 0) > 0;
 
   return (
     <Link
-      href={`/dashboard/products/batches/${encodeURIComponent(batch.id || batch.batchHash)}`}
+      href={`/dashboard/products/batches/${encodeURIComponent(batchKey)}`}
       className="group flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-5 py-4 shadow-sm transition hover:border-blue-300 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-950/70 dark:hover:border-blue-500/50"
     >
       <div className="min-w-0 flex-1">
@@ -30,11 +45,50 @@ function BatchRow({ batch, t }: { batch: Batch; t: (key: string) => string }) {
         <p className="truncate font-mono text-xs text-zinc-400 dark:text-zinc-500">{batch.batchQR || batch.id}</p>
         <div className="mt-1.5 flex flex-wrap gap-4 text-xs text-zinc-400 dark:text-zinc-500">
           <span>{t("Số lượng")}: {batch.quantity}</span>
+          {batch.visibleSerialCount !== undefined ? <span>{t("Đang hiển thị")}: {batch.visibleSerialCount}</span> : null}
           <span>{t("Hạn dùng")}: {batch.expiryDate}</span>
           <span>{batch.manufacturerName}</span>
         </div>
       </div>
-      <ArrowRight className="ml-4 h-4 w-4 shrink-0 text-zinc-300 transition group-hover:text-blue-500 dark:text-zinc-600 dark:group-hover:text-blue-300" />
+      <div className="ml-4 flex shrink-0 flex-wrap items-center gap-2">
+        {canTransferBatch ? (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(event) => {
+              event.preventDefault();
+              window.location.href = `/dashboard/transfers/create?batchId=${encodeURIComponent(batchKey)}&autoSelect=all`;
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              window.location.href = `/dashboard/transfers/create?batchId=${encodeURIComponent(batchKey)}&autoSelect=all`;
+            }}
+            className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+          >
+            {t("Chuyển giao")}
+          </span>
+        ) : null}
+        {canArchive ? (
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(event) => {
+              event.preventDefault();
+              onArchive(batch);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              onArchive(batch);
+            }}
+            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+          >
+            {t("Ẩn")}
+          </span>
+        ) : null}
+        <ArrowRight className="h-4 w-4 text-zinc-300 transition group-hover:text-blue-500 dark:text-zinc-600 dark:group-hover:text-blue-300" />
+      </div>
     </Link>
   );
 }
@@ -128,38 +182,42 @@ export default function BatchManagementPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const t = useTranslation();
   const { language } = useLanguage();
-  const { data: batches = [], isLoading } = useQuery<Batch[]>({ queryKey: ["batches"], queryFn: getBatches });
+  const [user] = useState(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const canToggleAll = canViewAllScope(user);
+  const [scope, setScope] = useState<"mine" | "all">("mine");
+  const { data: batches = [], isLoading } = useQuery<Batch[]>({ queryKey: ["batches", scope], queryFn: () => getBatches({ scope }) });
   const { data: transfers = [], isLoading: transfersLoading } = useQuery<TransferRecord[]>({
-    queryKey: ["transfers"],
-    queryFn: getTransfers,
+    queryKey: ["transfers", scope],
+    queryFn: () => getTransfers({ scope }),
     staleTime: 20_000,
   });
-  const [user] = useState(() => (typeof window === "undefined" ? null : getStoredUser()));
   const canRegister = canRegisterProducts(user);
-  const endUser = isEndUserRole(user);
-  const { data: ownedProducts, isLoading: ownedProductsLoading } = useQuery({
-    queryKey: ["owned-products", user?.address],
-    queryFn: () => getProducts({ owner: user?.address, page: 1, pageSize: 100 }),
-    enabled: endUser && Boolean(user?.address),
-  });
+  const canTransfer = canInitiateTransfer(user);
+  const canArchive = isAdminAuthority(user);
   const pendingBatchGroups = groupPendingTransfersByBatch(transfers, batches, user?.role);
-
-  const ownedBatchKeys = new Set(
-    (ownedProducts?.items || []).flatMap((product) =>
-      [product.batchId, product.batchHash].filter(Boolean).map(getBatchKey)
-    )
-  );
-  const visibleBatches = endUser
-    ? batches.filter((batch) =>
-        [batch.id, batch.batchHash, batch.batchQR].some((value) => ownedBatchKeys.has(getBatchKey(value)))
-      )
-    : batches;
+  const visibleBatches = batches;
 
   const filteredBatches = visibleBatches.filter((batch) => {
     if (statusFilter === "RECALLED") return !!batch.recalledAt;
     if (statusFilter === "ACTIVE") return !batch.recalledAt;
     return true;
   });
+
+  const archiveBatch = async (batch: Batch) => {
+    const batchId = batch.id || batch.batchHash;
+    const reason = window.prompt(t("Nhập lý do ẩn lô khỏi web. Dữ liệu on-chain sẽ không bị xóa."), "");
+    if (reason === null) return;
+    if (!window.confirm(t("Xác nhận ẩn lô và các serial trong lô khỏi web? Blockchain không bị thay đổi."))) return;
+
+    try {
+      await archiveProducts({ batchIds: [batchId], reason: reason.trim(), mode: "INVALIDATE" });
+      toast.success(t("Đã ẩn lô khỏi web."));
+      queryClient.invalidateQueries({ queryKey: ["batches"] });
+      queryClient.invalidateQueries({ queryKey: ["transfers"] });
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, t("Không thể ẩn lô.")));
+    }
+  };
 
   return (
     <div className="flex min-h-[calc(100dvh-10rem)] flex-col gap-6">
@@ -172,6 +230,24 @@ export default function BatchManagementPage() {
           <Link href="/dashboard/products/register" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white">{t("Đăng ký sản phẩm")}</Link>
         ) : null}
       </div>
+
+      {canToggleAll ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm dark:border-blue-500/20 dark:bg-blue-500/10">
+          <span className="font-semibold text-blue-800 dark:text-blue-100">{t("Phạm vi hiển thị")}</span>
+          <div className="flex rounded-lg border border-blue-200 bg-white p-1 dark:border-blue-500/30 dark:bg-zinc-950">
+            {(["mine", "all"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setScope(option)}
+                className={`min-h-8 rounded-md px-3 text-xs font-bold ${scope === option ? "bg-blue-600 text-white" : "text-blue-700 hover:bg-blue-50 dark:text-blue-200 dark:hover:bg-blue-500/10"}`}
+              >
+                {option === "mine" ? t("Của tôi") : t("Toàn hệ thống")}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <section className="rounded-2xl border border-amber-200 bg-amber-50/40 p-4 shadow-sm dark:border-amber-500/30 dark:bg-amber-500/10">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -205,7 +281,7 @@ export default function BatchManagementPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/70">
         <div className="flex items-center gap-2">
           <Boxes className="h-4 w-4 text-blue-500" />
-          <h2 className="font-semibold text-zinc-800 dark:text-zinc-100">{t(endUser ? "Lô đang quản lý" : "Tất cả lô hàng")}{visibleBatches.length > 0 ? <span className="ml-2 font-normal text-zinc-400">({visibleBatches.length})</span> : null}</h2>
+          <h2 className="font-semibold text-zinc-800 dark:text-zinc-100">{t(scope === "mine" ? "Lô đang quản lý" : "Tất cả lô hàng")}{visibleBatches.length > 0 ? <span className="ml-2 font-normal text-zinc-400">({visibleBatches.length})</span> : null}</h2>
         </div>
         <div className="flex flex-wrap gap-2">
           <select className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
@@ -224,7 +300,7 @@ export default function BatchManagementPage() {
       </div>
 
       <section className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50/70 p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/30">
-        {isLoading || (endUser && ownedProductsLoading) ? (
+        {isLoading ? (
           <div className="space-y-2">{[1, 2, 3].map((item) => <div key={item} className="h-20 animate-pulse rounded-xl bg-zinc-100 dark:bg-zinc-800" />)}</div>
         ) : filteredBatches.length === 0 ? (
           <div className="flex min-h-72 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-300 py-14 text-center dark:border-zinc-700">
@@ -239,7 +315,16 @@ export default function BatchManagementPage() {
           </div>
         ) : (
           <div className="max-h-[min(58vh,580px)] space-y-2 overflow-y-auto pr-1">
-            {filteredBatches.map((batch) => <BatchRow key={batch.id || batch.batchHash} batch={batch} t={t} />)}
+            {filteredBatches.map((batch) => (
+              <BatchRow
+                key={batch.id || batch.batchHash}
+                batch={batch}
+                canArchive={canArchive}
+                canTransfer={canTransfer && scope === "mine"}
+                onArchive={archiveBatch}
+                t={t}
+              />
+            ))}
           </div>
         )}
       </section>

@@ -3,15 +3,16 @@
 import { use, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { ArrowLeft, Download, ExternalLink, QrCode, X } from "lucide-react";
-import { getBatch, getBatchSerials } from "@/lib/api";
+import { archiveProducts, getApiErrorMessage, getBatch, getBatchSerials } from "@/lib/api";
 import { getConsumerVerifyQrValue } from "@/lib/qr";
 import { getProductStatusLabel, getStatusChipClass } from "@/lib/status";
 import type { Batch, Product } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import { getStoredUser } from "@/lib/auth";
-import { canInitiateTransfer, canRegisterProducts } from "@/lib/role-access";
+import { canInitiateTransfer, canRegisterProducts, canViewAllScope, isAdminAuthority } from "@/lib/role-access";
 
 interface PageProps {
   params: Promise<{ batchId: string }>;
@@ -94,15 +95,18 @@ export default function BatchDetailPage({ params }: PageProps) {
   const [user] = useState(() => (typeof window === "undefined" ? null : getStoredUser()));
   const canTransfer = canInitiateTransfer(user);
   const canRegister = canRegisterProducts(user);
+  const canToggleAll = canViewAllScope(user);
+  const canArchive = isAdminAuthority(user);
+  const [scope, setScope] = useState<"mine" | "all">("mine");
 
   const { data: batch, isLoading: batchLoading } = useQuery<Batch | undefined>({
-    queryKey: ["batch", decoded],
-    queryFn: () => getBatch(decoded),
+    queryKey: ["batch", decoded, scope],
+    queryFn: () => getBatch(decoded, { scope }),
   });
 
   const { data: serials = [], isLoading: serialsLoading } = useQuery<Product[]>({
-    queryKey: ["batch-serials", decoded],
-    queryFn: () => getBatchSerials(decoded),
+    queryKey: ["batch-serials", decoded, scope],
+    queryFn: () => getBatchSerials(decoded, { scope }),
   });
 
   if (batchLoading) {
@@ -138,6 +142,27 @@ export default function BatchDetailPage({ params }: PageProps) {
     return acc;
   }, {});
   const isRecalled = !!batch.recalledAt;
+  const transferableSerials = serials.filter((serial) =>
+    !serial.archivedAt &&
+    !["ARCHIVED", "INVALID", "RECALLED"].includes(serial.status) &&
+    !/^BATCH[-_:]/i.test(serial.serialId) &&
+    serial.serialId.toLowerCase() !== decoded.toLowerCase() &&
+    !["OWNER_MISMATCH", "STATUS_MISMATCH", "STALE_PENDING"].includes(serial.syncStatus || "")
+  );
+
+  const archiveBatch = async () => {
+    const reason = window.prompt(t("Nhập lý do ẩn lô khỏi web. Dữ liệu on-chain sẽ không bị xóa."), "");
+    if (reason === null) return;
+    if (!window.confirm(t("Xác nhận ẩn lô và các serial trong lô khỏi web? Blockchain không bị thay đổi."))) return;
+
+    try {
+      await archiveProducts({ batchIds: [decoded], reason: reason.trim(), mode: "INVALIDATE" });
+      toast.success(t("Đã ẩn lô khỏi web."));
+      window.location.href = "/dashboard/products/batches";
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, t("Không thể ẩn lô.")));
+    }
+  };
 
   return (
     <>
@@ -165,7 +190,34 @@ export default function BatchDetailPage({ params }: PageProps) {
           >
             {getOriginLabel(batch.origin, isRecalled, t)}
           </span>
+          {canArchive ? (
+            <button
+              type="button"
+              onClick={archiveBatch}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+            >
+              {t("Ẩn khỏi web")}
+            </button>
+          ) : null}
         </div>
+
+        {canToggleAll ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm">
+            <span className="font-semibold text-blue-800">{t("Phạm vi hiển thị")}</span>
+            <div className="flex rounded-lg border border-blue-200 bg-white p-1">
+              {(["mine", "all"] as const).map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() => setScope(option)}
+                  className={`min-h-8 rounded-md px-3 text-xs font-bold ${scope === option ? "bg-blue-600 text-white" : "text-blue-700 hover:bg-blue-50"}`}
+                >
+                  {option === "mine" ? t("Của tôi") : t("Toàn hệ thống")}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard label={t("Tổng serial")} value={batch.quantity} />
@@ -206,6 +258,14 @@ export default function BatchDetailPage({ params }: PageProps) {
                 <span className="ml-2 font-normal text-zinc-400">({serials.length})</span>
               )}
             </h2>
+            {canTransfer && transferableSerials.length > 0 ? (
+              <Link
+                href={`/dashboard/transfers/create?batchId=${encodeURIComponent(decoded)}&autoSelect=all`}
+                className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
+              >
+                {t("Chuyển cả lô")}
+              </Link>
+            ) : null}
           </div>
 
           {serialsLoading ? (
@@ -269,7 +329,7 @@ export default function BatchDetailPage({ params }: PageProps) {
                           >
                             <ExternalLink className="h-3 w-3" /> {t("Xác minh")}
                           </Link>
-                          {canTransfer ? (
+                          {canTransfer && transferableSerials.some((item) => item.serialId === serial.serialId) ? (
                             <Link
                               href={`/dashboard/transfers/create?serialId=${encodeURIComponent(serial.serialId)}`}
                               className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold text-emerald-700 hover:bg-emerald-100"

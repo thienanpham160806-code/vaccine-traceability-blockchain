@@ -1,7 +1,6 @@
 ﻿import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { ethers } from 'ethers';
-import jwt from 'jsonwebtoken';
 import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { ipfsService } from '../services/ipfs';
@@ -11,8 +10,9 @@ import { TransferRecord } from '../types';
 import { txQueue } from '../services/txQueue';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
-import config from '../config/env';
+import { decorateTransfer, getVisibilityContext, transferVisibleTo } from '../services/visibility';
 import {
+  transferBulkScanSchema,
   transferConfirmSchema,
   transferIdParamsSchema,
   transferRejectSchema,
@@ -33,7 +33,7 @@ const allowedTransferRoutes: Record<string, string[]> = {
   IMPORTER: ['DISTRIBUTOR'],
   DISTRIBUTOR: ['CLINIC', 'PHARMACY'],
 };
-const transferReceiverActionRoles = ['IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN'];
+const transferReceiverActionRoles = ['IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'ADMIN', 'RECALL_AUTHORITY'];
 
 function toBytes32(value?: string): string {
   if (!value) return ZERO_BYTES32;
@@ -74,7 +74,7 @@ function normalizeAddress(address?: string): string {
 }
 
 function buildTransferMetadata(body: any) {
-  return {
+  return pruneUndefined({
     fromLocationName: body.fromLocationName || body.fromLocation || undefined,
     toLocationName: body.toLocationName || undefined,
     fromWarehouseName: body.fromWarehouseName || undefined,
@@ -87,7 +87,11 @@ function buildTransferMetadata(body: any) {
     temperatureMaxC: body.temperatureMaxC,
     temperatureUnit: body.temperatureUnit || (body.temperatureMinC !== undefined || body.temperatureMaxC !== undefined ? 'C' : undefined),
     handlingNotes: body.handlingNotes || undefined,
-  };
+  });
+}
+
+function pruneUndefined<T extends Record<string, any>>(value: T): Partial<T> {
+  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== '')) as Partial<T>;
 }
 
 function requireReceiptEvent(receipt: any, eventName: string) {
@@ -112,6 +116,10 @@ function isAllowedTransferRoute(fromRole: string, toRole: string): boolean {
 function authenticatedUserHasRole(req: AuthRequest, role: string): boolean {
   const roles = req.user?.roles?.length ? req.user.roles : [req.user?.role];
   return roles.filter(Boolean).includes(role);
+}
+
+function canActAsRole(req: AuthRequest, role: string): boolean {
+  return req.user?.role === 'ADMIN' || req.user?.role === 'RECALL_AUTHORITY' || authenticatedUserHasRole(req, role);
 }
 
 function productRegistryStatusToProductStatus(status: number): TransferRecord['status'] | 'REGISTERED' | 'VERIFIED' | 'IN_TRANSIT' | 'DELIVERED' | 'FLAGGED' | 'RECALLED' {
@@ -180,32 +188,170 @@ async function requireSuccessfulTx(txHash: string, expectedTo?: string) {
   return receipt;
 }
 
+async function createTransferForSerial(req: AuthRequest, serialId: string, groupId?: string) {
+  const {
+    receiverAddress: rawReceiverAddress,
+    fromRole,
+    toRole,
+    fromLocationHash,
+    toLocationHash,
+    fromLocation,
+  } = req.body;
+
+  if (!serialId || !fromRole || !toRole) {
+    throw httpError(400, 'MISSING_FIELDS', 'Missing required fields: serialId, fromRole, toRole');
+  }
+
+  if (!SAFE_ID_PATTERN.test(serialId)) {
+    throw httpError(400, 'INVALID_SERIAL_ID', 'Serial chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.');
+  }
+
+  if (!canActAsRole(req, fromRole)) {
+    throw httpError(403, 'ROLE_MISMATCH', `Only ${fromRole} can create this transfer`);
+  }
+
+  if (!isAllowedTransferRoute(fromRole, toRole)) {
+    throw httpError(400, 'INVALID_TRANSFER_ROUTE', `Route ${fromRole} -> ${toRole} is not allowed by the supply-chain route matrix`);
+  }
+
+  const receiverAddress = rawReceiverAddress || contractClient.getRoleAddress(toRole);
+  if (!CryptoUtils.isValidAddress(receiverAddress)) {
+    throw httpError(400, 'INVALID_RECEIVER', 'receiverAddress must be a valid Ethereum address');
+  }
+
+  if (!contractClient.isInitialized()) {
+    throw httpError(503, 'CONTRACTS_NOT_READY', 'Smart contracts are not initialized');
+  }
+
+  const serialHash = toBytes32(serialId);
+  const existsOnChain = await contractClient.productExists(serialHash);
+  const productSnapshot = await db.ref(`products/${serialHash}`).once('value');
+  const productData = productSnapshot.val();
+
+  if (!existsOnChain) {
+    throw httpError(
+      404,
+      'PRODUCT_NOT_FOUND_ON_CHAIN',
+      productSnapshot.exists()
+        ? `Serial ${serialId} exists in Firebase but is not registered in the active ProductRegistry contract.`
+        : `Serial ${serialId} is not registered. Register the product before creating a transfer.`
+    );
+  }
+
+  if (['RECALLED', 'INVALID', 'ARCHIVED', 'ADMINISTERED'].includes(String(productData?.status || '').toUpperCase()) || productData?.archivedAt) {
+    throw httpError(400, 'PRODUCT_NOT_ACTIVE_INVENTORY', `Serial ${serialId} không còn là inventory hợp lệ. Không thể tạo lệnh chuyển giao.`);
+  }
+
+  if (['OWNER_MISMATCH', 'STATUS_MISMATCH', 'STALE_PENDING'].includes(String(productData?.syncStatus || '').toUpperCase())) {
+    throw httpError(409, 'PRODUCT_SYNC_MISMATCH', `Serial ${serialId} đang lệch Firebase/on-chain. Reconcile trước khi chuyển giao.`);
+  }
+
+  const senderAddress = contractClient.getRoleAddress(fromRole);
+  const [currentOwner, statusBefore, onChainPending] = await Promise.all([
+    contractClient.getCurrentOwner(serialHash),
+    contractClient.getProductStatus(serialHash),
+    contractClient.getPendingTransfer(serialHash),
+  ]);
+
+  if (onChainPending.exists) {
+    throw httpError(409, 'PENDING_TRANSFER_EXISTS_ON_CHAIN', `Serial ${serialId} already has a pending on-chain transfer.`);
+  }
+
+  if (!sameHex(currentOwner, senderAddress)) {
+    throw httpError(409, 'NOT_CURRENT_OWNER_ON_CHAIN', `Role ${fromRole} cannot transfer ${serialId} because its signer ${senderAddress} is not the current on-chain owner ${currentOwner}.`);
+  }
+
+  if (!canCreateOnChainTransfer(Number(statusBefore))) {
+    throw httpError(409, 'PRODUCT_STATUS_NOT_TRANSFERABLE', `Product ${serialId} cannot be transferred from current on-chain status ${productRegistryStatusToProductStatus(Number(statusBefore))}.`);
+  }
+
+  const fromLoc = toBytes32(fromLocationHash || (fromLocation ? `location:${fromLocation}` : `from:${senderAddress}`));
+  const toLoc = toBytes32(toLocationHash || `to:${receiverAddress}`);
+  const transferMetadata = buildTransferMetadata(req.body);
+
+  const now = Date.now();
+  const transferId = `${serialHash}_${now}`;
+  const job = await txQueue.enqueue({
+    type: 'CREATE_TRANSFER',
+    payload: {
+      serialId: serialHash,
+      receiver: receiverAddress,
+      fromLocationHash: fromLoc,
+      toLocationHash: toLoc,
+      signerRole: fromRole,
+    },
+    metadata: {
+      serialId,
+      serialHash,
+      transferId,
+      ...(groupId ? { batchTransferGroupId: groupId } : {}),
+    },
+  });
+
+  const txHash = job.txHash;
+  const ipfsResult = await ipfsService.pinJson(`transfer-${serialId}-${now}`, {
+    serialId,
+    serialHash,
+    sender: senderAddress,
+    receiver: receiverAddress,
+    fromRole,
+    toRole,
+    fromLocationHash: fromLoc,
+    toLocationHash: toLoc,
+    ...transferMetadata,
+    status: 'PENDING',
+    blockchainTx: txHash,
+    batchTransferGroupId: groupId,
+    createdAt: now,
+  });
+
+  const transfer: TransferRecord & { blockchainTx?: string; batchTransferGroupId?: string } = pruneUndefined({
+    id: transferId,
+    serialId,
+    batchId: req.body.batchId || productData?.batchId || '',
+    fromAddress: senderAddress,
+    toAddress: receiverAddress,
+    fromRole,
+    toRole,
+    status: 'PENDING',
+    fromLocationHash: fromLoc,
+    toLocationHash: toLoc,
+    ...transferMetadata,
+    ...(groupId ? { batchTransferGroupId: groupId } : {}),
+    ipfsCid: ipfsResult?.cid,
+    blockchainTx: txHash,
+    createdAt: now,
+    updatedAt: now,
+  }) as TransferRecord & { blockchainTx?: string; batchTransferGroupId?: string };
+
+  await Promise.all([
+    db.ref(`transfers/${transferId}`).set(transfer),
+    db.ref(`products/${serialHash}`).update({
+      status: 'IN_TRANSIT',
+      currentOwner: senderAddress,
+      ownerRole: fromRole,
+      latestTransferId: transferId,
+      syncStatus: 'OK',
+      updatedAt: now,
+    }),
+    db.ref(`pending-transfers/${serialHash}`).set(transferId),
+  ]);
+
+  return { transfer, serialHash, jobId: job.id };
+}
+
 /**
  * GET /transfers
  * List all transfer records from Firebase
  */
-const FULL_ACCESS_ROLES = new Set(['ADMIN', 'AUDITOR', 'RECALL_AUTHORITY']);
-
 router.get('/', async (req: Request, res: Response) => {
   try {
+    const visibility = getVisibilityContext(req);
     const snapshot = await db.ref('transfers').once('value');
     const data = snapshot.val() || {};
-    let transfers = Object.values(data) as TransferRecord[];
-
-    // Role-based filtering: if a valid JWT is present and role is not a privileged role,
-    // restrict view to only transfers involving that role.
-    const authHeader = req.headers.authorization;
-    if (authHeader?.startsWith('Bearer ')) {
-      try {
-        const decoded = jwt.verify(authHeader.substring(7), config.jwtSecret) as any;
-        const role: string | undefined = decoded?.role;
-        if (role && !FULL_ACCESS_ROLES.has(role)) {
-          transfers = transfers.filter((t) => t.fromRole === role || t.toRole === role);
-        }
-      } catch {
-        // Invalid or expired token â€” fall through and return all records unchanged
-      }
-    }
+    let transfers = (Object.values(data) as TransferRecord[])
+      .filter((transfer) => transferVisibleTo(transfer, visibility))
+      .map((transfer) => decorateTransfer(transfer, visibility));
 
     transfers.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
@@ -226,6 +372,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.get('/:transferId', validateRequest({ params: transferIdParamsSchema }), async (req: Request, res: Response) => {
   try {
     const { transferId } = req.params;
+    const visibility = getVisibilityContext(req);
     const snapshot = await db.ref(`transfers/${transferId}`).once('value');
 
     if (!snapshot.exists()) {
@@ -235,7 +382,16 @@ router.get('/:transferId', validateRequest({ params: transferIdParamsSchema }), 
       });
     }
 
-    res.json({ success: true, data: snapshot.val() });
+    const transfer = snapshot.val();
+    if (!transferVisibleTo(transfer, visibility)) {
+      return res.status(403).json({
+        success: false,
+        error: { code: 'FORBIDDEN', message: 'You can only view transfers related to your role or wallet.' },
+        timestamp: Date.now(),
+      });
+    }
+
+    res.json({ success: true, data: decorateTransfer(transfer, visibility) });
   } catch (error) {
     Logger.error('Get transfer error', error);
     res.status(500).json({
@@ -250,12 +406,199 @@ router.get('/:transferId', validateRequest({ params: transferIdParamsSchema }), 
  * Create transfer request (Scan QR to initiate delivery)
  */
 router.post(
+  '/bulk-scan',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'ADMIN']),
+  validateRequest({ body: transferBulkScanSchema }),
+  async (req: AuthRequest, res: Response) => {
+    const { serialIds } = req.body;
+    const uniqueSerialIds: string[] = Array.from(new Set<string>((serialIds || []).map((value: string) => value.trim()).filter(Boolean)));
+    const batchTransferGroupId = `bulk-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    const successful: any[] = [];
+    const failed: any[] = [];
+
+    for (const serialId of uniqueSerialIds) {
+      try {
+        const result = await createTransferForSerial(req, serialId, batchTransferGroupId);
+        successful.push({ serialId, ...result });
+      } catch (error: any) {
+        failed.push({
+          serialId,
+          code: error?.code || 'TRANSFER_SCAN_ERROR',
+          message: getErrorMessage(error, 'Failed to create transfer'),
+        });
+      }
+    }
+
+    res.status(failed.length > 0 ? 207 : 200).json({
+      success: failed.length === 0,
+      data: {
+        batchTransferGroupId,
+        total: uniqueSerialIds.length,
+        successful,
+        failed,
+      },
+    });
+  }
+);
+
+function batchMatches(batch: any, key: string) {
+  const normalized = String(key || '').trim().toLowerCase();
+  return batchIdentityValues(batch)
+    .some((value) => String(value).trim().toLowerCase() === normalized);
+}
+
+function batchIdentityValues(batch: any) {
+  return [batch?.id, batch?.batchHash, batch?.batchQR]
+    .filter(Boolean)
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+}
+
+function productBatchValues(product: any) {
+  return [product?.batchId, product?.batchHash]
+    .filter(Boolean)
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+}
+
+function isBatchLikeSerial(serialId: unknown, batchValues: string[]) {
+  const normalized = String(serialId || '').trim().toLowerCase();
+  if (!normalized) return true;
+  if (/^batch[-_:]/i.test(normalized)) return true;
+  return batchValues.some((value) => value.toLowerCase() === normalized);
+}
+
+async function findBatchById(batchId: string): Promise<[string, any] | null> {
+  const direct = await db.ref(`batches/${batchId}`).once('value');
+  if (direct.exists()) return [batchId, direct.val()];
+
+  const snapshot = await db.ref('batches').once('value');
+  const entries = Object.entries(snapshot.val() || {}) as Array<[string, any]>;
+  return entries.find(([, batch]) => batchMatches(batch, batchId)) || null;
+}
+
+router.post(
+  '/batch-shell',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'ADMIN', 'RECALL_AUTHORITY']),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { batchId, fromRole, toRole, receiverAddress: rawReceiverAddress } = req.body || {};
+      if (!batchId || !fromRole || !toRole) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'MISSING_FIELDS', message: 'Missing required fields: batchId, fromRole, toRole' },
+        });
+      }
+      if (!canActAsRole(req, fromRole)) {
+        return res.status(403).json({
+          success: false,
+          error: { code: 'ROLE_MISMATCH', message: `Only ${fromRole} can create this batch custody transfer` },
+        });
+      }
+      if (!isAllowedTransferRoute(fromRole, toRole)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_TRANSFER_ROUTE', message: `Route ${fromRole} -> ${toRole} is not allowed` },
+        });
+      }
+
+      const found = await findBatchById(String(batchId));
+      if (!found) {
+        return res.status(404).json({
+          success: false,
+          error: { code: 'BATCH_NOT_FOUND', message: `Batch ${batchId} not found` },
+        });
+      }
+      const [batchKey, batch] = found;
+      if (batch?.archivedAt || ['ARCHIVED', 'INVALID', 'RECALLED'].includes(String(batch?.status || '').toUpperCase())) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'BATCH_NOT_ACTIVE', message: `Batch ${batchId} is not active inventory` },
+        });
+      }
+
+      const productsSnapshot = await db.ref('products').once('value');
+      const batchValues = Array.from(new Set([batchKey, ...batchIdentityValues(batch)]));
+      const normalizedBatchValues = batchValues.map((item) => item.toLowerCase());
+      const serialsInBatch = (Object.values(productsSnapshot.val() || {}) as any[]).filter((product) => {
+        if (product?.archivedAt || ['ARCHIVED', 'INVALID', 'RECALLED'].includes(String(product?.status || '').toUpperCase())) return false;
+        if (isBatchLikeSerial(product?.serialId, batchValues)) return false;
+        return productBatchValues(product)
+          .map((value) => value.toLowerCase())
+          .some((value) => normalizedBatchValues.includes(value));
+      });
+      if (serialsInBatch.length > 0) {
+        return res.status(409).json({
+          success: false,
+          error: { code: 'BATCH_HAS_SERIALS', message: 'Batch has serials. Use bulk serial transfer instead.' },
+        });
+      }
+
+      const senderAddress = contractClient.getRoleAddress(fromRole);
+      const receiverAddress = rawReceiverAddress || contractClient.getRoleAddress(toRole);
+      if (!CryptoUtils.isValidAddress(receiverAddress)) {
+        return res.status(400).json({
+          success: false,
+          error: { code: 'INVALID_RECEIVER', message: 'receiverAddress must be a valid Ethereum address' },
+        });
+      }
+
+      const now = Date.now();
+      const transferId = `batch-${toBytes32(String(batch?.batchHash || batch?.id || batchId))}_${now}`;
+      const transfer = pruneUndefined({
+        id: transferId,
+        serialId: '',
+        batchId: batch?.id || String(batchId),
+        batchHash: batch?.batchHash || batchKey,
+        fromAddress: senderAddress,
+        toAddress: receiverAddress,
+        fromRole,
+        toRole,
+        status: 'PENDING',
+        mode: 'OFF_CHAIN_BATCH_CUSTODY',
+        transferMode: 'OFF_CHAIN_BATCH_CUSTODY',
+        offChainOnly: true,
+        reasonNote: 'Batch has no serials; no on-chain serial transfer was created',
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await Promise.all([
+        db.ref(`transfers/${transferId}`).set(transfer),
+        db.ref(`batch-transfers/${transferId}`).set(transfer),
+        db.ref(`batches/${batchKey}`).update({
+          pendingBatchTransferId: transferId,
+          custodyStatus: 'PENDING_TRANSFER',
+          updatedAt: now,
+        }),
+      ]);
+
+      res.json({ success: true, data: { transfer, transferId } });
+    } catch (error) {
+      Logger.error('Create batch shell transfer error', error);
+      res.status(500).json({
+        success: false,
+        error: { code: 'BATCH_SHELL_TRANSFER_ERROR', message: getErrorMessage(error, 'Failed to create batch custody transfer') },
+      });
+    }
+  }
+);
+
+router.post(
   '/scan',
   verifyToken,
   requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'ADMIN']),
   validateRequest({ body: transferScanSchema }),
   async (req: AuthRequest, res: Response) => {
   try {
+    const data = await createTransferForSerial(req, req.body.serialId);
+    return res.json({
+      success: true,
+      data,
+    });
+
     const {
       serialId,
       receiverAddress: rawReceiverAddress,
@@ -607,6 +950,92 @@ router.post(
   }
   }
 );
+
+router.post('/:transferId/confirm-batch-shell', verifyToken, requireRole(transferReceiverActionRoles), async (req: AuthRequest, res: Response) => {
+  try {
+    const { transferId } = req.params;
+    const snapshot = await db.ref(`transfers/${transferId}`).once('value');
+    if (!snapshot.exists()) {
+      return res.status(404).json({ success: false, error: { code: 'TRANSFER_NOT_FOUND', message: `Transfer ${transferId} not found` } });
+    }
+    const transfer = snapshot.val();
+    if (transfer.mode !== 'OFF_CHAIN_BATCH_CUSTODY' && transfer.transferMode !== 'OFF_CHAIN_BATCH_CUSTODY') {
+      return res.status(400).json({ success: false, error: { code: 'NOT_BATCH_SHELL_TRANSFER', message: 'Transfer is not an off-chain batch custody transfer' } });
+    }
+    if (transfer.status !== 'PENDING') {
+      return res.status(409).json({ success: false, error: { code: 'TRANSFER_NOT_PENDING', message: 'Transfer is not pending' } });
+    }
+    if (!canActAsRole(req, transfer.toRole)) {
+      return res.status(403).json({ success: false, error: { code: 'ROLE_MISMATCH', message: `Only ${transfer.toRole} can confirm this transfer` } });
+    }
+
+    const found = await findBatchById(transfer.batchHash || transfer.batchId);
+    const batchKey = found?.[0] || transfer.batchHash || transfer.batchId;
+    const now = Date.now();
+    const updates: Record<string, unknown> = {
+      [`transfers/${transferId}/status`]: 'CONFIRMED',
+      [`transfers/${transferId}/confirmedAt`]: now,
+      [`transfers/${transferId}/updatedAt`]: now,
+      [`batch-transfers/${transferId}/status`]: 'CONFIRMED',
+      [`batch-transfers/${transferId}/confirmedAt`]: now,
+      [`batch-transfers/${transferId}/updatedAt`]: now,
+      [`batches/${batchKey}/currentOwner`]: transfer.toAddress,
+      [`batches/${batchKey}/ownerRole`]: transfer.toRole,
+      [`batches/${batchKey}/latestTransferId`]: transferId,
+      [`batches/${batchKey}/pendingBatchTransferId`]: null,
+      [`batches/${batchKey}/custodyStatus`]: 'CONFIRMED',
+      [`batches/${batchKey}/updatedAt`]: now,
+    };
+    await db.ref().update(updates);
+    res.json({ success: true, data: { ...transfer, status: 'CONFIRMED', confirmedAt: now, updatedAt: now } });
+  } catch (error) {
+    Logger.error('Confirm batch shell transfer error', error);
+    res.status(500).json({ success: false, error: { code: 'BATCH_SHELL_CONFIRM_ERROR', message: getErrorMessage(error, 'Failed to confirm batch custody transfer') } });
+  }
+});
+
+router.post('/:transferId/reject-batch-shell', verifyToken, requireRole(transferReceiverActionRoles), async (req: AuthRequest, res: Response) => {
+  try {
+    const { transferId } = req.params;
+    const { rejectionReason = '' } = req.body || {};
+    const snapshot = await db.ref(`transfers/${transferId}`).once('value');
+    if (!snapshot.exists()) {
+      return res.status(404).json({ success: false, error: { code: 'TRANSFER_NOT_FOUND', message: `Transfer ${transferId} not found` } });
+    }
+    const transfer = snapshot.val();
+    if (transfer.mode !== 'OFF_CHAIN_BATCH_CUSTODY' && transfer.transferMode !== 'OFF_CHAIN_BATCH_CUSTODY') {
+      return res.status(400).json({ success: false, error: { code: 'NOT_BATCH_SHELL_TRANSFER', message: 'Transfer is not an off-chain batch custody transfer' } });
+    }
+    if (transfer.status !== 'PENDING') {
+      return res.status(409).json({ success: false, error: { code: 'TRANSFER_NOT_PENDING', message: 'Transfer is not pending' } });
+    }
+    if (!canActAsRole(req, transfer.toRole)) {
+      return res.status(403).json({ success: false, error: { code: 'ROLE_MISMATCH', message: `Only ${transfer.toRole} can reject this transfer` } });
+    }
+
+    const found = await findBatchById(transfer.batchHash || transfer.batchId);
+    const batchKey = found?.[0] || transfer.batchHash || transfer.batchId;
+    const now = Date.now();
+    const updates: Record<string, unknown> = {
+      [`transfers/${transferId}/status`]: 'REJECTED',
+      [`transfers/${transferId}/rejectedReason`]: String(rejectionReason || '').trim(),
+      [`transfers/${transferId}/rejectedAt`]: now,
+      [`transfers/${transferId}/updatedAt`]: now,
+      [`batch-transfers/${transferId}/status`]: 'REJECTED',
+      [`batch-transfers/${transferId}/rejectedReason`]: String(rejectionReason || '').trim(),
+      [`batch-transfers/${transferId}/rejectedAt`]: now,
+      [`batch-transfers/${transferId}/updatedAt`]: now,
+      [`batches/${batchKey}/pendingBatchTransferId`]: null,
+      [`batches/${batchKey}/custodyStatus`]: 'REJECTED',
+      [`batches/${batchKey}/updatedAt`]: now,
+    };
+    await db.ref().update(updates);
+    res.json({ success: true, data: { ...transfer, status: 'REJECTED', rejectedReason: String(rejectionReason || '').trim(), rejectedAt: now, updatedAt: now } });
+  } catch (error) {
+    Logger.error('Reject batch shell transfer error', error);
+    res.status(500).json({ success: false, error: { code: 'BATCH_SHELL_REJECT_ERROR', message: getErrorMessage(error, 'Failed to reject batch custody transfer') } });
+  }
+});
 
 /**
  * POST /transfers/confirm

@@ -2,15 +2,18 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { keccak256, toBytes, type Hex } from "viem";
 import { RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { QrResultCard } from "./QrResultCard";
-import { getApiErrorMessage, registerProduct, syncWalletProductRegistration } from "@/lib/api";
+import { getApiErrorMessage, getBatches, registerProduct, syncWalletProductRegistration } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
+import type { Batch } from "@/lib/types";
 import { getZodFieldErrors, productRegistrationSchema } from "@/lib/validation";
 import { emptyBytes32, getProductRegistryAddress, productRegistryAbi, toBytes32 } from "@/lib/wallet-contracts";
+import { ActionSpinner } from "@/components/ui/ActionSpinner";
 import { useTranslation } from "@/providers/LanguageProvider";
 
 type RegisterProductResult = {
@@ -79,10 +82,36 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [batchMode, setBatchMode] = useState<"new" | "existing">("new");
+  const [selectedBatchKey, setSelectedBatchKey] = useState("");
+
+  const { data: ownedBatches = [] } = useQuery<Batch[]>({
+    queryKey: ["register-owned-batches"],
+    queryFn: () => getBatches({ scope: "mine" }),
+    staleTime: 30_000,
+  });
+
+  const selectableBatches = ownedBatches.filter((batch) => !batch.archivedAt && !batch.recalledAt);
+
+  const applyExistingBatch = (batchKey: string) => {
+    setSelectedBatchKey(batchKey);
+    const batch = selectableBatches.find((item) => (item.batchHash || item.id || item.batchQR) === batchKey);
+    if (!batch) return;
+    setForm((prev) => ({
+      ...prev,
+      batchId: batch.id || batch.batchQR || batch.batchHash || prev.batchId,
+      productName: batch.productName || prev.productName,
+      manufacturerName: batch.manufacturerName || prev.manufacturerName,
+      expiryDate: batch.expiryDate || prev.expiryDate,
+      productType: batch.origin === "IMPORTED" ? "IMPORT" : "LOCAL",
+    }));
+  };
 
   const regenerate = () => {
     const ids = makeIds();
     setForm((prev) => ({ ...prev, ...ids }));
+    setBatchMode("new");
+    setSelectedBatchKey("");
     setGeneratedSerial(null);
     setGeneratedBatch(null);
     setResult(null);
@@ -230,6 +259,53 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
         )}
 
         {/* Fields */}
+        <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50/70 p-4 dark:border-blue-500/20 dark:bg-blue-500/10">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-blue-700 dark:text-blue-200">{t("Cách chọn lô")}</p>
+              <p className="mt-0.5 text-xs text-blue-700/80 dark:text-blue-100/80">
+                {t("Chọn lô hiện có để bổ sung serial vào batch nhà sản xuất đang sở hữu. Serial vẫn phải là mã riêng của sản phẩm.")}
+              </p>
+            </div>
+            <div className="flex rounded-lg border border-blue-200 bg-white p-1 text-xs font-bold dark:border-blue-500/30 dark:bg-zinc-950">
+              <button
+                type="button"
+                onClick={() => {
+                  setBatchMode("new");
+                  setSelectedBatchKey("");
+                }}
+                className={`rounded-md px-3 py-1.5 ${batchMode === "new" ? "bg-blue-600 text-white" : "text-blue-700 dark:text-blue-200"}`}
+              >
+                {t("Lô mới")}
+              </button>
+              <button
+                type="button"
+                onClick={() => setBatchMode("existing")}
+                className={`rounded-md px-3 py-1.5 ${batchMode === "existing" ? "bg-blue-600 text-white" : "text-blue-700 dark:text-blue-200"}`}
+              >
+                {t("Lô hiện có")}
+              </button>
+            </div>
+          </div>
+          {batchMode === "existing" ? (
+            <select
+              className={inputCls}
+              value={selectedBatchKey}
+              onChange={(event) => applyExistingBatch(event.target.value)}
+            >
+              <option value="">{t("Chọn batch đang sở hữu...")}</option>
+              {selectableBatches.map((batch) => {
+                const key = batch.batchHash || batch.id || batch.batchQR;
+                return (
+                  <option key={key} value={key}>
+                    {batch.id || batch.batchQR || batch.batchHash} - {batch.productName} ({batch.visibleSerialCount ?? 0} serial)
+                  </option>
+                );
+              })}
+            </select>
+          ) : null}
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={t("Tên sản phẩm")}>
             <input
@@ -254,6 +330,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
               className={monoInputCls}
               value={form.batchId}
               onChange={(e) => setForm({ ...form, batchId: e.target.value })}
+              readOnly={batchMode === "existing"}
             />
           </Field>
           <Field label="Serial ID">
@@ -339,7 +416,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
             disabled={isSubmitting}
             className="btn-brand rounded-lg px-5 py-2.5 text-sm font-bold text-white disabled:opacity-50"
           >
-            {isSubmitting ? t("Đang đăng ký...") : t("Đăng ký lô hàng")}
+            {isSubmitting ? <ActionSpinner label={t("Đang đăng ký...")} /> : t("Đăng ký lô hàng")}
           </button>
           <Link
             href="/dashboard/products"

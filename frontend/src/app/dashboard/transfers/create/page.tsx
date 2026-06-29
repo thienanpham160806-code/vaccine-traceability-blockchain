@@ -5,11 +5,11 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
-import { confirmTransfer, getApiErrorMessage, getDemoActors, getTransferableProducts, getTransfers, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
+import { bulkScanTransfer, confirmBatchShellTransfer, confirmTransfer, createBatchShellTransfer, getApiErrorMessage, getBatches, getDemoActors, getTransferableProducts, getTransfers, rejectBatchShellTransfer, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
-import type { Product, TransferRecord } from "@/lib/types";
+import type { Batch, Product, TransferRecord } from "@/lib/types";
 import {
   allowedTransferRoutes,
   getZodFieldErrors,
@@ -21,6 +21,7 @@ import {
 } from "@/lib/validation";
 import { getTransferLedgerAddress, toBytes32, transferLedgerAbi } from "@/lib/wallet-contracts";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
+import { ActionSpinner } from "@/components/ui/ActionSpinner";
 
 const statusChip: Record<string, string> = {
   PENDING: "bg-amber-50 text-amber-700 border-amber-200",
@@ -40,19 +41,6 @@ const safeIdPattern = /^[A-Za-z0-9._:-]{3,128}$/;
 const safeIdMessage = "Chỉ dùng chữ, số, dấu chấm, gạch dưới, dấu hai chấm hoặc gạch ngang.";
 const batchLikePattern = /^BATCH[-_:]/i;
 const batchLikeSerialMessage = "Vui lòng chọn serial sản phẩm bên trong lô, không dùng mã lô để chuyển giao.";
-
-function optionalNumber(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  const numberValue = Number(trimmed);
-  return Number.isFinite(numberValue) ? numberValue : undefined;
-}
-
-function optionalDateTime(value: string) {
-  if (!value) return undefined;
-  const timestamp = new Date(value).getTime();
-  return Number.isNaN(timestamp) ? undefined : timestamp;
-}
 
 function compactPayload<T extends Record<string, unknown>>(payload: T) {
   return Object.fromEntries(
@@ -77,6 +65,8 @@ function getInitialTransferForm() {
   const user = getStoredUser();
   return {
     serialId: params.get("serialId") || "",
+    batchId: params.get("batchId") || "",
+    autoSelectAllBatch: params.get("autoSelect") === "all",
     fromRole: user?.role && isInitiatorRole(user.role) ? user.role : ("MANUFACTURER" as TransferInitiatorRole),
   };
 }
@@ -98,16 +88,47 @@ function isBatchLikeSerial(value: string) {
   return batchLikePattern.test(value.trim());
 }
 
-function groupProductsByBatch(products: Product[]) {
+function sameId(left?: string, right?: string) {
+  return String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
+}
+
+function batchKeysFromBatch(batch?: Batch) {
+  return [batch?.id, batch?.batchHash, batch?.batchQR]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+}
+
+function batchKeysFromProduct(product?: Product) {
+  return [product?.batchId, product?.batchHash]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+}
+
+function normalizedKeySet(values: Array<string | undefined>) {
+  return new Set(values.filter(Boolean).map((value) => String(value).trim().toLowerCase()));
+}
+
+function findBatchForProduct(product: Product, batches: Batch[]) {
+  const productKeys = normalizedKeySet(batchKeysFromProduct(product));
+  return batches.find((batch) => batchKeysFromBatch(batch).some((key) => productKeys.has(key.toLowerCase())));
+}
+
+function groupProductsByBatch(products: Product[], batches: Batch[] = []) {
   const groups = new Map<string, {
     batchId: string;
     productName: string;
     manufacturerName: string;
     products: Product[];
+    batch?: Batch;
+    keys: string[];
   }>();
 
   products.forEach((product) => {
-    const batchId = product.batchId || product.batchHash || "UNKNOWN_BATCH";
+    const matchedBatch = findBatchForProduct(product, batches);
+    const batchKeys = matchedBatch ? batchKeysFromBatch(matchedBatch) : batchKeysFromProduct(product);
+    const batchId = batchKeys[0] || product.batchId || product.batchHash || "UNKNOWN_BATCH";
     const current = groups.get(batchId);
     if (current) {
       current.products.push(product);
@@ -119,6 +140,22 @@ function groupProductsByBatch(products: Product[]) {
       productName: product.productName || "Unknown product",
       manufacturerName: product.manufacturerName || "Unknown manufacturer",
       products: [product],
+      batch: matchedBatch,
+      keys: batchKeys.length > 0 ? batchKeys : [batchId],
+    });
+  });
+
+  batches.forEach((batch) => {
+    const keys = batchKeysFromBatch(batch);
+    const batchId = keys[0] || "UNKNOWN_BATCH";
+    if (groups.has(batchId)) return;
+    groups.set(batchId, {
+      batchId,
+      productName: batch.productName || "Batch chưa có serial",
+      manufacturerName: batch.manufacturerName || "Unknown manufacturer",
+      products: [],
+      batch,
+      keys: keys.length > 0 ? keys : [batchId],
     });
   });
 
@@ -134,7 +171,7 @@ function TransferList() {
   const { address: connectedAddress } = useAccount();
   const { data: allTransfers = [], isLoading } = useQuery<TransferRecord[]>({
     queryKey: ["transfers"],
-    queryFn: getTransfers,
+    queryFn: () => getTransfers({ scope: "mine" }),
     staleTime: 20_000,
     refetchInterval: 30_000,
     refetchOnWindowFocus: false,
@@ -154,29 +191,37 @@ function TransferList() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleConfirm = async (serialId: string) => {
+  const isBatchTransfer = (transfer?: TransferRecord) =>
+    Boolean(
+      transfer &&
+      (transfer.mode === "OFF_CHAIN_BATCH_CUSTODY" ||
+        transfer.transferMode === "OFF_CHAIN_BATCH_CUSTODY" ||
+        isBatchLikeSerial(transfer.serialId))
+    );
+
+  const handleConfirm = async (transfer: TransferRecord) => {
     setBusy(true);
     setError(null);
     try {
-      if (isBatchLikeSerial(serialId)) {
-        setError(tLabel(batchLikeSerialMessage));
+      if (isBatchTransfer(transfer)) {
+        await confirmBatchShellTransfer(transfer.id);
+        qc.invalidateQueries({ queryKey: ["transfers"] });
+        qc.invalidateQueries({ queryKey: ["transferable-products"] });
         return;
       }
-      const parsed = transferConfirmFormSchema.safeParse({ serialId });
+      const parsed = transferConfirmFormSchema.safeParse({ serialId: transfer.serialId });
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
         setError(Object.values(errors)[0] || tLabel("Serial của lệnh chuyển không hợp lệ."));
         return;
       }
 
-      const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
-      const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer?.toAddress);
+      const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer.toAddress);
       if (shouldUseWallet) {
-        if (!normalizeAddress(connectedAddress) || normalizeAddress(connectedAddress) !== normalizeAddress(transfer?.toAddress)) {
+        if (!normalizeAddress(connectedAddress) || normalizeAddress(connectedAddress) !== normalizeAddress(transfer.toAddress)) {
           throw new Error(tLabel("MetaMask đang chọn sai ví. Hãy chuyển sang ví nhận lệnh trước khi xác nhận."));
         }
         if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
-        if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ xác nhận."));
         const txHash = await writeContractAsync({
           address: getTransferLedgerAddress(),
           abi: transferLedgerAbi,
@@ -197,30 +242,47 @@ function TransferList() {
     }
   };
 
-  const handleReject = async (serialId: string) => {
+  const handleConfirmBatchShell = async (transferId: string) => {
+    setBusy(true);
+    setError(null);
+    try {
+      await confirmBatchShellTransfer(transferId);
+      qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["batches"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, tLabel("Xác nhận batch thất bại.")));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReject = async (transfer: TransferRecord) => {
     if (!rejectReason.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      if (isBatchLikeSerial(serialId)) {
-        setError(tLabel(batchLikeSerialMessage));
+      if (isBatchTransfer(transfer)) {
+        await rejectBatchShellTransfer(transfer.id, rejectReason.trim());
+        setRejectingId(null);
+        setRejectReason("");
+        qc.invalidateQueries({ queryKey: ["transfers"] });
+        qc.invalidateQueries({ queryKey: ["transferable-products"] });
         return;
       }
-      const parsed = transferRejectFormSchema.safeParse({ serialId, rejectionReason: rejectReason });
+      const parsed = transferRejectFormSchema.safeParse({ serialId: transfer.serialId, rejectionReason: rejectReason });
       if (!parsed.success) {
         const errors = getZodFieldErrors(parsed.error);
         setError(Object.values(errors)[0] || tLabel("Vui lòng nhập lý do từ chối hợp lệ."));
         return;
       }
 
-      const transfer = transfers.find((item) => item.serialId === parsed.data.serialId && item.status === "PENDING");
-      const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer?.toAddress);
+      const shouldUseWallet = storedUser?.authMode === "wallet" && normalizeAddress(storedUser.address) === normalizeAddress(transfer.toAddress);
       if (shouldUseWallet) {
-        if (!normalizeAddress(connectedAddress) || normalizeAddress(connectedAddress) !== normalizeAddress(transfer?.toAddress)) {
+        if (!normalizeAddress(connectedAddress) || normalizeAddress(connectedAddress) !== normalizeAddress(transfer.toAddress)) {
           throw new Error(tLabel("MetaMask đang chọn sai ví. Hãy chuyển sang ví nhận lệnh trước khi từ chối."));
         }
         if (!publicClient) throw new Error(tLabel("Chưa sẵn sàng kết nối Sepolia."));
-        if (!transfer) throw new Error(tLabel("Không tìm thấy lệnh chờ từ chối."));
         const txHash = await writeContractAsync({
           address: getTransferLedgerAddress(),
           abi: transferLedgerAbi,
@@ -238,6 +300,24 @@ function TransferList() {
       qc.invalidateQueries({ queryKey: ["transferable-products"] });
   } catch (err: unknown) {
       setError(getApiErrorMessage(err, tLabel("Từ chối thất bại.")));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleRejectBatchShell = async (transferId: string) => {
+    if (!rejectReason.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await rejectBatchShellTransfer(transferId, rejectReason.trim());
+      setRejectingId(null);
+      setRejectReason("");
+      qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["batches"] });
+      qc.invalidateQueries({ queryKey: ["transferable-products"] });
+    } catch (err: unknown) {
+      setError(getApiErrorMessage(err, tLabel("Từ chối batch thất bại.")));
     } finally {
       setBusy(false);
     }
@@ -277,7 +357,11 @@ function TransferList() {
         >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="font-mono text-xs font-semibold text-zinc-700 truncate">{t.serialId}</p>
+              <p className="font-mono text-xs font-semibold text-zinc-700 truncate">
+                {t.mode === "OFF_CHAIN_BATCH_CUSTODY" || t.transferMode === "OFF_CHAIN_BATCH_CUSTODY"
+                  ? t.batchId || t.batchHash || tLabel("Batch")
+                  : t.serialId}
+              </p>
               <p className="mt-0.5 text-xs text-zinc-400">
                 {translateRole(t.fromRole || "", language) || tLabel("Không rõ")} <ArrowRight className="inline h-3 w-3" /> {translateRole(t.toRole || "", language) || tLabel("Không rõ")}
               </p>
@@ -314,7 +398,11 @@ function TransferList() {
                 />
                 <button
                   disabled={busy || !rejectReason.trim()}
-                  onClick={() => handleReject(t.serialId)}
+                  onClick={() =>
+                    isBatchTransfer(t)
+                      ? handleRejectBatchShell(t.id)
+                      : handleReject(t)
+                  }
                   className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
                 >
                   {tLabel("Xác nhận từ chối")}
@@ -329,14 +417,18 @@ function TransferList() {
             ) : (
               <div className="flex gap-2 flex-wrap">
                 <button
-                  disabled={busy || !transferConfirmFormSchema.safeParse({ serialId: t.serialId }).success}
-                  onClick={() => handleConfirm(t.serialId)}
+                  disabled={busy || (!isBatchTransfer(t) && !transferConfirmFormSchema.safeParse({ serialId: t.serialId }).success)}
+                  onClick={() =>
+                    isBatchTransfer(t)
+                      ? handleConfirmBatchShell(t.id)
+                      : handleConfirm(t)
+                  }
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" /> {tLabel("Xác nhận")}
                 </button>
                 <button
-                  disabled={busy || !transferRejectFormSchema.safeParse({ serialId: t.serialId, rejectionReason: "valid reason" }).success}
+                  disabled={busy || (!isBatchTransfer(t) && !transferRejectFormSchema.safeParse({ serialId: t.serialId, rejectionReason: "valid reason" }).success)}
                   onClick={() => setRejectingId(t.id)}
                   className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
                 >
@@ -373,20 +465,12 @@ export default function ScanTransferPage() {
   const { writeContractAsync } = useWriteContract();
   const initialTransferForm = useMemo(() => getInitialTransferForm(), []);
   const [serialId, setSerialId] = useState(initialTransferForm.serialId);
+  const [selectedSerialIds, setSelectedSerialIds] = useState<string[]>(() => initialTransferForm.serialId ? [initialTransferForm.serialId] : []);
+  const initialBatchId = initialTransferForm.batchId;
   const [fromRole, setFromRole] = useState<TransferInitiatorRole>(initialTransferForm.fromRole);
   const [toRole, setToRole] = useState<TransferReceiverRole>("DISTRIBUTOR");
-  const [fromLocation, setFromLocation] = useState("");
-  const [toLocationName, setToLocationName] = useState("");
-  const [fromWarehouseName, setFromWarehouseName] = useState("");
-  const [toWarehouseName, setToWarehouseName] = useState("");
-  const [carrierName, setCarrierName] = useState("");
-  const [vehicleId, setVehicleId] = useState("");
-  const [departedAt, setDepartedAt] = useState("");
-  const [arrivedAt, setArrivedAt] = useState("");
-  const [temperatureMinC, setTemperatureMinC] = useState("");
-  const [temperatureMaxC, setTemperatureMaxC] = useState("");
-  const [handlingNotes, setHandlingNotes] = useState("");
-  const [user, setUser] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
+  const [selectedBatchShellId, setSelectedBatchShellId] = useState("");
+  const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [transferId, setTransferId] = useState<string | null>(null);
@@ -394,20 +478,11 @@ export default function ScanTransferPage() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isBusy, setIsBusy] = useState(false);
 
-  useEffect(() => {
-    const storedUser = getStoredUser();
-    setUser(storedUser);
-    if (storedUser?.role && isInitiatorRole(storedUser.role)) {
-      setFromRole(storedUser.role);
-    }
-
-  }, []);
-
   const selectableFromRoles = useMemo<TransferInitiatorRole[]>(() => {
-    if (user?.role === "ADMIN") return fromRoleOptions;
+    if (user?.role === "ADMIN" || user?.role === "RECALL_AUTHORITY") return fromRoleOptions;
     return user?.role && isInitiatorRole(user.role) ? [user.role] : [];
   }, [user]);
-  const inventoryRole = user?.role === "ADMIN" ? fromRole : user?.role;
+  const inventoryRole = user?.role === "ADMIN" || user?.role === "RECALL_AUTHORITY" ? fromRole : user?.role;
   const canLoadInventory = Boolean(
     user && inventoryRole && operationalInventoryRoles.includes(inventoryRole as (typeof operationalInventoryRoles)[number])
   );
@@ -423,10 +498,60 @@ export default function ScanTransferPage() {
     enabled: canLoadInventory,
     staleTime: 10_000,
   });
-  const transferableProducts = transferableInventory?.items || [];
+  const { data: ownedBatches = [] } = useQuery<Batch[]>({
+    queryKey: ["batches", user?.address, inventoryRole],
+    queryFn: () => getBatches({ scope: "mine" }),
+    enabled: canLoadInventory,
+    staleTime: 10_000,
+  });
+  const transferableProducts = useMemo(() => transferableInventory?.items || [], [transferableInventory?.items]);
   const canCreateTransfer = Boolean(transferableInventory?.canTransfer);
 
-  const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts), [transferableProducts]);
+  const emptyTransferableBatches = useMemo(() => {
+    const productBatchKeys = normalizedKeySet(transferableProducts.flatMap((product) => batchKeysFromProduct(product)));
+    return ownedBatches.filter((batch) => {
+      const keys = batchKeysFromBatch(batch).map((item) => item.toLowerCase());
+      return keys.length > 0 && keys.every((key) => !productBatchKeys.has(key)) && !batch.recalledAt && !batch.archivedAt;
+    });
+  }, [ownedBatches, transferableProducts]);
+
+  const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts, emptyTransferableBatches), [emptyTransferableBatches, transferableProducts]);
+  const batchCodeSet = useMemo(() => {
+    const codes = new Set<string>();
+    batchGroups.forEach((group) => {
+      codes.add(group.batchId.toLowerCase());
+      group.keys.forEach((key) => codes.add(key.toLowerCase()));
+      group.products.forEach((product) => {
+        if (product.batchId) codes.add(product.batchId.toLowerCase());
+        if (product.batchHash) codes.add(product.batchHash.toLowerCase());
+      });
+    });
+    return codes;
+  }, [batchGroups]);
+  const isKnownBatchCode = (value: string) => batchCodeSet.has(value.trim().toLowerCase());
+
+  useEffect(() => {
+    if (!initialBatchId || !initialTransferForm.autoSelectAllBatch || transferableProducts.length === 0 || selectedSerialIds.length > 0) return;
+    const selectedGroup = batchGroups.find((group) =>
+      group.keys.some((key) => sameId(key, initialBatchId)) || sameId(group.batchId, initialBatchId)
+    );
+    const selected = (selectedGroup?.products || transferableProducts.filter((product) =>
+      batchKeysFromProduct(product).some((key) => sameId(key, initialBatchId))
+    ))
+      .map((product) => product.serialId)
+      .filter((id) =>
+        id &&
+        !isBatchLikeSerial(id) &&
+        !sameId(id, initialBatchId) &&
+        !selectedGroup?.keys.some((key) => sameId(id, key))
+      );
+    if (selected.length > 0) {
+      window.setTimeout(() => {
+        setSelectedSerialIds(selected);
+        setSerialId(selected[0]);
+      }, 0);
+    }
+  }, [batchGroups, initialBatchId, initialTransferForm.autoSelectAllBatch, selectedSerialIds.length, transferableProducts]);
 
   const toRoleOptions = useMemo(() => {
     const backendRoles = (transferableInventory?.allowedToRoles || []).filter(isReceiverRole);
@@ -435,36 +560,51 @@ export default function ScanTransferPage() {
   const effectiveToRole = toRoleOptions.includes(toRole) ? toRole : toRoleOptions[0] || "DISTRIBUTOR";
 
   const create = async () => {
-    if (!serialId.trim() || isBusy) return;
-    if (!safeIdPattern.test(serialId.trim())) {
+    const serialsToTransfer = Array.from(new Set((selectedSerialIds.length ? selectedSerialIds : [serialId]).map((item) => item.trim()).filter(Boolean)));
+    const primarySerialId = serialsToTransfer[0] || "";
+    if (isBusy) return;
+    if (!primarySerialId && !selectedBatchShellId) return;
+    if (selectedBatchShellId && serialsToTransfer.length === 0) {
+      setIsBusy(true);
+      setError(null);
+      setStatusMsg(t("Đang tạo lệnh chuyển batch..."));
+      setTxHash(null);
+      try {
+        const data = await createBatchShellTransfer({
+          batchId: selectedBatchShellId,
+          fromRole,
+          toRole: effectiveToRole,
+        });
+        setTransferId(data.transferId || data.transfer.id);
+        setStatusMsg(t("Đã tạo lệnh chuyển batch. Bên nhận có thể xác nhận trong danh sách lệnh."));
+        qc.invalidateQueries({ queryKey: ["transfers"] });
+        qc.invalidateQueries({ queryKey: ["batches"] });
+        qc.invalidateQueries({ queryKey: ["transferable-products"] });
+      } catch (err: unknown) {
+        setError(getApiErrorMessage(err, t("Tạo lệnh batch thất bại.")));
+        setStatusMsg(null);
+      } finally {
+        setIsBusy(false);
+      }
+      return;
+    }
+    if (serialsToTransfer.some((item) => !safeIdPattern.test(item))) {
       setError(t(safeIdMessage));
       return;
     }
-    if (isBatchLikeSerial(serialId)) {
+    if (serialsToTransfer.some((item) => isBatchLikeSerial(item) || isKnownBatchCode(item) || sameId(item, initialBatchId))) {
       setError(t(batchLikeSerialMessage));
       return;
     }
     const transferPayload = compactPayload({
-      serialId: serialId.trim(),
+      serialId: primarySerialId,
       fromRole,
       toRole: effectiveToRole,
-      fromLocation: fromLocation.trim() || undefined,
-      fromLocationName: fromLocation.trim() || undefined,
-      toLocationName: toLocationName.trim() || undefined,
-      fromWarehouseName: fromWarehouseName.trim() || undefined,
-      toWarehouseName: toWarehouseName.trim() || undefined,
-      carrierName: carrierName.trim() || undefined,
-      vehicleId: vehicleId.trim() || undefined,
-      departedAt: optionalDateTime(departedAt),
-      arrivedAt: optionalDateTime(arrivedAt),
-      temperatureMinC: optionalNumber(temperatureMinC),
-      temperatureMaxC: optionalNumber(temperatureMaxC),
-      temperatureUnit: (temperatureMinC.trim() || temperatureMaxC.trim()) ? "C" : undefined,
-      handlingNotes: handlingNotes.trim() || undefined,
+      batchId: initialBatchId || undefined,
     });
     setIsBusy(true);
     setError(null);
-    setStatusMsg(`${t("Đang tạo lệnh")} ${fromRole} -> ${effectiveToRole} on-chain...`);
+    setStatusMsg(`${t("Đang tạo lệnh")} ${fromRole} -> ${effectiveToRole} on-chain... (${serialsToTransfer.length} serial)`);
     setTxHash(null);
     try {
       const parsed = transferScanFormSchema.safeParse(transferPayload);
@@ -476,7 +616,7 @@ export default function ScanTransferPage() {
         return;
       }
 
-      let data;
+      let data: { txHash?: string; transfer?: TransferRecord; transferId?: string };
       const user = getStoredUser();
       if (user?.authMode === "wallet") {
         if (!address) throw new Error(t("Chưa kết nối MetaMask."));
@@ -504,12 +644,23 @@ export default function ScanTransferPage() {
           toLocationHash: toBytes32(`to:${receiverAddress}`),
           txHash,
         });
+      } else if (serialsToTransfer.length > 1) {
+        const bulkPayload = { ...parsed.data };
+        delete (bulkPayload as Partial<typeof parsed.data>).serialId;
+        const bulk = await bulkScanTransfer({
+          ...bulkPayload,
+          serialIds: serialsToTransfer,
+        });
+        const failedText = bulk.failed.length > 0 ? ` ${bulk.failed.length} lỗi.` : "";
+        setStatusMsg(`${t("Đã tạo")} ${bulk.successful.length}/${bulk.total} ${t("lệnh chuyển.")}${failedText}`);
+        setTransferId(bulk.successful[0]?.transfer?.id ?? null);
+        data = bulk.successful[0] || {};
       } else {
         data = await scanTransfer(parsed.data);
       }
       setTxHash(data.txHash ?? null);
-      setTransferId(data.transfer?.id ?? null);
-      setStatusMsg(t("Đã tạo lệnh. Xác nhận giao hàng ở danh sách bên phải."));
+      setTransferId(data.transfer?.id ?? transferId);
+      if (serialsToTransfer.length === 1) setStatusMsg(t("Đã tạo lệnh. Xác nhận giao hàng ở danh sách bên phải."));
       qc.invalidateQueries({ queryKey: ["transfers"] });
       qc.invalidateQueries({ queryKey: ["transferable-products"] });
     } catch (err: unknown) {
@@ -590,9 +741,16 @@ export default function ScanTransferPage() {
               onChange={(e) => {
                 setFieldErrors({});
                 setSerialId(e.target.value);
+                setSelectedSerialIds(e.target.value.trim() ? [e.target.value.trim()] : []);
+                setSelectedBatchShellId("");
               }}
               placeholder="VCN-…"
             />
+            {selectedSerialIds.length > 1 ? (
+              <p className="mt-1 text-xs font-semibold text-blue-600">
+                {t("Đã chọn")} {selectedSerialIds.length} serial
+              </p>
+            ) : null}
           </Field>
 
           {canCreateTransfer ? (
@@ -672,7 +830,15 @@ export default function ScanTransferPage() {
               </div>
             ) : (
               <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
-                {batchGroups.map((group) => (
+                {batchGroups.map((group) => {
+                  const validProducts = group.products.filter((product) =>
+                    product.serialId &&
+                    !isBatchLikeSerial(product.serialId) &&
+                    !sameId(product.serialId, group.batchId) &&
+                    !group.keys.some((key) => sameId(product.serialId, key))
+                  );
+
+                  return (
                   <div key={group.batchId} className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950">
                     <div className="flex flex-wrap items-start justify-between gap-2">
                       <div className="min-w-0">
@@ -681,21 +847,79 @@ export default function ScanTransferPage() {
                         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{group.manufacturerName}</p>
                       </div>
                       <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-                        {group.products.length} serial
+                        {validProducts.length > 0 ? `${validProducts.length} serial` : t("Batch")}
                       </span>
                     </div>
+                    {canCreateTransfer ? (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {validProducts.length > 0 ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ids = validProducts.map((product) => product.serialId);
+                                setSelectedSerialIds((current) => Array.from(new Set([...current, ...ids])));
+                                setSerialId(ids[0] || serialId);
+                                setSelectedBatchShellId("");
+                                setFieldErrors({});
+                                setError(null);
+                              }}
+                              className="rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1.5 text-[11px] font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+                            >
+                              {t("Chọn cả lô")}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const ids = new Set(validProducts.map((product) => product.serialId));
+                                setSelectedSerialIds((current) => current.filter((id) => !ids.has(id)));
+                                setFieldErrors({});
+                                setError(null);
+                              }}
+                              className="rounded-md border border-zinc-200 bg-white px-2.5 py-1.5 text-[11px] font-bold text-zinc-600 hover:bg-zinc-50"
+                            >
+                              {t("Bỏ chọn lô")}
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedBatchShellId(group.batchId);
+                              setSelectedSerialIds([]);
+                              setSerialId("");
+                              setFieldErrors({});
+                              setError(null);
+                            }}
+                            className={`rounded-md border px-2.5 py-1.5 text-[11px] font-bold ${
+                              selectedBatchShellId === group.batchId
+                                ? "border-amber-500 bg-amber-500 text-white"
+                                : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                            }`}
+                          >
+                            {selectedBatchShellId === group.batchId ? t("Đã chọn batch") : t("Chuyển batch")}
+                          </button>
+                        )}
+                      </div>
+                    ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {group.products.slice(0, 8).map((product) => (
+                      {validProducts.slice(0, 8).map((product) => (
                         <button
                           key={product.serialId}
                           type="button"
                           onClick={() => {
-                            setSerialId(product.serialId);
+                            setSelectedSerialIds((current) => {
+                              const exists = current.includes(product.serialId);
+                              const next = exists ? current.filter((id) => id !== product.serialId) : [...current, product.serialId];
+                              setSerialId(next[0] || product.serialId);
+                              setSelectedBatchShellId("");
+                              return next;
+                            });
                             setFieldErrors({});
                             setError(null);
                           }}
                           className={`rounded-md border px-2.5 py-1.5 font-mono text-[11px] font-bold transition ${
-                            serialId === product.serialId
+                            selectedSerialIds.includes(product.serialId)
                               ? "border-blue-500 bg-blue-600 text-white"
                               : "border-zinc-200 bg-zinc-50 text-zinc-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:border-blue-500/60 dark:hover:bg-blue-500/10"
                           }`}
@@ -703,9 +927,9 @@ export default function ScanTransferPage() {
                           {product.serialId}
                         </button>
                       ))}
-                      {group.products.length > 8 ? (
+                      {validProducts.length > 8 ? (
                         <span className="rounded-md border border-zinc-200 px-2.5 py-1.5 text-[11px] font-semibold text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-                          +{group.products.length - 8}
+                          +{validProducts.length - 8}
                         </span>
                       ) : null}
                     </div>
@@ -715,118 +939,12 @@ export default function ScanTransferPage() {
                       </p>
                     ) : null}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
 
-          {canCreateTransfer ? (
-            <>
-              <Field label={t("Vị trí (giả lập)")}>
-                <input
-                  className={inputCls}
-                  value={fromLocation}
-                  onChange={(e) => setFromLocation(e.target.value)}
-                  placeholder={t("Ví dụ: Hà Nội – Kho 1")}
-                />
-              </Field>
-
-              <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-                <div className="mb-3">
-                  <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t("Thông tin vận chuyển")}</h3>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{t("Dữ liệu này dùng để hiển thị node lịch sử chuỗi cung ứng khi verify.")}</p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label={t("Kho đi")}>
-                    <input
-                      className={inputCls}
-                      value={fromWarehouseName}
-                      onChange={(e) => setFromWarehouseName(e.target.value)}
-                      placeholder={t("Ví dụ: Kho lạnh A")}
-                    />
-                  </Field>
-                  <Field label={t("Kho đến")}>
-                    <input
-                      className={inputCls}
-                      value={toWarehouseName}
-                      onChange={(e) => setToWarehouseName(e.target.value)}
-                      placeholder={t("Ví dụ: Kho tiếp nhận B")}
-                    />
-                  </Field>
-                  <Field label={t("Vị trí đến")}>
-                    <input
-                      className={inputCls}
-                      value={toLocationName}
-                      onChange={(e) => setToLocationName(e.target.value)}
-                      placeholder={t("Ví dụ: TP.HCM – Quận 1")}
-                    />
-                  </Field>
-                  <Field label={t("Đơn vị vận chuyển")}>
-                    <input
-                      className={inputCls}
-                      value={carrierName}
-                      onChange={(e) => setCarrierName(e.target.value)}
-                      placeholder={t("Ví dụ: ColdChain Logistics")}
-                    />
-                  </Field>
-                  <Field label={t("Mã xe / container")}>
-                    <input
-                      className={inputCls}
-                      value={vehicleId}
-                      onChange={(e) => setVehicleId(e.target.value)}
-                      placeholder="TRUCK-01"
-                    />
-                  </Field>
-                  <Field label={t("Thời gian rời kho")}>
-                    <input
-                      className={inputCls}
-                      type="datetime-local"
-                      value={departedAt}
-                      onChange={(e) => setDepartedAt(e.target.value)}
-                    />
-                  </Field>
-                  <Field label={t("Thời gian đến dự kiến")}>
-                    <input
-                      className={inputCls}
-                      type="datetime-local"
-                      value={arrivedAt}
-                      onChange={(e) => setArrivedAt(e.target.value)}
-                    />
-                  </Field>
-                  <Field label={t("Nhiệt độ tối thiểu (C)")}>
-                    <input
-                      className={inputCls}
-                      type="number"
-                      step="0.1"
-                      value={temperatureMinC}
-                      onChange={(e) => setTemperatureMinC(e.target.value)}
-                      placeholder="2"
-                    />
-                  </Field>
-                  <Field label={t("Nhiệt độ tối đa (C)")}>
-                    <input
-                      className={inputCls}
-                      type="number"
-                      step="0.1"
-                      value={temperatureMaxC}
-                      onChange={(e) => setTemperatureMaxC(e.target.value)}
-                      placeholder="8"
-                    />
-                  </Field>
-                </div>
-
-                <Field label={t("Ghi chú xử lý")}>
-                  <textarea
-                    className={`${inputCls} min-h-20 resize-y`}
-                    value={handlingNotes}
-                    onChange={(e) => setHandlingNotes(e.target.value)}
-                    placeholder={t("Ví dụ: Niêm phong còn nguyên, duy trì thùng lạnh trong suốt quá trình vận chuyển.")}
-                  />
-                </Field>
-              </div>
-            </>
-          ) : null}
         </div>
 
         {/* Status */}
@@ -870,11 +988,11 @@ export default function ScanTransferPage() {
         <div className="mt-5 flex flex-wrap gap-2.5">
           {canCreateTransfer ? (
             <button
-              disabled={isBusy || !serialId.trim()}
+              disabled={isBusy || !(selectedSerialIds.length || serialId.trim() || selectedBatchShellId)}
               onClick={create}
               className="btn-brand rounded-lg px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
             >
-              {isBusy ? t("Đang xử lý...") : t("Tạo lệnh")}
+              {isBusy ? <ActionSpinner label={t("Đang xử lý...")} /> : selectedBatchShellId ? t("Tạo lệnh batch") : selectedSerialIds.length > 1 ? `${t("Tạo lệnh")} (${selectedSerialIds.length})` : t("Tạo lệnh")}
             </button>
           ) : null}
           <button

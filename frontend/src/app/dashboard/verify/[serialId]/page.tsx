@@ -47,6 +47,11 @@ export default function VerifyPage({ params }: PageProps) {
 
       <div className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:shadow-none">
         <h2 className="text-xl font-bold">{result.product.productName}</h2>
+        {String(result.product.status || "").toUpperCase() === "ADMINISTERED" ? (
+          <p className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
+            Serial này đã được xác nhận là đã tiêm. QR không còn hợp lệ để gắn lên vaccine khác.
+          </p>
+        ) : null}
         <div className="mt-4 grid gap-3 text-sm md:grid-cols-2">
           <p><span className="font-semibold">{t("Mã lô")}:</span> {result.product.batchId}</p>
           <p><span className="font-semibold">{t("Trạng thái")}:</span> {result.product.status}</p>

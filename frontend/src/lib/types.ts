@@ -22,7 +22,8 @@ export type ProductStatus =
   | "ADMINISTERED"
   | "FLAGGED"
   | "RECALLED"
-  | "INVALID";
+  | "INVALID"
+  | "ARCHIVED";
 
 export type RiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
@@ -36,6 +37,10 @@ export type Product = {
   manufacturerAddress?: string;
   currentOwner: string;
   ownerRole?: UserRole;
+  currentLocationName?: string | null;
+  currentWarehouseName?: string | null;
+  latestTransferId?: string | null;
+  syncStatus?: "OK" | "FIREBASE_ONLY" | "CHAIN_ONLY" | "OWNER_MISMATCH" | "STATUS_MISMATCH" | "STALE_PENDING";
   status: ProductStatus;
   riskLevel: RiskLevel;
   expiryDate: string;
@@ -48,6 +53,17 @@ export type Product = {
   ipfsCid?: string;
   qrImage?: string;
   notes?: string;
+  archivedAt?: number;
+  archivedBy?: string;
+  archiveReason?: string;
+  invalidatedAt?: number;
+  invalidatedBy?: string;
+  invalidationReason?: string;
+  administeredAt?: number;
+  administeredBy?: string;
+  administeredByRole?: string;
+  administeredReason?: string;
+  administeredAuditId?: string;
   registeredAt?: number;
 
   createdAt?: number;
@@ -188,12 +204,20 @@ export type Batch = {
   metadataHash?: string;
   productName: string;
   quantity: number;
+  visibleSerialCount?: number;
   manufacturerAddress?: string;
   manufacturerName?: string;
   expiryDate: string;
   origin?: "MANUFACTURED" | "IMPORTED";
   ipfsCid?: string;
   recalledAt?: number;
+  archivedAt?: number;
+  archivedBy?: string;
+  archiveReason?: string;
+  currentOwner?: string;
+  ownerRole?: UserRole;
+  pendingBatchTransferId?: string | null;
+  custodyStatus?: string;
   createdAt?: number;
   updatedAt?: number;
 };
@@ -281,6 +305,13 @@ export type TransferRecord = {
   fromRole: UserRole;
   toRole: UserRole;
   status: TransferStatus;
+  visibilityScope?: "mine" | "all";
+  batchTransferGroupId?: string;
+  mode?: "SERIAL_ON_CHAIN" | "BULK_SERIAL_ON_CHAIN" | "OFF_CHAIN_BATCH_CUSTODY";
+  transferMode?: "SERIAL_ON_CHAIN" | "BULK_SERIAL_ON_CHAIN" | "OFF_CHAIN_BATCH_CUSTODY";
+  batchHash?: string;
+  offChainOnly?: boolean;
+  reasonNote?: string;
   fromLocationHash?: string;
   toLocationHash?: string;
   fromLocationName?: string;

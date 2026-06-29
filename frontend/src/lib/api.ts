@@ -100,14 +100,104 @@ export type TransferActionResponse = {
   serialId?: string;
   serialHash?: string;
   rejectionReason?: string;
+  jobId?: string;
   txHash?: string;
+};
+
+export type BatchShellTransferResponse = {
+  transfer: TransferRecord;
+  transferId: string;
+};
+
+export type ReconcileItem = {
+  productKey: string;
+  serialId: string;
+  serialHash: string;
+  firebaseOwner?: string | null;
+  firebaseOwnerRole?: string | null;
+  firebaseStatus?: string | null;
+  firebasePendingTransferId?: string | null;
+  chainExists: boolean;
+  chainOwner?: string | null;
+  chainOwnerRole?: string | null;
+  chainStatus?: string | null;
+  chainPendingExists: boolean;
+  syncStatus: Product["syncStatus"];
+  problems: string[];
+};
+
+export type ReconcilePreviewResponse = {
+  summary: Record<string, number>;
+  items: ReconcileItem[];
+};
+
+export type ReconcileApplyResponse = {
+  summary: Record<string, number>;
+  applied: Array<{ serialId: string; syncStatus: Product["syncStatus"]; action: string }>;
+  skipped: Array<{ serialId: string; reason: string }>;
+};
+
+export type RouteDiagnosticsResponse = {
+  routes: Array<{
+    fromRole: string;
+    toRole: string;
+    allowedOnChain: boolean;
+    allowedByApiPolicy: boolean;
+    mustBeBlocked: boolean;
+  }>;
+  invalidOpenRoutes: Array<{
+    fromRole: string;
+    toRole: string;
+    allowedOnChain: boolean;
+    allowedByApiPolicy: boolean;
+    mustBeBlocked: boolean;
+  }>;
+  healthy: boolean;
+};
+
+export type ArchiveProductsResponse = {
+  mode: "ARCHIVE" | "INVALIDATE";
+  total: number;
+  archived: Array<{ serialId: string; serialHash: string; status: Product["status"] }>;
+  archivedBatches?: Array<{ batchId: string; serialsAffected: number; status: Product["status"] }>;
+  failed: Array<{ serialId?: string; batchId?: string; code: string; message: string }>;
+};
+
+export type ArchivedDataResponse = {
+  total: number;
+  products: Array<{
+    id: string;
+    serialId?: string;
+    serialHash?: string;
+    mode?: "ARCHIVE" | "INVALIDATE";
+    reason?: string;
+    actor?: string;
+    createdAt?: number;
+    product?: Product | null;
+  }>;
+  batches: Array<{
+    id: string;
+    batchId?: string;
+    mode?: "ARCHIVE" | "INVALIDATE";
+    reason?: string;
+    actor?: string;
+    serialsAffected?: number;
+    createdAt?: number;
+    batch?: Batch | null;
+  }>;
 };
 
 export type DisputeRecord = {
   id?: string;
+  targetType?: "SERIAL" | "BATCH";
+  targetId?: string;
   relatedSerialId: string;
+  relatedBatchId?: string;
   reason: string;
   reportedBy?: string;
+  reportedByAddress?: string;
+  createdByAddress?: string;
+  createdByRole?: string;
   status?: string;
   statusNote?: string;
   evidenceIpfsCid?: string;
@@ -187,13 +277,18 @@ export const endpoints = {
   getProducts: "/products",
   getProductDetail: (serialId: string) => `/products/${encodeURIComponent(serialId)}/detail`,
   updateProduct: (serialId: string) => `/products/${encodeURIComponent(serialId)}`,
+  administerProduct: (serialId: string) => `/products/${encodeURIComponent(serialId)}/administer`,
 
   getTransfers: "/transfers",
   getTransfer: (transferId: string) => `/transfers/${transferId}`,
   scanTransfer: "/transfers/scan",
+  batchShellTransfer: "/transfers/batch-shell",
+  confirmBatchShellTransfer: (transferId: string) => `/transfers/${encodeURIComponent(transferId)}/confirm-batch-shell`,
+  rejectBatchShellTransfer: (transferId: string) => `/transfers/${encodeURIComponent(transferId)}/reject-batch-shell`,
   confirmTransfer: "/transfers/confirm",
   rejectTransfer: "/transfers/reject",
   clearStaleTransfer: (transferId: string) => `/transfers/${encodeURIComponent(transferId)}/clear-stale`,
+  bulkScanTransfer: "/transfers/bulk-scan",
   syncWalletTransferCreate: "/transfers/sync-wallet-create",
   syncWalletTransferConfirm: "/transfers/sync-wallet-confirm",
   syncWalletTransferReject: "/transfers/sync-wallet-reject",
@@ -211,6 +306,12 @@ export const endpoints = {
 
   recalls: "/recalls",
   syncWalletRecall: "/recalls/sync-wallet",
+  reconcilePreview: "/admin/reconcile/preview",
+  reconcileApply: "/admin/reconcile/apply",
+  routeDiagnostics: "/admin/route-diagnostics",
+  routeDiagnosticsApply: "/admin/route-diagnostics/apply",
+  archiveProducts: "/admin/products/archive",
+  archivedData: "/admin/archived",
 };
 
 export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
@@ -343,32 +444,32 @@ export async function rejectRoleRequest(id: string, reason?: string) {
   return requireApiData(res.data.data, "Role request reject response did not include data.");
 }
 
-export async function getDashboardOverview() {
-  const res = await api.get<ApiResponse<DashboardStats>>(endpoints.overview);
+export async function getDashboardOverview(scope: "mine" | "all" = "mine") {
+  const res = await api.get<ApiResponse<DashboardStats>>(endpoints.overview, { params: { scope } });
   return requireApiData(res.data.data, "Dashboard response did not include data.");
 }
 
-export async function getDashboardRecentActivity(limit = 10) {
+export async function getDashboardRecentActivity(limit = 10, scope: "mine" | "all" = "mine") {
   const res = await api.get<ApiResponse<DashboardActivity[]>>(endpoints.recentActivity, {
-    params: { limit },
+    params: { limit, scope },
   });
   return res.data.data || [];
 }
 
 // ============= Batches =============
 
-export async function getBatches() {
-  const res = await api.get<ApiResponse<Batch[]>>(endpoints.getBatches);
+export async function getBatches(params?: { scope?: "mine" | "all" }) {
+  const res = await api.get<ApiResponse<Batch[]>>(endpoints.getBatches, { params });
   return res.data.data || [];
 }
 
-export async function getBatch(batchId: string) {
-  const res = await api.get<ApiResponse<Batch>>(endpoints.getBatch(batchId));
+export async function getBatch(batchId: string, params?: { scope?: "mine" | "all" }) {
+  const res = await api.get<ApiResponse<Batch>>(endpoints.getBatch(batchId), { params });
   return requireApiData(res.data.data, "Batch response did not include data.");
 }
 
-export async function getBatchSerials(batchId: string) {
-  const res = await api.get<ApiResponse<Product[]>>(endpoints.getBatchSerials(batchId));
+export async function getBatchSerials(batchId: string, params?: { scope?: "mine" | "all" }) {
+  const res = await api.get<ApiResponse<Product[]>>(endpoints.getBatchSerials(batchId), { params });
   return res.data.data || [];
 }
 
@@ -380,6 +481,7 @@ export async function getProducts(params?: {
   manufacturer?: string;
   owner?: string;
   batch?: string;
+  scope?: "mine" | "all";
   origin?: "MANUFACTURED" | "IMPORTED";
   sort?: string;
   page?: number;
@@ -529,9 +631,14 @@ export async function getImportApprovals() {
 
 // ============= Transfers =============
 
-export async function getTransfers() {
-  const res = await api.get<ApiResponse<TransferRecord[]>>(endpoints.getTransfers);
+export async function getTransfers(params?: { scope?: "mine" | "all" }) {
+  const res = await api.get<ApiResponse<TransferRecord[]>>(endpoints.getTransfers, { params });
   return res.data.data || [];
+}
+
+export async function administerProduct(serialId: string, payload?: { reason?: string }) {
+  const res = await api.post<ApiResponse<{ product: Product; auditId: string }>>(endpoints.administerProduct(serialId), payload || {});
+  return requireApiData(res.data.data, "Administer product response did not include data.");
 }
 
 export async function getTransfer(transferId: string) {
@@ -561,6 +668,55 @@ export async function scanTransfer(payload: {
 }) {
   const res = await api.post<ApiResponse<TransferActionResponse>>(endpoints.scanTransfer, payload);
   return requireApiData(res.data.data, "Scan transfer response did not include data.");
+}
+
+export async function createBatchShellTransfer(payload: {
+  batchId: string;
+  fromRole: string;
+  toRole: string;
+  receiverAddress?: string;
+}) {
+  const res = await api.post<ApiResponse<BatchShellTransferResponse>>(endpoints.batchShellTransfer, payload);
+  return requireApiData(res.data.data, "Batch shell transfer response did not include data.");
+}
+
+export async function confirmBatchShellTransfer(transferId: string) {
+  const res = await api.post<ApiResponse<TransferRecord>>(endpoints.confirmBatchShellTransfer(transferId));
+  return requireApiData(res.data.data, "Confirm batch shell transfer response did not include data.");
+}
+
+export async function rejectBatchShellTransfer(transferId: string, rejectionReason: string) {
+  const res = await api.post<ApiResponse<TransferRecord>>(endpoints.rejectBatchShellTransfer(transferId), { rejectionReason });
+  return requireApiData(res.data.data, "Reject batch shell transfer response did not include data.");
+}
+
+export async function bulkScanTransfer(payload: {
+  serialIds: string[];
+  fromRole: string;
+  toRole: string;
+  receiverAddress?: string;
+  batchId?: string;
+  fromLocation?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: "C" | "F";
+  handlingNotes?: string;
+}) {
+  const res = await api.post<ApiResponse<{
+    batchTransferGroupId: string;
+    total: number;
+    successful: Array<{ serialId: string; transfer?: TransferRecord; serialHash?: string; jobId?: string }>;
+    failed: Array<{ serialId: string; code: string; message: string }>;
+  }>>(endpoints.bulkScanTransfer, payload);
+  return requireApiData(res.data.data, "Bulk scan transfer response did not include data.");
 }
 
 export async function confirmTransfer(serialId: string) {
@@ -669,6 +825,42 @@ export async function syncWalletRecall(payload: { batchHash: string; reason: str
   return requireApiData(res.data.data, "Wallet recall sync response did not include data.");
 }
 
+export async function previewReconcile() {
+  const res = await api.get<ApiResponse<ReconcilePreviewResponse>>(endpoints.reconcilePreview);
+  return requireApiData(res.data.data, "Reconcile preview response did not include data.");
+}
+
+export async function applyReconcile() {
+  const res = await api.post<ApiResponse<ReconcileApplyResponse>>(endpoints.reconcileApply);
+  return requireApiData(res.data.data, "Reconcile apply response did not include data.");
+}
+
+export async function getRouteDiagnostics() {
+  const res = await api.get<ApiResponse<RouteDiagnosticsResponse>>(endpoints.routeDiagnostics);
+  return requireApiData(res.data.data, "Route diagnostics response did not include data.");
+}
+
+export async function applyRouteDiagnostics() {
+  const res = await api.post<ApiResponse<{
+    route: { fromRole: string; toRole: string };
+    changed: boolean;
+    allowedBefore: boolean;
+    allowedAfter: boolean;
+    txHash?: string | null;
+  }>>(endpoints.routeDiagnosticsApply);
+  return requireApiData(res.data.data, "Route diagnostics apply response did not include data.");
+}
+
+export async function archiveProducts(payload: { serialIds?: string[]; batchIds?: string[]; reason?: string; mode?: "ARCHIVE" | "INVALIDATE" }) {
+  const res = await api.post<ApiResponse<ArchiveProductsResponse>>(endpoints.archiveProducts, payload);
+  return requireApiData(res.data.data, "Archive products response did not include data.");
+}
+
+export async function getArchivedData() {
+  const res = await api.get<ApiResponse<ArchivedDataResponse>>(endpoints.archivedData);
+  return requireApiData(res.data.data, "Archived data response did not include data.");
+}
+
 export async function getDisputes() {
   const res = await api.get<ApiResponse<DisputeRecord[]>>(endpoints.disputes);
   return res.data.data || [];
@@ -679,14 +871,14 @@ export async function getDispute(id: string) {
   return requireApiData(res.data.data, "Dispute response did not include data.");
 }
 
-export async function createDispute(payload: { relatedSerialId: string; reason: string; reportedBy?: string }) {
+export async function createDispute(payload: { relatedSerialId?: string; targetId?: string; targetType?: "SERIAL" | "BATCH"; reason: string; reportedBy?: string }) {
   const res = await api.post<ApiResponse<DisputeRecord>>(endpoints.disputes, payload);
   return requireApiData(res.data.data, "Create dispute response did not include data.");
 }
 
 export async function updateDisputeStatus(
   id: string,
-  payload: { status: "OPEN" | "INVESTIGATING" | "RESOLVED" | "REJECTED"; note?: string; updatedBy?: string }
+  payload: { status: "OPEN" | "INVESTIGATING" | "NEEDS_EXPLANATION" | "RESOLVED" | "REJECTED" | "RECALL_CREATED"; note?: string; updatedBy?: string }
 ) {
   const res = await api.put<ApiResponse<DisputeRecord>>(endpoints.updateDisputeStatus(id), payload);
   return requireApiData(res.data.data, "Update dispute status response did not include data.");
