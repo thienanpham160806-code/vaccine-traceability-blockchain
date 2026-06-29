@@ -74,7 +74,7 @@ PRODUCT_REGISTRY_ABI = [
  * Contract client - manages interaction with smart contracts
  */
 export class ContractClient {
-  private provider: ethers.JsonRpcProvider;
+  private provider: ethers.Provider;
   private wallet: ethers.Wallet;
   public productRegistry: ethers.Contract | null = null;
   public transferLedger: ethers.Contract | null = null;
@@ -92,14 +92,21 @@ export class ContractClient {
 
   constructor() {
     try {
-      const rpcUrl = config.blockchainRpcUrl;
+      const rpcUrls = config.blockchainRpcUrls;
       const privateKey = config.backendPrivateKey;
 
-      if (!rpcUrl || !privateKey) {
+      if (!rpcUrls.length || !privateKey) {
         throw new Error('Missing RPC URL or private key in config');
       }
 
-      this.provider = new ethers.JsonRpcProvider(rpcUrl);
+      if (rpcUrls.length === 1) {
+        this.provider = new ethers.JsonRpcProvider(rpcUrls[0]);
+      } else {
+        this.provider = new ethers.FallbackProvider(
+          rpcUrls.map((rpcUrl) => new ethers.JsonRpcProvider(rpcUrl)),
+          1
+        );
+      }
       this.wallet = new ethers.Wallet(privateKey, this.provider);
 
       Logger.success(`✅ Backend wallet: ${this.wallet.address}`);
@@ -269,7 +276,7 @@ export class ContractClient {
   /**
    * Get provider (for event listeners)
    */
-  getProvider(): ethers.JsonRpcProvider {
+  getProvider(): ethers.Provider {
     return this.provider;
   }
 
@@ -375,7 +382,7 @@ export class ContractClient {
     }
 
     try {
-      Logger.info(`📝 Registering product: ${serialId}`);
+      Logger.info(`📝 Broadcasting product registration: ${serialId}`);
 
       const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
       const tx = await registry.registerProduct(
@@ -386,10 +393,8 @@ export class ContractClient {
         zkpProof
       );
 
-      const receipt = await tx.wait();
-      Logger.success(`✅ Product registered. TX: ${receipt?.hash}`);
-
-      return receipt?.hash || tx.hash;
+      Logger.info(`📤 Product registration tx submitted: ${tx.hash}`);
+      return tx.hash;
     } catch (error) {
       Logger.error('Failed to register product', error);
       throw error;
@@ -413,7 +418,7 @@ export class ContractClient {
     }
 
     try {
-      Logger.info(`📝 Registering imported product with ZKP: ${serialId}`);
+      Logger.info(`📝 Broadcasting imported product registration with ZKP: ${serialId}`);
 
       const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
       const tx = await registry.registerImportedProductZK(
@@ -426,10 +431,8 @@ export class ContractClient {
         proof.input
       );
 
-      const receipt = await tx.wait();
-      Logger.success(`✅ Imported product registered with ZKP. TX: ${receipt?.hash}`);
-
-      return receipt?.hash || tx.hash;
+      Logger.info(`📤 Imported product registration tx submitted: ${tx.hash}`);
+      return tx.hash;
     } catch (error) {
       Logger.error('Failed to register imported product with ZKP', error);
       throw error;
@@ -534,7 +537,7 @@ export class ContractClient {
     }
 
     try {
-      Logger.info(`📝 Creating transfer for: ${serialId}`);
+      Logger.info(`📝 Broadcasting transfer for: ${serialId}`);
 
       const ledger = this.transferLedger.connect(this.getSigner(signerRole)) as ethers.Contract;
       const tx = await ledger.createTransferRequest(
@@ -544,10 +547,8 @@ export class ContractClient {
         toLocationHash
       );
 
-      const receipt = await tx.wait();
-      Logger.success(`✅ Transfer created. TX: ${receipt?.hash}`);
-
-      return receipt?.hash || tx.hash;
+      Logger.info(`📤 Transfer tx submitted: ${tx.hash}`);
+      return tx.hash;
     } catch (error) {
       Logger.error('Failed to create transfer request', error);
       throw error;
@@ -568,7 +569,7 @@ export class ContractClient {
     }
 
     try {
-      Logger.info(`📝 Confirming transfer: ${serialId}`);
+      Logger.info(`📝 Broadcasting transfer confirmation: ${serialId}`);
 
       const signer = expectedReceiver
         ? this.getSignerForAddress(expectedReceiver, signerRole)
@@ -576,10 +577,8 @@ export class ContractClient {
       const ledger = this.transferLedger.connect(signer) as ethers.Contract;
       const tx = await ledger.confirmTransfer(serialId, receiverLocationHash);
 
-      const receipt = await tx.wait();
-      Logger.success(`✅ Transfer confirmed. TX: ${receipt?.hash}`);
-
-      return receipt?.hash || tx.hash;
+      Logger.info(`📤 Transfer confirmation tx submitted: ${tx.hash}`);
+      return tx.hash;
     } catch (error) {
       Logger.error('Failed to confirm transfer', error);
       throw error;
@@ -615,7 +614,7 @@ export class ContractClient {
     }
 
     try {
-      Logger.info(`📝 Rejecting transfer: ${serialId}`);
+      Logger.info(`📝 Broadcasting transfer rejection: ${serialId}`);
 
       const reasonBytes = reason.startsWith('0x') && reason.length === 66
         ? reason
@@ -627,10 +626,8 @@ export class ContractClient {
       const ledger = this.transferLedger.connect(signer) as ethers.Contract;
       const tx = await ledger.rejectTransfer(serialId, reasonBytes);
 
-      const receipt = await tx.wait();
-      Logger.success(`✅ Transfer rejected. TX: ${receipt?.hash}`);
-
-      return receipt?.hash || tx.hash;
+      Logger.info(`📤 Transfer rejection tx submitted: ${tx.hash}`);
+      return tx.hash;
     } catch (error) {
       Logger.error('Failed to reject transfer', error);
       throw error;

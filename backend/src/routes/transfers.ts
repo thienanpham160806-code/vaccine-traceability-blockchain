@@ -8,6 +8,7 @@ import { ipfsService } from '../services/ipfs';
 import { CryptoUtils } from '../utils/crypto';
 import { Logger } from '../utils/logger';
 import { TransferRecord } from '../types';
+import { txQueue } from '../services/txQueue';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
 import config from '../config/env';
@@ -403,15 +404,25 @@ router.post(
     const fromLoc = toBytes32(fromLocationHash || (fromLocation ? `location:${fromLocation}` : `from:${senderAddress}`));
     const toLoc = toBytes32(toLocationHash || `to:${receiverAddress}`);
     const transferMetadata = buildTransferMetadata(req.body);
-    const txHash = await contractClient.createTransferRequest(
-      serialHash,
-      receiverAddress,
-      fromLoc,
-      toLoc,
-      fromRole
-    );
+
+    const job = await txQueue.enqueue({
+      type: 'CREATE_TRANSFER',
+      payload: {
+        serialId: serialHash,
+        receiver: receiverAddress,
+        fromLocationHash: fromLoc,
+        toLocationHash: toLoc,
+        signerRole: fromRole,
+      },
+      metadata: {
+        serialId,
+        serialHash,
+        transferId: `${serialHash}_${Date.now()}`,
+      },
+    });
 
     const now = Date.now();
+    const txHash = job.txHash;
     const transferId = `${serialHash}_${now}`;
     const ipfsResult = await ipfsService.pinJson(`transfer-${serialId}-${now}`, {
       serialId,
@@ -462,7 +473,7 @@ router.post(
       data: {
         transfer,
         serialHash,
-        txHash,
+        jobId: job.id,
       },
     });
   } catch (error) {
@@ -657,30 +668,27 @@ router.post(
     }
 
     const locationHash = toBytes32(receiverLocationHash || pendingTransfer.toLocationHash);
-    const txHash = await contractClient.confirmTransfer(
-      serialHash,
-      locationHash,
-      pendingTransfer.toRole,
-      pendingTransfer.toAddress
-    );
-    const now = Date.now();
-    const deliveredStatus = getDeliveredStatus(pendingTransfer.toRole);
 
-    await Promise.all([
-      db.ref(`transfers/${transferId}`).update({
-        status: 'CONFIRMED',
-        confirmedAt: now,
-        blockchainTx: txHash,
-        updatedAt: now,
-      }),
-      db.ref(`products/${serialHash}`).update({
-        status: deliveredStatus,
-        currentOwner: pendingTransfer.toAddress,
-        ownerRole: pendingTransfer.toRole,
-        updatedAt: now,
-      }),
-      db.ref(`pending-transfers/${serialHash}`).remove(),
-    ]);
+    const job = await txQueue.enqueue({
+      type: 'CONFIRM_TRANSFER',
+      payload: {
+        serialId: serialHash,
+        receiverLocationHash: locationHash,
+        signerRole: pendingTransfer.toRole,
+        expectedReceiver: pendingTransfer.toAddress,
+      },
+      metadata: {
+        serialId,
+        serialHash,
+        transferId,
+      },
+    });
+
+    const now = Date.now();
+
+    await db.ref(`transfers/${transferId}`).update({
+      updatedAt: now,
+    });
 
     res.json({
       success: true,
@@ -688,7 +696,7 @@ router.post(
         transferId,
         serialId,
         serialHash,
-        txHash,
+        jobId: job.id,
       },
     });
   } catch (error) {
@@ -874,31 +882,26 @@ router.post(
     }
 
     // Receiver address must sign the rejection.
-    const txHash = await contractClient.rejectTransfer(
-      serialHash,
-      rejectionReason,
-      pendingTransfer.toRole,
-      pendingTransfer.toAddress
-    );
-    const statusAfter = await contractClient.getProductStatus(serialHash);
+    const job = await txQueue.enqueue({
+      type: 'REJECT_TRANSFER',
+      payload: {
+        serialId: serialHash,
+        reason: rejectionReason,
+        signerRole: pendingTransfer.toRole,
+        expectedReceiver: pendingTransfer.toAddress,
+      },
+      metadata: {
+        serialId,
+        serialHash,
+        transferId,
+      },
+    });
+
     const now = Date.now();
 
-    await Promise.all([
-      db.ref(`transfers/${transferId}`).update({
-        status: 'REJECTED',
-        rejectedReason: rejectionReason,
-        rejectedAt: now,
-        blockchainTx: txHash,
-        updatedAt: now,
-      }),
-      db.ref(`products/${serialHash}`).update({
-        status: productRegistryStatusToProductStatus(Number(statusAfter)),
-        currentOwner: pendingTransfer.fromAddress,
-        ownerRole: pendingTransfer.fromRole,
-        updatedAt: now,
-      }),
-      db.ref(`pending-transfers/${serialHash}`).remove(),
-    ]);
+    await db.ref(`transfers/${transferId}`).update({
+      updatedAt: now,
+    });
 
     res.json({
       success: true,
@@ -907,7 +910,7 @@ router.post(
         serialId,
         serialHash,
         rejectionReason,
-        txHash,
+        jobId: job.id,
       },
     });
   } catch (error) {

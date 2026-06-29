@@ -2,6 +2,11 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
+const rpcUrls = (process.env.BLOCKCHAIN_RPC_URLS || process.env.BLOCKCHAIN_RPC_URL || 'http://127.0.0.1:8545')
+  .split(',')
+  .map((url) => url.trim())
+  .filter(Boolean);
+
 export const config = {
   // Server
   port: parseInt(process.env.PORT || '5000', 10),
@@ -9,7 +14,8 @@ export const config = {
   logLevel: process.env.LOG_LEVEL || 'info',
 
   // Blockchain
-  blockchainRpcUrl: process.env.BLOCKCHAIN_RPC_URL || 'http://127.0.0.1:8545',
+  blockchainRpcUrl: rpcUrls[0] || 'http://127.0.0.1:8545',
+  blockchainRpcUrls: rpcUrls,
   backendPrivateKey: process.env.BACKEND_PRIVATE_KEY || '',
   rolePrivateKeys: {
     admin: process.env.ADMIN_PRIVATE_KEY || process.env.BACKEND_PRIVATE_KEY || '',

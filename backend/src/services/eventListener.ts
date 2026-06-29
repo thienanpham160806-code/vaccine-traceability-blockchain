@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { Logger } from '../utils/logger';
+import { txQueue } from './txQueue';
 
 const productStatuses = ['REGISTERED', 'VERIFIED', 'IN_TRANSIT', 'DELIVERED', 'FLAGGED', 'RECALLED'];
 const riskLevels = ['SAFE', 'ALERT', 'ALERT', 'HIGH', 'CRITICAL'];
@@ -58,6 +59,21 @@ async function primaryRoleFor(address: string): Promise<string | undefined> {
   } catch (error) {
     Logger.warn(`Could not infer primary role for ${address}`, error);
     return undefined;
+  }
+}
+
+async function updateJobStatusByTx(txHash: string | undefined, status: 'CONFIRMED' | 'FAILED'): Promise<void> {
+  if (!txHash) return;
+  try {
+    const snapshot = await db.ref('onchain-jobs').once('value');
+    const jobs = snapshot.val() || {};
+    const matches = Object.entries(jobs).filter(([, job]: [string, any]) => {
+      return job?.txHash === txHash || job?.metadata?.preSubmittedTxHash === txHash;
+    });
+
+    await Promise.all(matches.map(([jobId]) => db.ref(`onchain-jobs/${jobId}`).update({ status, updatedAt: Date.now() })));
+  } catch (error) {
+    Logger.warn(`Could not sync tx queue status for ${txHash}`, error);
   }
 }
 
@@ -152,6 +168,7 @@ export class EventListener {
             updatedAt: now,
             lastSyncedAt: now,
           });
+          await updateJobStatusByTx(eventTxHash(event), 'CONFIRMED');
           Logger.success(`✅ Synced product: ${serialID}`);
         } catch (err) {
           Logger.error('Failed to sync product', err);
@@ -279,6 +296,7 @@ export class EventListener {
             currentOwner: asString(sender),
             updatedAt: now,
           });
+          await updateJobStatusByTx(eventTxHash(event), 'CONFIRMED');
           Logger.success(`✅ Synced transfer: ${serialID}`);
         } catch (err) {
           Logger.error('Failed to sync transfer', err);
@@ -310,6 +328,7 @@ export class EventListener {
             ownerRole: existing?.value.toRole || null,
             updatedAt: now,
           });
+          await updateJobStatusByTx(eventTxHash(event), 'CONFIRMED');
           Logger.success(`✅ Synced transfer confirm: ${serialID}`);
         } catch (err) {
           Logger.error('Failed to sync transfer confirm', err);
@@ -341,6 +360,7 @@ export class EventListener {
             ownerRole: existing?.value.fromRole || null,
             updatedAt: now,
           });
+          await updateJobStatusByTx(eventTxHash(event), 'CONFIRMED');
           Logger.success(`Synced transfer reject: ${serialID}`);
         } catch (err) {
           Logger.error('Failed to sync transfer reject', err);

@@ -9,6 +9,7 @@ import { CryptoUtils } from '../utils/crypto';
 import { QRCodeGenerator } from '../utils/qr';
 import { Logger } from '../utils/logger';
 import { Batch, Product } from '../types';
+import { txQueue } from '../services/txQueue';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
 import {
@@ -899,11 +900,13 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       qrContent,
     });
 
-    let txHash: string;
+    let txHash: string | undefined;
     let importDocumentIpfsCid: string | undefined;
+    let queueJobType: 'REGISTER_PRODUCT' | 'REGISTER_IMPORTED_PRODUCT' = 'REGISTER_PRODUCT';
     let importDocCommitment: string | undefined;
     let approvedImportRoot: string | undefined;
     let importProofMode: string | undefined;
+    let zkpProofPayload: any = undefined;
 
     if (isImported) {
       const importDocIpfsResult = await ipfsService.pinJson(`import-doc-${batchQR}-${serialId}`, {
@@ -932,26 +935,31 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
         });
       }
 
-      txHash = await contractClient.registerImportedProductZK(
-        serialHash,
-        batchHash,
-        metadataHash,
-        zkp.proof,
-        signerRole
-      );
+      queueJobType = 'REGISTER_IMPORTED_PRODUCT';
+      zkpProofPayload = zkp.proof;
       importDocCommitment = zkp.commitment;
       approvedImportRoot = zkp.approvedRoot;
       importProofMode = zkp.proof.mode;
-    } else {
-      txHash = await contractClient.registerProduct(
-        serialHash,
+    }
+
+    const job = await txQueue.enqueue({
+      type: queueJobType,
+      payload: {
+        serialId: serialHash,
         batchHash,
         metadataHash,
         importDocHash,
-        proofBytes,
-        signerRole
-      );
-    }
+        zkpProof: proofBytes,
+        signerRole,
+        proof: zkpProofPayload,
+      },
+      metadata: {
+        serialId,
+        batchHash,
+        batchQR,
+        serialHash,
+      },
+    });
 
     const now = Date.now();
     const batch: Batch = {
@@ -982,12 +990,11 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       manufacturerAddress: batch.manufacturerAddress,
       currentOwner: contractClient.getRoleAddress(signerRole),
       ownerRole: signerRole,
-      status: 'VERIFIED',
+      status: 'REGISTERED',
       riskLevel: 'LOW',
       expiryDate,
       isImported,
       zkpVerified: isImported ? true : Boolean(zkpProof && importDocHash !== ZERO_BYTES32),
-      blockchainTx: txHash,
       ...(importDocumentIpfsCid ? { importDocumentIpfsCid } : {}),
       ...(importDocCommitment ? { importDocCommitment } : {}),
       ...(approvedImportRoot ? { approvedImportRoot } : {}),
@@ -1008,8 +1015,8 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
         success: false,
         error: {
           code: 'FIREBASE_WRITE_FAILED',
-          message: `Product was registered on-chain (txHash: ${txHash}) but Firebase sync failed. Use POST /products/sync-wallet-register with this txHash to retry.`,
-          txHash,
+          message: `Product was queued for on-chain registration (jobId: ${job.id}) but Firebase sync failed. Use POST /products/sync-wallet-register with the queued tx once it is confirmed.`,
+          jobId: job.id,
         },
       });
     }
@@ -1029,7 +1036,7 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
         importProofMode,
         qrContent,
         qrImage,
-        txHash,
+        jobId: job.id,
       },
     });
   } catch (error) {
@@ -1352,7 +1359,7 @@ router.post('/bulk', validateRequest({ body: bulkProductsSchema }), async (req: 
           metadataHash,
           qrContent,
         });
-        let txHash: string;
+        let txHash: string | undefined;
         let importDocumentIpfsCid: string | undefined;
         let importDocCommitment: string | undefined;
         let approvedImportRoot: string | undefined;
