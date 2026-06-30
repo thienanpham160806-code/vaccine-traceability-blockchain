@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dir \"d:/SCHOOL/HK6 \\(25-26\\)/Blockchain/vaccine-traceability-blockchain/backend\")"
+    ]
+  }
+}
