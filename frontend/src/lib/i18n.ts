@@ -394,6 +394,7 @@ const translationPairs: Array<[vi: string, en: string]> = [
   ["Nhập lý do từ chối...", "Enter rejection reason..."],
   ["Xác nhận giao hàng", "Confirm delivery"],
   ["Từ chối lệnh", "Reject transfer"],
+  ["Lệnh đã được ghi nhận.", "Request submitted."],
   ["Đang chờ blockchain xác nhận (30–60 giây).", "Waiting for blockchain confirmation (30–60 sec)."],
   ["Trang sẽ tự cập nhật. Không cần thao tác thêm.", "Page will update automatically. No further action needed."],
   ["Xác minh sản phẩm", "Verify product"],

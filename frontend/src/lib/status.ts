@@ -34,7 +34,7 @@ const productStatusEn: Record<string, string> = {
 
 const transferStatusVi: Record<string, string> = {
   PENDING: "Chờ xác nhận",
-  PROCESSING: "Đang xử lý on-chain",
+  PROCESSING: "Đã gửi lệnh",
   CONFIRMED: "Đã xác nhận",
   REJECTED: "Đã từ chối",
   RETURNED: "Đã hoàn trả",
@@ -43,7 +43,7 @@ const transferStatusVi: Record<string, string> = {
 
 const transferStatusEn: Record<string, string> = {
   PENDING: "Pending",
-  PROCESSING: "Processing on-chain",
+  PROCESSING: "Request sent",
   CONFIRMED: "Confirmed",
   REJECTED: "Rejected",
   RETURNED: "Returned",
@@ -64,7 +64,7 @@ export const statusChipClass: Record<string, string> = {
   RECALLED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
   INVALID: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
   PENDING: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-200 dark:border-amber-800",
-  PROCESSING: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-800",
+  PROCESSING: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800",
   CONFIRMED: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800",
   REJECTED: "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/60 dark:text-red-200 dark:border-red-800",
   RETURNED: "bg-zinc-100 text-zinc-700 border-zinc-200 dark:bg-zinc-800 dark:text-zinc-200 dark:border-zinc-700",

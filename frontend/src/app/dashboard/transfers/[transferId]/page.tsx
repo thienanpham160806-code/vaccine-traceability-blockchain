@@ -425,10 +425,10 @@ export default function TransferDetailPage({ params }: PageProps) {
       )}
 
       {transfer.status === "PROCESSING" && (
-        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">
-          <Clock className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+        <div className="flex items-start gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm font-semibold text-emerald-800">
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
-            <p>{t("Đang chờ blockchain xác nhận (30–60 giây).")}</p>
+            <p>{t("Lệnh đã được ghi nhận.")}</p>
             <p className="mt-1 font-normal opacity-80">{t("Trang sẽ tự cập nhật. Không cần thao tác thêm.")}</p>
           </div>
         </div>
