@@ -55,7 +55,7 @@ export default function DashboardScanPage() {
       const result = await administerProduct(serialId, { reason: reason.trim() || undefined });
       setAdminister({ phase: "success", serialId, auditId: result.auditId });
     } catch (err: unknown) {
-      setAdminister({ phase: "error", serialId, message: getApiErrorMessage(err, "Không thể đánh dấu đã tiêm.") });
+      setAdminister({ phase: "error", serialId, message: getApiErrorMessage(err, t("Không thể đánh dấu đã tiêm.")) });
     }
   };
 
@@ -115,17 +115,17 @@ export default function DashboardScanPage() {
               <div className="flex items-start gap-3">
                 <Syringe className="mt-0.5 h-5 w-5 shrink-0 text-amber-700 dark:text-amber-200" />
                 <div>
-                  <p className="font-bold text-amber-900 dark:text-amber-100">Xác nhận tiêm vaccine</p>
+                  <p className="font-bold text-amber-900 dark:text-amber-100">{t("Xác nhận tiêm vaccine")}</p>
                   <p className="mt-0.5 font-mono text-xs text-amber-700 dark:text-amber-200">{administer.serialId}</p>
                 </div>
               </div>
               <div className="space-y-1.5">
-                <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-300">Ghi chú (tuỳ chọn)</p>
+                <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-300">{t("Ghi chú (tuỳ chọn)")}</p>
                 <input
                   className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none placeholder:text-zinc-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-amber-500/30 dark:bg-zinc-900 dark:text-zinc-100"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  placeholder="Ví dụ: Tiêm mũi 1 cho BN Nguyễn Văn A"
+                  placeholder={t("Ví dụ: Tiêm mũi 1 cho BN Nguyễn Văn A")}
                 />
               </div>
               <div className="flex flex-wrap gap-2">
@@ -135,7 +135,7 @@ export default function DashboardScanPage() {
                   className="flex min-h-10 items-center gap-1.5 rounded-lg bg-amber-600 px-4 text-sm font-bold text-white hover:bg-amber-700"
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  Đánh dấu đã tiêm
+                  {t("Đánh dấu đã tiêm")}
                 </button>
                 <button
                   type="button"
@@ -143,7 +143,7 @@ export default function DashboardScanPage() {
                   className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  Chỉ tra cứu
+                  {t("Chỉ tra cứu")}
                 </button>
                 <button
                   type="button"
@@ -151,7 +151,7 @@ export default function DashboardScanPage() {
                   className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900"
                 >
                   <XCircle className="h-4 w-4" />
-                  Quét lại
+                  {t("Quét lại")}
                 </button>
               </div>
             </div>
@@ -160,7 +160,7 @@ export default function DashboardScanPage() {
           {administer.phase === "loading" ? (
             <div className="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 p-5 text-sm font-semibold text-blue-800 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-200">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-              Đang ghi nhận lên hệ thống...
+              {t("Đang ghi nhận lên hệ thống...")}
             </div>
           ) : null}
 
@@ -169,7 +169,7 @@ export default function DashboardScanPage() {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300" />
                 <div>
-                  <p className="font-bold text-emerald-900 dark:text-emerald-100">Đã đánh dấu tiêm thành công</p>
+                  <p className="font-bold text-emerald-900 dark:text-emerald-100">{t("Đã đánh dấu tiêm thành công")}</p>
                   <p className="mt-0.5 font-mono text-xs text-emerald-700 dark:text-emerald-300">{administer.serialId}</p>
                   <p className="mt-1 font-mono text-[10px] text-emerald-600 dark:text-emerald-400">Audit: {administer.auditId}</p>
                 </div>
@@ -180,7 +180,7 @@ export default function DashboardScanPage() {
                 className="flex min-h-10 items-center gap-1.5 rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700"
               >
                 <Camera className="h-4 w-4" />
-                Quét lọ tiếp theo
+                {t("Quét lọ tiếp theo")}
               </button>
             </div>
           ) : null}
@@ -190,7 +190,7 @@ export default function DashboardScanPage() {
               <div className="flex items-start gap-3">
                 <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-red-600 dark:text-red-300" />
                 <div>
-                  <p className="font-bold text-red-800 dark:text-red-100">Không thể đánh dấu đã tiêm</p>
+                  <p className="font-bold text-red-800 dark:text-red-100">{t("Không thể đánh dấu đã tiêm")}</p>
                   <p className="mt-1 text-sm text-red-700 dark:text-red-200">{administer.message}</p>
                 </div>
               </div>
@@ -201,14 +201,14 @@ export default function DashboardScanPage() {
                   className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200"
                 >
                   <ExternalLink className="h-4 w-4" />
-                  Tra cứu thông tin lọ
+                  {t("Tra cứu thông tin lọ")}
                 </button>
                 <button
                   type="button"
                   onClick={resetScan}
                   className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-4 text-sm font-semibold text-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900"
                 >
-                  Quét lại
+                  {t("Quét lại")}
                 </button>
               </div>
             </div>
