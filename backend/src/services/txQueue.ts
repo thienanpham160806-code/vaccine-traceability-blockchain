@@ -162,6 +162,15 @@ class OnChainTxQueue {
 
   private async failJob(jobId: string, errorMessage: string): Promise<void> {
     await this.updateJob(jobId, { status: 'FAILED', error: errorMessage, updatedAt: Date.now() });
+    const job = this.jobs.get(jobId);
+    const transferId = job?.metadata?.transferId;
+    if (transferId && (job?.type === 'CONFIRM_TRANSFER' || job?.type === 'REJECT_TRANSFER')) {
+      try {
+        await db.ref(`transfers/${transferId}`).update({ status: 'PENDING', processingJobId: null, updatedAt: Date.now() });
+      } catch (err) {
+        Logger.warn(`Could not reset transfer ${transferId} to PENDING after job failure`, err);
+      }
+    }
   }
 
   private async updateJob(jobId: string, patch: Partial<OnChainTxJob>): Promise<void> {

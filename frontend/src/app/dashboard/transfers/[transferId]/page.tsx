@@ -139,6 +139,7 @@ export default function TransferDetailPage({ params }: PageProps) {
   const { data: transfer, isLoading } = useQuery<TransferRecord | undefined>({
     queryKey: ["transfer", decoded],
     queryFn: () => getTransfer(decoded),
+    refetchInterval: (query) => query.state.data?.status === "PROCESSING" ? 8000 : false,
   });
 
   const handleConfirm = async () => {
@@ -413,6 +414,16 @@ export default function TransferDetailPage({ params }: PageProps) {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {transfer.status === "PROCESSING" && (
+        <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
+          <div>
+            <p>Đang chờ blockchain xác nhận (30–60 giây).</p>
+            <p className="mt-1 font-normal opacity-80">Trang sẽ tự cập nhật. Không cần thao tác thêm.</p>
+          </div>
         </div>
       )}
 

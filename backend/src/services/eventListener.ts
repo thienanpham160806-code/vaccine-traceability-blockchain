@@ -328,6 +328,16 @@ export class EventListener {
             ownerRole: existing?.value.toRole || null,
             updatedAt: now,
           });
+
+          const batchKey = existing?.value.batchHash || existing?.value.batchId;
+          if (batchKey) {
+            await db.ref(`batches/${batchKey}`).update({
+              currentOwner: asString(receiver),
+              ownerRole: existing?.value.toRole || null,
+              updatedAt: now,
+            });
+          }
+
           await updateJobStatusByTx(eventTxHash(event), 'CONFIRMED');
           Logger.success(`✅ Synced transfer confirm: ${serialID}`);
         } catch (err) {

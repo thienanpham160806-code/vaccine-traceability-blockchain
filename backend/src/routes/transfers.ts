@@ -1116,6 +1116,8 @@ router.post(
     const now = Date.now();
 
     await db.ref(`transfers/${transferId}`).update({
+      status: 'PROCESSING',
+      processingJobId: job.id,
       updatedAt: now,
     });
 
@@ -1329,6 +1331,8 @@ router.post(
     const now = Date.now();
 
     await db.ref(`transfers/${transferId}`).update({
+      status: 'PROCESSING',
+      processingJobId: job.id,
       updatedAt: now,
     });
 

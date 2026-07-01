@@ -294,7 +294,7 @@ export type RecallRecord = {
   recalledAt?: number;
 };
 
-export type TransferStatus = "PENDING" | "CONFIRMED" | "REJECTED" | "RETURNED";
+export type TransferStatus = "PENDING" | "PROCESSING" | "CONFIRMED" | "REJECTED" | "RETURNED";
 
 export type TransferRecord = {
   id: string;
