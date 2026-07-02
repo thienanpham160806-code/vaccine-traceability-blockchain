@@ -180,8 +180,8 @@ async function main() {
                   {
                     gasLimit: 500000,
                     nonce: currentNonce,
-                    maxPriorityFeePerGas: ethers.parseUnits('2', 'gwei'),
-                    maxFeePerGas: ethers.parseUnits('20', 'gwei'),
+                    maxPriorityFeePerGas: ethers.parseUnits('25', 'gwei'),
+                    maxFeePerGas: ethers.parseUnits('200', 'gwei'),
                   }
                 );
                 console.log(`  📤 ${item.serialId} submitted (nonce=${currentNonce}, tx=${tx.hash.slice(0, 18)}...)`);

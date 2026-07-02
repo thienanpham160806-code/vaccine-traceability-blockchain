@@ -93,10 +93,16 @@ export class ContractClient {
       }
 
       if (rpcUrls.length === 1) {
-        this.provider = new ethers.JsonRpcProvider(rpcUrls[0]);
+        const p = new ethers.JsonRpcProvider(rpcUrls[0]);
+        p.pollingInterval = 1000;
+        this.provider = p;
       } else {
         this.provider = new ethers.FallbackProvider(
-          rpcUrls.map((rpcUrl) => new ethers.JsonRpcProvider(rpcUrl)),
+          rpcUrls.map((rpcUrl) => {
+            const p = new ethers.JsonRpcProvider(rpcUrl);
+            p.pollingInterval = 1000;
+            return p;
+          }),
           1
         );
       }
@@ -385,19 +391,19 @@ export class ContractClient {
     return receipt?.hash || tx.hash;
   }
 
-  private async getGasOverrides(): Promise<{ maxPriorityFeePerGas: bigint; maxFeePerGas: bigint; gasLimit?: number }> {
+  private async getGasOverrides(): Promise<{ maxPriorityFeePerGas: bigint; maxFeePerGas: bigint }> {
+    const tip = ethers.parseUnits('25', 'gwei');
     try {
       const feeData = await this.provider.getFeeData();
-      const baseFee = (feeData as any).lastBaseFeePerGas ?? feeData.maxFeePerGas ?? ethers.parseUnits('10', 'gwei');
-      const priorityFee = ethers.parseUnits('2', 'gwei');
+      const baseFee = (feeData as any).lastBaseFeePerGas ?? feeData.maxFeePerGas ?? ethers.parseUnits('5', 'gwei');
       return {
-        maxPriorityFeePerGas: priorityFee,
-        maxFeePerGas: baseFee * 2n + priorityFee,
+        maxPriorityFeePerGas: tip,
+        maxFeePerGas: baseFee * 3n + tip,
       };
     } catch {
       return {
-        maxPriorityFeePerGas: ethers.parseUnits('2', 'gwei'),
-        maxFeePerGas: ethers.parseUnits('20', 'gwei'),
+        maxPriorityFeePerGas: tip,
+        maxFeePerGas: ethers.parseUnits('200', 'gwei'),
       };
     }
   }
