@@ -62,13 +62,6 @@ try {
   ];
 }
 
-PRODUCT_REGISTRY_ABI = [
-  ...PRODUCT_REGISTRY_ABI,
-  'function registerImportedProductZK(bytes32 serialID, bytes32 batchHash, bytes32 metadataHash, uint[2] a, uint[2][2] b, uint[2] c, uint[5] input) external',
-  'function approvedImportRoot() external view returns (uint256)',
-  'function setApprovedImportRoot(uint256 newApprovedImportRoot) external',
-  'function setImportVerifier(address newImportVerifier) external',
-];
 
 /**
  * Contract client - manages interaction with smart contracts
