@@ -30,7 +30,7 @@ type ApiErrorLike = {
   };
 };
 
-const productionApiUrl = "https://vaxi-trust.up.railway.app";
+const productionApiUrl = "https://vaccine-traceability-blockchain-production.up.railway.app";
 
 function isLoopbackApiUrl(url: string) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url);
@@ -350,6 +350,9 @@ export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
     INVALID_BATCH_ID: "Mã lô chỉ được dùng chữ, số, dấu gạch ngang hoặc gạch dưới.",
     ON_CHAIN_PENDING_TRANSFER_NOT_FOUND:
       "Lệnh này còn pending trong Firebase nhưng không còn pending trên smart contract hiện tại. Admin cần dọn lệnh stale hoặc tạo lại lệnh chuyển bằng serial sản phẩm.",
+    PRODUCT_SYNC_MISMATCH: "Serial này chưa sẵn sàng on-chain hoặc đang đồng bộ. Hãy đợi backend xác nhận rồi thử lại.",
+    PENDING_TRANSFER_EXISTS: "Serial này đã có lệnh chuyển đang mở. Hãy xác nhận, từ chối hoặc đợi lệnh hiện tại xử lý xong.",
+    BATCH_HAS_NO_SERIALS: "Batch này chưa có serial hợp lệ. Hãy đăng ký serial vào batch trước khi chuyển giao.",
   };
 
   if (code === "VALIDATION_ERROR" && Array.isArray(details) && details.length > 0) {
@@ -900,7 +903,7 @@ export async function verifyProduct(serialId: string) {
 }
 
 export async function reregisterProduct(serialId: string) {
-  const res = await api.post<ApiResponse<{ txHash: string; serialHash: string; serialId: string }>>(
+  const res = await api.post<ApiResponse<{ txHash?: string; serialHash: string; serialId: string; product?: Product; alreadyOnChain?: boolean }>>(
     `/products/${encodeURIComponent(serialId)}/reregister`
   );
   return requireApiData(res.data.data, "Re-register response did not include data.");
