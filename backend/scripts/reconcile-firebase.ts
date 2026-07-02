@@ -109,12 +109,14 @@ async function main() {
       });
 
       let toRegister: typeof mapped;
+      let alreadyOn: any[] = [];
       const noKey = mapped.filter(e => e.noKey);
       noKey.forEach(e => fail(`${e.serialId} — no private key for ${e.signerRole}`));
 
       if (FORCE) {
         log(`  --force: skipping on-chain existence check for ${mapped.length} product(s)`);
         toRegister = mapped.filter(e => !e.noKey);
+        alreadyOn = [];
       } else {
         // Check all existence in parallel
         log(`  Checking on-chain existence for ${mapped.length} product(s)...`);
@@ -175,7 +177,12 @@ async function main() {
                   metadataHash,
                   ZERO_BYTES32,
                   '0x',
-                  { gasLimit: 500000, nonce: currentNonce }
+                  {
+                    gasLimit: 500000,
+                    nonce: currentNonce,
+                    maxPriorityFeePerGas: ethers.parseUnits('2', 'gwei'),
+                    maxFeePerGas: ethers.parseUnits('20', 'gwei'),
+                  }
                 );
                 console.log(`  📤 ${item.serialId} submitted (nonce=${currentNonce}, tx=${tx.hash.slice(0, 18)}...)`);
                 const receipt = await tx.wait();

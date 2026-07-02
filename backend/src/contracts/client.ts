@@ -385,6 +385,23 @@ export class ContractClient {
     return receipt?.hash || tx.hash;
   }
 
+  private async getGasOverrides(): Promise<{ maxPriorityFeePerGas: bigint; maxFeePerGas: bigint; gasLimit?: number }> {
+    try {
+      const feeData = await this.provider.getFeeData();
+      const baseFee = (feeData as any).lastBaseFeePerGas ?? feeData.maxFeePerGas ?? ethers.parseUnits('10', 'gwei');
+      const priorityFee = ethers.parseUnits('2', 'gwei');
+      return {
+        maxPriorityFeePerGas: priorityFee,
+        maxFeePerGas: baseFee * 2n + priorityFee,
+      };
+    } catch {
+      return {
+        maxPriorityFeePerGas: ethers.parseUnits('2', 'gwei'),
+        maxFeePerGas: ethers.parseUnits('20', 'gwei'),
+      };
+    }
+  }
+
   /**
    * Register product on blockchain
    */
@@ -404,12 +421,14 @@ export class ContractClient {
       Logger.info(`📝 Broadcasting product registration: ${serialId}`);
 
       const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const gasOverrides = await this.getGasOverrides();
       const tx = await registry.registerProduct(
         serialId,
         batchHash,
         metadataHash,
         importDocHash,
-        zkpProof
+        zkpProof,
+        gasOverrides
       );
 
       Logger.info(`📤 Product registration tx submitted: ${tx.hash}`);
@@ -440,6 +459,7 @@ export class ContractClient {
       Logger.info(`📝 Broadcasting imported product registration with ZKP: ${serialId}`);
 
       const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const gasOverrides = await this.getGasOverrides();
       const tx = await registry.registerImportedProductZK(
         serialId,
         batchHash,
@@ -447,7 +467,8 @@ export class ContractClient {
         proof.a,
         proof.b,
         proof.c,
-        proof.input
+        proof.input,
+        gasOverrides
       );
 
       Logger.info(`📤 Imported product registration tx submitted: ${tx.hash}`);
@@ -559,11 +580,13 @@ export class ContractClient {
       Logger.info(`📝 Broadcasting transfer for: ${serialId}`);
 
       const ledger = this.transferLedger.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const gasOverrides = await this.getGasOverrides();
       const tx = await ledger.createTransferRequest(
         serialId,
         receiver,
         fromLocationHash,
-        toLocationHash
+        toLocationHash,
+        gasOverrides
       );
 
       Logger.info(`📤 Transfer tx submitted: ${tx.hash}`);
@@ -594,7 +617,8 @@ export class ContractClient {
         ? this.getSignerForAddress(expectedReceiver, signerRole)
         : this.getSigner(signerRole);
       const ledger = this.transferLedger.connect(signer) as ethers.Contract;
-      const tx = await ledger.confirmTransfer(serialId, receiverLocationHash);
+      const gasOverrides = await this.getGasOverrides();
+      const tx = await ledger.confirmTransfer(serialId, receiverLocationHash, gasOverrides);
 
       Logger.info(`📤 Transfer confirmation tx submitted: ${tx.hash}`);
       return tx.hash;
@@ -643,7 +667,8 @@ export class ContractClient {
         ? this.getSignerForAddress(expectedReceiver, signerRole)
         : this.getSigner(signerRole);
       const ledger = this.transferLedger.connect(signer) as ethers.Contract;
-      const tx = await ledger.rejectTransfer(serialId, reasonBytes);
+      const gasOverrides = await this.getGasOverrides();
+      const tx = await ledger.rejectTransfer(serialId, reasonBytes, gasOverrides);
 
       Logger.info(`📤 Transfer rejection tx submitted: ${tx.hash}`);
       return tx.hash;
