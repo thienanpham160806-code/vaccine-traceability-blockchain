@@ -30,7 +30,7 @@ type ApiErrorLike = {
   };
 };
 
-const productionApiUrl = "https://vaccine-traceability-blockchain.onrender.com";
+const productionApiUrl = "https://vaxi-trust.up.railway.app";
 
 function isLoopbackApiUrl(url: string) {
   return /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/i.test(url);
@@ -328,10 +328,10 @@ export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
 
   const error = err as ApiErrorLike;
   if (error?.code === "ECONNABORTED") {
-    return `Backend phản hồi quá thời gian. Render có thể đang cold start, hãy thử lại sau vài giây. API hiện tại: ${apiBaseUrl}.`;
+    return `Backend phản hồi quá thời gian. Hãy thử lại sau vài giây. API hiện tại: ${apiBaseUrl}.`;
   }
   if (!error?.response) {
-    return error?.message || `Không kết nối được backend. Hãy kiểm tra NEXT_PUBLIC_API_URL hoặc trạng thái Render: ${apiBaseUrl}.`;
+    return error?.message || `Không kết nối được backend. Hãy kiểm tra NEXT_PUBLIC_API_URL hoặc trạng thái backend: ${apiBaseUrl}.`;
   }
   const code = error.response.data?.error?.code;
   const message = error.response.data?.error?.message || error.message;
