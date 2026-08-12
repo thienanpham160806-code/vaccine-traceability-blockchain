@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import "./interfaces/IImportZKPVerifier.sol";
 
 interface ISupplyChainAccessControl {
@@ -14,7 +15,9 @@ contract ProductRegistry {
         IN_TRANSIT,
         DELIVERED,
         FLAGGED,
-        RECALLED
+        RECALLED,
+        DISPENSED,
+        DECOMMISSIONED
     }
 
     struct Product {
@@ -53,9 +56,21 @@ contract ProductRegistry {
     address public transferLedger;
 
     mapping(bytes32 => Product) private products;
-    mapping(bytes32 => bytes32[]) private batchToSerials;
+    mapping(bytes32 => bytes32[]) private batchToSerials; // Deprecated: use off-chain Merkle tree
     mapping(bytes32 => bool) public recalledBatches;
     mapping(bytes32 => bytes32) public batchRecallReasons;
+
+    // Lot management
+    mapping(bytes32 => bytes32) public lotAggregationRoots; // lotIdHash => aggregationRoot
+    mapping(bytes32 => bytes32) public lotMetadataHashes;      // lotIdHash => metadataHash
+    mapping(bytes32 => bool) public lotExists;                // lotIdHash => exists
+    mapping(bytes32 => bool) public lotRecalled;              // lotIdHash => recalled
+    mapping(bytes32 => bytes32[]) private lotToSubLots;        // parentLotIdHash => subLotIdHash[]
+    mapping(bytes32 => bytes32) public subLotParent;           // subLotIdHash => parentLotIdHash
+
+    // Unit decommission tracking
+    mapping(bytes32 => bytes32) public unitLotId;              // unitIdHash => lotIdHash
+    mapping(bytes32 => bool) public unitDecommissioned;        // unitIdHash => decommissioned
 
     event ProductRegistered(
         bytes32 indexed serialID,
@@ -102,6 +117,31 @@ contract ProductRegistry {
     event ProductUnflagged(
         bytes32 indexed serialID,
         address indexed clearedBy
+    );
+
+    // Lot management events
+    event LotCommissioned(
+        bytes32 indexed lotIdHash,
+        bytes32 indexed aggregationRoot,
+        bytes32 metadataHash,
+        address indexed manufacturer,
+        uint256 timestamp
+    );
+
+    event LotDisaggregated(
+        bytes32 indexed parentLotIdHash,
+        bytes32 indexed subLotIdHash,
+        bytes32 subLotRoot,
+        address indexed toActor,
+        uint256 timestamp
+    );
+
+    event UnitDecommissioned(
+        bytes32 indexed unitIdHash,
+        bytes32 indexed lotIdHash,
+        address indexed dispensedBy,
+        bytes32 eventType,
+        uint256 timestamp
     );
 
     constructor(address accessControlAddress) {
@@ -477,12 +517,20 @@ function verifyProof(
 
     function getRiskLevel(bytes32 serialID) external view returns (uint8) {
         require(products[serialID].exists, "Product not found");
-        return products[serialID].riskLevel;
+        Product memory p = products[serialID];
+        if (recalledBatches[p.batchHash]) {
+            return RISK_CRITICAL;
+        }
+        return p.riskLevel;
     }
 
     function getFlagReason(bytes32 serialID) external view returns (bytes32) {
         require(products[serialID].exists, "Product not found");
-        return products[serialID].flagReason;
+        Product memory p = products[serialID];
+        if (recalledBatches[p.batchHash]) {
+            return batchRecallReasons[p.batchHash];
+        }
+        return p.flagReason;
     }
 
     function isZkpVerified(bytes32 serialID) external view returns (bool) {
@@ -493,5 +541,161 @@ function verifyProof(
     function isImportedProduct(bytes32 serialID) external view returns (bool) {
         require(products[serialID].exists, "Product not found");
         return products[serialID].isImported;
+    }
+
+    // ============================================
+    // LOT MANAGEMENT FUNCTIONS (Merkle Tree based)
+    // ============================================
+
+    function commissionLot(
+        bytes32 lotIdHash,
+        bytes32 aggregationRoot,
+        bytes32 metadataHash,
+        bytes calldata zkpProof
+    ) external onlyManufacturerOrImporter {
+        require(lotIdHash != bytes32(0), "Invalid lot ID");
+        require(aggregationRoot != bytes32(0), "Invalid aggregation root");
+        require(metadataHash != bytes32(0), "Invalid metadata");
+        require(!lotExists[lotIdHash], "Lot already exists");
+        require(!lotRecalled[lotIdHash], "Lot recalled");
+
+        // Verify ZKP proof (mock verifier for MVP)
+        require(_verifyLotProof(lotIdHash, aggregationRoot, zkpProof), "Invalid proof");
+
+        lotAggregationRoots[lotIdHash] = aggregationRoot;
+        lotMetadataHashes[lotIdHash] = metadataHash;
+        lotExists[lotIdHash] = true;
+
+        emit LotCommissioned(
+            lotIdHash,
+            aggregationRoot,
+            metadataHash,
+            msg.sender,
+            block.timestamp
+        );
+    }
+
+    function decommission(
+        bytes32 unitIdHash,
+        bytes32[] calldata merkleProof,
+        bytes32 lotIdHash,
+        bytes32 eventType
+    ) external onlyManufacturerOrImporter {
+        require(unitIdHash != bytes32(0), "Invalid unit ID");
+        require(lotIdHash != bytes32(0), "Invalid lot ID");
+        require(lotExists[lotIdHash], "Lot not found");
+        require(!lotRecalled[lotIdHash], "Lot recalled");
+        require(!unitDecommissioned[unitIdHash], "Unit already decommissioned");
+
+        bytes32 aggregationRoot = lotAggregationRoots[lotIdHash];
+        require(aggregationRoot != bytes32(0), "No aggregation root for lot");
+
+        // Verify Merkle proof against the lot's aggregation root
+        bool isValidProof = MerkleProof.verify(
+            merkleProof,
+            aggregationRoot,
+            unitIdHash
+        );
+        require(isValidProof, "Invalid Merkle proof");
+
+        unitDecommissioned[unitIdHash] = true;
+        unitLotId[unitIdHash] = lotIdHash;
+
+        emit UnitDecommissioned(
+            unitIdHash,
+            lotIdHash,
+            msg.sender,
+            eventType,
+            block.timestamp
+        );
+    }
+
+    function disaggregate(
+        bytes32 parentLotIdHash,
+        bytes32 subLotIdHash,
+        bytes32 subLotRoot,
+        address toActor
+    ) external onlyManufacturerOrImporter {
+        require(parentLotIdHash != bytes32(0), "Invalid parent lot");
+        require(subLotIdHash != bytes32(0), "Invalid sub-lot");
+        require(subLotRoot != bytes32(0), "Invalid sub-lot root");
+        require(toActor != address(0), "Invalid actor");
+        require(lotExists[parentLotIdHash], "Parent lot not found");
+        require(!lotExists[subLotIdHash], "Sub-lot already exists");
+        require(!lotRecalled[parentLotIdHash], "Parent lot recalled");
+
+        lotAggregationRoots[subLotIdHash] = subLotRoot;
+        lotMetadataHashes[subLotIdHash] = lotMetadataHashes[parentLotIdHash];
+        lotExists[subLotIdHash] = true;
+        lotToSubLots[parentLotIdHash].push(subLotIdHash);
+        subLotParent[subLotIdHash] = parentLotIdHash;
+
+        emit LotDisaggregated(
+            parentLotIdHash,
+            subLotIdHash,
+            subLotRoot,
+            toActor,
+            block.timestamp
+        );
+    }
+
+    // ============================================
+    // VIEW FUNCTIONS FOR LOT MANAGEMENT
+    // ============================================
+
+    function getLotAggregationRoot(bytes32 lotIdHash) external view returns (bytes32) {
+        require(lotExists[lotIdHash], "Lot not found");
+        return lotAggregationRoots[lotIdHash];
+    }
+
+    function getLotMetadataHash(bytes32 lotIdHash) external view returns (bytes32) {
+        require(lotExists[lotIdHash], "Lot not found");
+        return lotMetadataHashes[lotIdHash];
+    }
+
+    function isLotExists(bytes32 lotIdHash) external view returns (bool) {
+        return lotExists[lotIdHash];
+    }
+
+    function isLotRecalled(bytes32 lotIdHash) external view returns (bool) {
+        return lotRecalled[lotIdHash];
+    }
+
+    function isUnitDecommissioned(bytes32 unitIdHash) external view returns (bool) {
+        return unitDecommissioned[unitIdHash];
+    }
+
+    function getUnitLotId(bytes32 unitIdHash) external view returns (bytes32) {
+        require(unitDecommissioned[unitIdHash], "Unit not decommissioned");
+        return unitLotId[unitIdHash];
+    }
+
+    function getSubLots(bytes32 parentLotIdHash) external view returns (bytes32[] memory) {
+        require(lotExists[parentLotIdHash], "Lot not found");
+        return lotToSubLots[parentLotIdHash];
+    }
+
+    function getSubLotCount(bytes32 parentLotIdHash) external view returns (uint256) {
+        require(lotExists[parentLotIdHash], "Lot not found");
+        return lotToSubLots[parentLotIdHash].length;
+    }
+
+    function recallLot(bytes32 lotIdHash, bytes32 reasonHash) external onlyRecallAuthority {
+        require(lotIdHash != bytes32(0), "Invalid lot");
+        require(lotExists[lotIdHash], "Lot not found");
+        require(!lotRecalled[lotIdHash], "Lot already recalled");
+
+        lotRecalled[lotIdHash] = true;
+
+        emit BatchRecalled(lotIdHash, reasonHash, 0);
+    }
+
+    // Mock ZKP verifier for lot commissioning (MVP)
+    function _verifyLotProof(
+        bytes32 lotIdHash,
+        bytes32 aggregationRoot,
+        bytes calldata zkpProof
+    ) internal pure returns (bool) {
+        return lotIdHash != bytes32(0) && aggregationRoot != bytes32(0) && zkpProof.length > 0;
     }
 }

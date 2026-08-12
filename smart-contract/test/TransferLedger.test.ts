@@ -178,7 +178,9 @@ describe("TransferLedger", function () {
           serialID,
           distributor.address,
           fromLocation,
-          toLocation
+          toLocation,
+          ethers.ZeroHash,  // lotIdHash
+          0                 // legId
         );
 
       const pending =
@@ -207,7 +209,9 @@ describe("TransferLedger", function () {
             ethers.ZeroHash,
             distributor.address,
             fromLocation,
-            toLocation
+            toLocation,
+            ethers.ZeroHash,
+            0
           )
       ).to.be.revertedWith(
         "Invalid serial"
@@ -249,7 +253,9 @@ describe("TransferLedger", function () {
             serialID,
             distributor.address,
             fromLocation,
-            toLocation
+            toLocation,
+            ethers.ZeroHash,
+            0
           )
       ).to.be.revertedWith(
         "Not current owner"
@@ -291,7 +297,9 @@ describe("TransferLedger", function () {
             serialID,
             pharmacy.address,
             fromLocation,
-            toLocation
+            toLocation,
+            ethers.ZeroHash,
+            0
           )
       ).to.be.revertedWith(
         "Invalid route"
@@ -332,7 +340,9 @@ describe("TransferLedger", function () {
           serialID,
           distributor.address,
           fromLocation,
-          toLocation
+          toLocation,
+          ethers.ZeroHash,
+          0
         );
 
       expect(
@@ -378,7 +388,9 @@ describe("TransferLedger", function () {
           serialID,
           distributor.address,
           fromLocation,
-          toLocation
+          toLocation,
+          ethers.ZeroHash,
+          0
         );
 
       await transferLedger
@@ -429,7 +441,9 @@ describe("TransferLedger", function () {
           serialID,
           distributor.address,
           fromLocation,
-          toLocation
+          toLocation,
+          ethers.ZeroHash,
+          0
         );
 
       await expect(
@@ -478,7 +492,9 @@ describe("TransferLedger", function () {
           serialID,
           distributor.address,
           fromLocation,
-          toLocation
+          toLocation,
+          ethers.ZeroHash,
+          0
         );
 
       await expect(
@@ -531,7 +547,9 @@ describe("TransferLedger", function () {
           serialID,
           distributor.address,
           fromLocation,
-          toLocation
+          toLocation,
+          ethers.ZeroHash,
+          0
         );
 
       await transferLedger

@@ -46,6 +46,8 @@ interface ISupplyChainAccessControl {
 contract TransferLedger {
     struct PendingTransfer {
         bytes32 serialID;
+        bytes32 lotIdHash;    // NEW: for lot-level transfers
+        uint8 legId;          // NEW: for cold-chain tracking
         address sender;
         address receiver;
         bytes32 senderRole;
@@ -58,6 +60,8 @@ contract TransferLedger {
 
     struct TransferRecord {
         bytes32 serialID;
+        bytes32 lotIdHash;    // NEW: for lot-level transfers
+        uint8 legId;          // NEW: for cold-chain tracking
         address from;
         address to;
         bytes32 fromRole;
@@ -91,8 +95,10 @@ contract TransferLedger {
 
     event TransferRequested(
         bytes32 indexed serialID,
-        address indexed sender,
-        address indexed receiver,
+        bytes32 indexed lotIdHash,
+        uint8 indexed legId,
+        address sender,
+        address receiver,
         bytes32 fromLocationHash,
         bytes32 toLocationHash,
         uint256 requestedAt
@@ -100,15 +106,19 @@ contract TransferLedger {
 
     event TransferConfirmed(
         bytes32 indexed serialID,
-        address indexed sender,
-        address indexed receiver,
+        bytes32 indexed lotIdHash,
+        uint8 indexed legId,
+        address sender,
+        address receiver,
         uint256 confirmedAt
     );
 
     event TransferRejected(
         bytes32 indexed serialID,
-        address indexed sender,
-        address indexed receiver,
+        bytes32 indexed lotIdHash,
+        uint8 indexed legId,
+        address sender,
+        address receiver,
         bytes32 reason
     );
 
@@ -132,7 +142,9 @@ contract TransferLedger {
         bytes32 serialID,
         address receiver,
         bytes32 fromLocationHash,
-        bytes32 toLocationHash
+        bytes32 toLocationHash,
+        bytes32 lotIdHash,    // NEW: for lot-level tracking
+        uint8 legId           // NEW: for cold-chain leg tracking
     ) external {
         // serialID is ProductRegistry.serialID. It must not be a batch hash.
         require(serialID != bytes32(0), "Invalid serial");
@@ -177,6 +189,8 @@ contract TransferLedger {
 
             emit TransferRejected(
                 serialID,
+                lotIdHash,
+                legId,
                 msg.sender,
                 receiver,
                 REASON_INVALID_ROUTE
@@ -189,6 +203,8 @@ contract TransferLedger {
 
         pendingTransfers[serialID] = PendingTransfer({
             serialID: serialID,
+            lotIdHash: lotIdHash,
+            legId: legId,
             sender: msg.sender,
             receiver: receiver,
             senderRole: senderRole,
@@ -208,6 +224,8 @@ contract TransferLedger {
 
         emit TransferRequested(
             serialID,
+            lotIdHash,
+            legId,
             msg.sender,
             receiver,
             fromLocationHash,
@@ -243,6 +261,8 @@ contract TransferLedger {
         transferHistory[serialID].push(
             TransferRecord({
                 serialID: serialID,
+                lotIdHash: pendingTransfer.lotIdHash,
+                legId: pendingTransfer.legId,
                 from: pendingTransfer.sender,
                 to: pendingTransfer.receiver,
                 fromRole: pendingTransfer.senderRole,
@@ -263,6 +283,8 @@ contract TransferLedger {
 
         emit TransferConfirmed(
             serialID,
+            pendingTransfer.lotIdHash,
+            pendingTransfer.legId,
             pendingTransfer.sender,
             pendingTransfer.receiver,
             block.timestamp
@@ -279,12 +301,14 @@ contract TransferLedger {
 
         address sender = pending.sender;
         address receiver = pending.receiver;
+        bytes32 lotIdHash = pending.lotIdHash;
+        uint8 legId = pending.legId;
 
         delete pendingTransfers[serialID];
 
         productRegistry.revertTransit(serialID);
 
-        emit TransferRejected(serialID, sender, receiver, reason);
+        emit TransferRejected(serialID, lotIdHash, legId, sender, receiver, reason);
     }
 
     function getTransferHistory(
