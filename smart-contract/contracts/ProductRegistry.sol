@@ -56,7 +56,7 @@ contract ProductRegistry {
     address public transferLedger;
 
     mapping(bytes32 => Product) private products;
-    mapping(bytes32 => bytes32[]) private batchToSerials; // Deprecated: use off-chain Merkle tree
+    // batchToSerials removed: use off-chain Merkle tree instead (gas optimization per spec)
     mapping(bytes32 => bool) public recalledBatches;
     mapping(bytes32 => bytes32) public batchRecallReasons;
 
@@ -251,8 +251,7 @@ contract ProductRegistry {
             exists: true
         });
 
-        batchToSerials[batchHash].push(serialID);
-
+        // batchToSerials removed: use off-chain Merkle tree instead
         emit ProductRegistered(
             serialID,
             batchHash,
@@ -312,8 +311,7 @@ contract ProductRegistry {
             exists: true
         });
 
-        batchToSerials[batchHash].push(serialID);
-
+        // batchToSerials removed: use off-chain Merkle tree instead
         emit ProductRegistered(
             serialID,
             batchHash,
@@ -351,12 +349,11 @@ function verifyProof(
         require(batchHash != bytes32(0), "Invalid batch");
         require(reasonHash != bytes32(0), "Invalid reason");
         require(!recalledBatches[batchHash], "Batch already recalled");
-        require(batchToSerials[batchHash].length > 0, "Empty batch");
 
         recalledBatches[batchHash] = true;
         batchRecallReasons[batchHash] = reasonHash;
 
-        emit BatchRecalled(batchHash, reasonHash, batchToSerials[batchHash].length);
+        emit BatchRecalled(batchHash, reasonHash, 0); // Count tracked off-chain
     }
 
     function unflagProduct(bytes32 serialID) external onlyRecallAuthority {
@@ -476,7 +473,7 @@ function verifyProof(
         bytes32 batchHash
     ) external view returns (bytes32[] memory) {
         require(batchHash != bytes32(0), "Invalid batch");
-        return batchToSerials[batchHash];
+        return new bytes32[](0); // Deprecated: use off-chain Merkle tree
     }
 
     function isBatchRecalled(
@@ -490,7 +487,7 @@ function verifyProof(
         bytes32 batchHash
     ) external view returns (uint256) {
         require(batchHash != bytes32(0), "Invalid batch");
-        return batchToSerials[batchHash].length;
+        return 0; // Deprecated: use off-chain Merkle tree for count
     }
 
     function getBatchSummary(
@@ -507,7 +504,7 @@ function verifyProof(
 
         return (
             recalledBatches[batchHash],
-            batchToSerials[batchHash].length
+            0 // Deprecated: use off-chain Merkle tree for count
         );
     }
 

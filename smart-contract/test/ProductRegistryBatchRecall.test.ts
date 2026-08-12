@@ -111,22 +111,22 @@ describe("ProductRegistry - Batch and Recall", function () {
     return fixture;
   }
 
-  it("Should return correct batch size after registering products", async function () {
+  // batchToSerials removed per spec: count and serials tracked off-chain via Merkle tree
+
+  it("Should return batch size as 0 (off-chain tracking)", async function () {
     const { productRegistry, batchHash } =
       await registerTwoProductsInSameBatch();
 
-    expect(await productRegistry.getBatchSize(batchHash)).to.equal(2);
+    expect(await productRegistry.getBatchSize(batchHash)).to.equal(0);
   });
 
-  it("Should return all serials in a batch", async function () {
-    const { productRegistry, batchHash, serial1, serial2 } =
+  it("Should return empty serials array (off-chain tracking)", async function () {
+    const { productRegistry, batchHash } =
       await registerTwoProductsInSameBatch();
 
     const serials = await productRegistry.getBatchSerials(batchHash);
 
-    expect(serials.length).to.equal(2);
-    expect(serials[0]).to.equal(serial1);
-    expect(serials[1]).to.equal(serial2);
+    expect(serials.length).to.equal(0);
   });
 
   it("Should return false when batch has not been recalled", async function () {
@@ -143,7 +143,7 @@ describe("ProductRegistry - Batch and Recall", function () {
     const summary = await productRegistry.getBatchSummary(batchHash);
 
     expect(summary.recalled).to.equal(false);
-    expect(summary.totalProducts).to.equal(2);
+    expect(summary.totalProducts).to.equal(0); // Off-chain tracking
   });
 
   it("Should allow recall authority to recall a batch", async function () {
@@ -160,7 +160,7 @@ describe("ProductRegistry - Batch and Recall", function () {
         .recallBatch(batchHash, reasonHash)
     )
       .to.emit(productRegistry, "BatchRecalled")
-      .withArgs(batchHash, reasonHash, 2);
+      .withArgs(batchHash, reasonHash, 0);
 
     expect(await productRegistry.isBatchRecalled(batchHash)).to.equal(true);
   });
@@ -224,7 +224,7 @@ describe("ProductRegistry - Batch and Recall", function () {
     const summary = await productRegistry.getBatchSummary(batchHash);
 
     expect(summary.recalled).to.equal(true);
-    expect(summary.totalProducts).to.equal(2);
+    expect(summary.totalProducts).to.equal(0); // Off-chain tracking
   });
 
   it("Should reject recall by non recall authority", async function () {
@@ -242,7 +242,8 @@ describe("ProductRegistry - Batch and Recall", function () {
     ).to.be.revertedWith("Not recall authority");
   });
 
-  it("Should reject recall for empty batch", async function () {
+  // batchToSerials removed per spec: recall works without on-chain count
+  it("Should allow recall for any batch (count tracked off-chain)", async function () {
     const { productRegistry, recallAuthority, reasonHash } =
       await deployFixture();
 
@@ -254,7 +255,7 @@ describe("ProductRegistry - Batch and Recall", function () {
       productRegistry
         .connect(recallAuthority)
         .recallBatch(emptyBatchHash, reasonHash)
-    ).to.be.revertedWith("Empty batch");
+    ).to.emit(productRegistry, "BatchRecalled");
   });
 
   it("Should reject recall with invalid batch hash", async function () {
