@@ -19,6 +19,7 @@ import verifyRoutes from './routes/verify';
 import opsRoutes from './routes/ops';
 import importZkpRoutes from './routes/importZkp';
 import coldchainRoutes from './routes/coldchain';
+import disaggregateRoutes from './routes/disaggregate';
 
 dotenv.config();
 
@@ -84,6 +85,7 @@ app.use('/transfers', transfersRoutes);
 app.use('/verify', verifyRoutes);
 app.use('/import-zkp', importZkpRoutes);
 app.use('/coldchain', coldchainRoutes);
+app.use('/disaggregate', disaggregateRoutes);
 app.use('/', opsRoutes);
 app.use('/consumer/verify', (req, _res, next) => {
   req.url = `/consumer${req.url}`;
