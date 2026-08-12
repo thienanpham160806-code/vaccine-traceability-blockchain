@@ -18,6 +18,7 @@ import transfersRoutes from './routes/transfers';
 import verifyRoutes from './routes/verify';
 import opsRoutes from './routes/ops';
 import importZkpRoutes from './routes/importZkp';
+import coldchainRoutes from './routes/coldchain';
 
 dotenv.config();
 
@@ -82,6 +83,7 @@ app.use('/batches', batchesRoutes);
 app.use('/transfers', transfersRoutes);
 app.use('/verify', verifyRoutes);
 app.use('/import-zkp', importZkpRoutes);
+app.use('/coldchain', coldchainRoutes);
 app.use('/', opsRoutes);
 app.use('/consumer/verify', (req, _res, next) => {
   req.url = `/consumer${req.url}`;

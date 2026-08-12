@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "test:verify-lookup": "ts-node -r tsconfig-paths/register scripts/check-verify-lookup.ts",
     "seed:demo": "ts-node -r tsconfig-paths/register scripts/seed-demo.ts",
+    "sim:coldchain": "ts-node -r tsconfig-paths/register scripts/run-coldchain-sim.ts",
     "seed:demo:activate": "ts-node -r tsconfig-paths/register scripts/seed-demo.ts --activate",
     "add:batches": "ts-node -r tsconfig-paths/register scripts/add-transferable-batches.ts",
     "reconcile": "ts-node -r tsconfig-paths/register scripts/reconcile-firebase.ts",
