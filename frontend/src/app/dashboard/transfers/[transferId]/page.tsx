@@ -107,10 +107,6 @@ function sameAddress(left?: string, right?: string) {
   return String(left || "").trim().toLowerCase() === String(right || "").trim().toLowerCase();
 }
 
-function isBatchLikeSerial(value?: string) {
-  return /^BATCH[-_:]/i.test(String(value || "").trim());
-}
-
 function actionResultMeta(result: { txHash?: string; jobId?: string; transferId?: string; serialId?: string }, transfer: TransferRecord, t: (key: string) => string) {
   return [
     { label: transfer.offChainOnly ? "Batch" : "Serial", value: transfer.offChainOnly ? transfer.batchId : result.serialId || transfer.serialId },
@@ -144,7 +140,10 @@ export default function TransferDetailPage({ params }: PageProps) {
   const { data: transfer, isLoading } = useQuery<TransferRecord | undefined>({
     queryKey: ["transfer", decoded],
     queryFn: () => getTransfer(decoded),
-    refetchInterval: (query) => query.state.data?.status === "PROCESSING" ? 8000 : false,
+    refetchInterval: (query) => {
+      const item = query.state.data;
+      return item?.status === "PROCESSING" || (item?.status === "PENDING" && !item.blockchainTx) ? 2500 : false;
+    },
   });
 
   const handleConfirm = async () => {

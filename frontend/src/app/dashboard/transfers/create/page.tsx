@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
-import { bulkScanTransfer, confirmBatchShellTransfer, confirmTransfer, createBatchShellTransfer, getApiErrorMessage, getBatches, getDemoActors, getTransferableProducts, getTransfers, rejectBatchShellTransfer, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
+import { bulkScanTransfer, confirmBatchShellTransfer, confirmTransfer, getApiErrorMessage, getDemoActors, getTransferableProducts, getTransfers, rejectBatchShellTransfer, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
@@ -172,8 +172,11 @@ function TransferList() {
   const { data: allTransfers = [], isLoading } = useQuery<TransferRecord[]>({
     queryKey: ["transfers"],
     queryFn: () => getTransfers({ scope: "mine" }),
-    staleTime: 20_000,
-    refetchInterval: 30_000,
+    staleTime: 5_000,
+    refetchInterval: (query) =>
+      (query.state.data || []).some((item) => item.status === "PROCESSING" || (item.status === "PENDING" && !item.blockchainTx))
+        ? 2500
+        : 10_000,
     refetchOnWindowFocus: false,
   });
 
@@ -498,24 +501,10 @@ export default function ScanTransferPage() {
     enabled: canLoadInventory,
     staleTime: 10_000,
   });
-  const { data: ownedBatches = [] } = useQuery<Batch[]>({
-    queryKey: ["batches", user?.address, inventoryRole],
-    queryFn: () => getBatches({ scope: "mine" }),
-    enabled: canLoadInventory,
-    staleTime: 10_000,
-  });
   const transferableProducts = useMemo(() => transferableInventory?.items || [], [transferableInventory?.items]);
   const canCreateTransfer = Boolean(transferableInventory?.canTransfer);
 
-  const emptyTransferableBatches = useMemo(() => {
-    const productBatchKeys = normalizedKeySet(transferableProducts.flatMap((product) => batchKeysFromProduct(product)));
-    return ownedBatches.filter((batch) => {
-      const keys = batchKeysFromBatch(batch).map((item) => item.toLowerCase());
-      return keys.length > 0 && keys.every((key) => !productBatchKeys.has(key)) && !batch.recalledAt && !batch.archivedAt;
-    });
-  }, [ownedBatches, transferableProducts]);
-
-  const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts, emptyTransferableBatches), [emptyTransferableBatches, transferableProducts]);
+  const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts), [transferableProducts]);
   const batchCodeSet = useMemo(() => {
     const codes = new Set<string>();
     batchGroups.forEach((group) => {
@@ -565,27 +554,8 @@ export default function ScanTransferPage() {
     if (isBusy) return;
     if (!primarySerialId && !selectedBatchShellId) return;
     if (selectedBatchShellId && serialsToTransfer.length === 0) {
-      setIsBusy(true);
-      setError(null);
-      setStatusMsg(t("Đang tạo lệnh chuyển batch..."));
-      setTxHash(null);
-      try {
-        const data = await createBatchShellTransfer({
-          batchId: selectedBatchShellId,
-          fromRole,
-          toRole: effectiveToRole,
-        });
-        setTransferId(data.transferId || data.transfer.id);
-        setStatusMsg(t("Đã tạo lệnh chuyển batch. Bên nhận có thể xác nhận trong danh sách lệnh."));
-        qc.invalidateQueries({ queryKey: ["transfers"] });
-        qc.invalidateQueries({ queryKey: ["batches"] });
-        qc.invalidateQueries({ queryKey: ["transferable-products"] });
-      } catch (err: unknown) {
-        setError(getApiErrorMessage(err, t("Tạo lệnh batch thất bại.")));
-        setStatusMsg(null);
-      } finally {
-        setIsBusy(false);
-      }
+      setError(t("Batch chưa có serial hợp lệ, hãy đăng ký serial vào batch trước khi chuyển giao."));
+      setStatusMsg(null);
       return;
     }
     if (serialsToTransfer.some((item) => !safeIdPattern.test(item))) {
@@ -847,7 +817,7 @@ export default function ScanTransferPage() {
                         <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{group.manufacturerName}</p>
                       </div>
                       <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-bold text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200">
-                        {validProducts.length > 0 ? `${validProducts.length} serial` : t("Batch")}
+                        {`${validProducts.length} serial`}
                       </span>
                     </div>
                     {canCreateTransfer ? (
@@ -881,25 +851,7 @@ export default function ScanTransferPage() {
                               {t("Bỏ chọn lô")}
                             </button>
                           </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedBatchShellId(group.batchId);
-                              setSelectedSerialIds([]);
-                              setSerialId("");
-                              setFieldErrors({});
-                              setError(null);
-                            }}
-                            className={`rounded-md border px-2.5 py-1.5 text-[11px] font-bold ${
-                              selectedBatchShellId === group.batchId
-                                ? "border-amber-500 bg-amber-500 text-white"
-                                : "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100"
-                            }`}
-                          >
-                            {selectedBatchShellId === group.batchId ? t("Đã chọn batch") : t("Chuyển batch")}
-                          </button>
-                        )}
+                        ) : null}
                       </div>
                     ) : null}
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -988,11 +940,11 @@ export default function ScanTransferPage() {
         <div className="mt-5 flex flex-wrap gap-2.5">
           {canCreateTransfer ? (
             <button
-              disabled={isBusy || !(selectedSerialIds.length || serialId.trim() || selectedBatchShellId)}
+              disabled={isBusy || !(selectedSerialIds.length || serialId.trim())}
               onClick={create}
               className="btn-brand rounded-lg px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
             >
-              {isBusy ? <ActionSpinner label={t("Đang xử lý...")} /> : selectedBatchShellId ? t("Tạo lệnh batch") : selectedSerialIds.length > 1 ? `${t("Tạo lệnh")} (${selectedSerialIds.length})` : t("Tạo lệnh")}
+              {isBusy ? <ActionSpinner label={t("Đang xử lý...")} /> : selectedSerialIds.length > 1 ? `${t("Tạo lệnh")} (${selectedSerialIds.length})` : t("Tạo lệnh")}
             </button>
           ) : null}
           <button

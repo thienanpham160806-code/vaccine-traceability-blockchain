@@ -198,6 +198,21 @@ function canCreateOnChainTransfer(status: number): boolean {
   return status === 1 || status === 3;
 }
 
+function productStatusFromChain(status: number): Product['status'] {
+  const statuses = ['REGISTERED', 'VERIFIED', 'IN_TRANSIT', 'DELIVERED', 'FLAGGED', 'RECALLED'] as const;
+  return (statuses[status] || 'VERIFIED') as Product['status'];
+}
+
+function roleFromOwnerAddress(address?: string): string | null {
+  const normalized = normalizeAddress(address);
+  const roles = ['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'CLINIC', 'PHARMACY', 'RECALL_AUTHORITY', 'ADMIN'];
+  for (const role of roles) {
+    const roleAddress = contractClient.getRoleAddress(role);
+    if (roleAddress && normalizeAddress(roleAddress) === normalized) return role;
+  }
+  return null;
+}
+
 /**
  * GET /products/transferable
  * Return products owned by the authenticated wallet and ready for a new transfer.
@@ -270,10 +285,12 @@ router.get(
           product.ownerRole ||
           (normalizeAddress(firebaseOwner) === normalizedOwner ? ownerRole : '');
         const normalizedStatus = String(product.status || '').toUpperCase();
+        const productSyncStatus = String((product as any).syncStatus || '').toUpperCase();
 
         if (product.archivedAt || ['RECALLED', 'INVALID', 'ARCHIVED'].includes(normalizedStatus)) return null;
-        if (['OWNER_MISMATCH', 'STATUS_MISMATCH', 'STALE_PENDING'].includes(String((product as any).syncStatus || '').toUpperCase())) return null;
-        if (latestTransferBySerial.get(product.serialId)?.status === 'PENDING') return null;
+        if (productSyncStatus && productSyncStatus !== 'OK') return null;
+        if (['PENDING', 'PROCESSING'].includes(String(latestTransferBySerial.get(product.serialId)?.status || '').toUpperCase())) return null;
+        if (!product.blockchainTx) return null;
         if (!TRANSFERABLE_PRODUCT_STATUSES.has(String(product.status))) return null;
 
         let existsOnChain = false;
@@ -1097,7 +1114,7 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
     });
 
     const now = Date.now();
-    const batch: Batch = mergeBatchRecord(existingBatch, {
+    const batchPatch = {
       id: batchQR,
       batchHash,
       batchQR,
@@ -1114,9 +1131,12 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       ...(approvedImportRoot ? { approvedImportRoot } : {}),
       createdAt: now,
       updatedAt: now,
-    }, quantity);
+      syncStatus: 'PROCESSING',
+      processingJobId: job.id,
+    } as Batch & { syncStatus?: string; processingJobId?: string };
+    const batch: Batch & { syncStatus?: string; processingJobId?: string } = mergeBatchRecord(existingBatch, batchPatch, quantity);
 
-    const product: Product = {
+    const product: Product & { syncStatus?: string; processingJobId?: string } = {
       serialId,
       batchId: batchQR,
       batchHash,
@@ -1134,6 +1154,8 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       ...(importDocCommitment ? { importDocCommitment } : {}),
       ...(approvedImportRoot ? { approvedImportRoot } : {}),
       ...(importProofMode ? { importProofMode } : {}),
+      syncStatus: 'PROCESSING',
+      processingJobId: job.id,
       createdAt: now,
       updatedAt: now,
     };
@@ -1788,15 +1810,35 @@ router.post(
         });
       }
 
+      const product = snapshot.val() as Product;
       const existsOnChain = await contractClient.productExists(serialHash);
       if (existsOnChain) {
-        return res.status(400).json({
-          success: false,
-          error: { code: 'ALREADY_ON_CHAIN', message: `Product ${decodedSerialId} is already registered on the current contract.` },
+        const [chainOwner, chainStatus] = await Promise.all([
+          contractClient.getCurrentOwner(serialHash).catch(() => product.currentOwner),
+          contractClient.getProductStatus(serialHash).catch(() => 1),
+        ]);
+        const now = Date.now();
+        const updates: Partial<Product> & { syncStatus?: string } = {
+          status: productStatusFromChain(Number(chainStatus)),
+          currentOwner: chainOwner || product.currentOwner || product.manufacturerAddress,
+          ownerRole: (roleFromOwnerAddress(chainOwner) || product.ownerRole || (product.isImported ? 'IMPORTER' : 'MANUFACTURER')) as Product['ownerRole'],
+          syncStatus: 'OK',
+          updatedAt: now,
+        };
+        await db.ref(`products/${productKey}`).update(updates);
+        const reconciledProduct = { ...product, ...updates };
+        return res.json({
+          success: true,
+          data: {
+            txHash: product.blockchainTx || '',
+            serialHash,
+            serialId: decodedSerialId,
+            product: reconciledProduct,
+            alreadyOnChain: true,
+          },
         });
       }
 
-      const product = snapshot.val() as Product;
       const batchHash = product.batchHash || toBytes32(product.batchId || decodedSerialId);
       const metadataHash = (product as any).metadataHash || toBytes32(JSON.stringify({ serialId: decodedSerialId }));
       const signerRole = product.isImported ? 'IMPORTER' : 'MANUFACTURER';
@@ -1812,13 +1854,27 @@ router.post(
       );
 
       const now = Date.now();
-      await db.ref(`products/${productKey}`).update({ blockchainTx: txHash, updatedAt: now });
+      const currentOwner = product.currentOwner || product.manufacturerAddress || contractClient.getRoleAddress(signerRole);
+      const updates: Partial<Product> & { syncStatus?: string } = {
+        blockchainTx: txHash,
+        status: product.status === 'REGISTERED' || product.status === 'VERIFIED' ? 'VERIFIED' : product.status,
+        currentOwner,
+        ownerRole: product.ownerRole || signerRole,
+        syncStatus: 'OK',
+        updatedAt: now,
+      };
+      await db.ref(`products/${productKey}`).update(updates);
 
       Logger.success(`Re-registered ${decodedSerialId} → tx ${txHash}`);
 
       res.json({
         success: true,
-        data: { txHash, serialHash, serialId: decodedSerialId },
+        data: {
+          txHash,
+          serialHash,
+          serialId: decodedSerialId,
+          product: { ...product, ...updates },
+        },
       });
     } catch (error) {
       Logger.error('Re-register product error', error);

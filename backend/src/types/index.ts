@@ -140,7 +140,7 @@ export interface Batch {
 }
 
 // ============= Transfer =============
-export type TransferStatus = 'PENDING' | 'CONFIRMED' | 'REJECTED' | 'RETURNED';
+export type TransferStatus = 'PENDING' | 'PROCESSING' | 'CONFIRMED' | 'REJECTED' | 'RETURNED';
 
 export interface TransferRecord {
   id: string;

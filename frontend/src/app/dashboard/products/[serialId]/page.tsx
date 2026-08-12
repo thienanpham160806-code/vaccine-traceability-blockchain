@@ -91,7 +91,7 @@ export default function ProductDetailPage({ params }: PageProps) {
         toast.error(message);
       })
       .finally(() => setIsLoading(false));
-  }, [decodedSerialId]);
+  }, [decodedSerialId, t]);
 
   const startEditing = () => {
     if (!detail) return;
@@ -121,10 +121,19 @@ export default function ProductDetailPage({ params }: PageProps) {
     setMessage(null);
     try {
       const result = await reregisterProduct(detail.product.serialId);
-      setMessage(`${t("Đăng ký lại on-chain")} TX: ${result.txHash}`);
-      toast.success(t("Đăng ký lại on-chain"));
+      const successMessage = result.alreadyOnChain
+        ? "Đã đồng bộ trạng thái on-chain về Firebase."
+        : `${t("Đăng ký lại on-chain")} TX: ${result.txHash}`;
+      setMessage(successMessage);
+      toast.success(successMessage);
       setDetail((current) =>
-        current ? { ...current, product: { ...current.product, blockchainTx: result.txHash } } : current
+        current
+          ? {
+              ...current,
+              product: result.product || { ...current.product, blockchainTx: result.txHash, syncStatus: "OK" },
+              blockchain: { ...current.blockchain, txHash: result.txHash || current.blockchain.txHash, available: true },
+            }
+          : current
       );
     } catch (err: unknown) {
       const msg = getApiErrorMessage(err, t("Không thể đăng ký lại on-chain."));
@@ -214,13 +223,16 @@ export default function ProductDetailPage({ params }: PageProps) {
   const currentUser = getStoredUser();
   const canReregisterRole = canRegisterProducts(currentUser);
   const canReregisterOnChain = !blockchain.available && canReregisterRole;
-  const hasSyncMismatch = ["OWNER_MISMATCH", "STATUS_MISMATCH", "STALE_PENDING"].includes(product.syncStatus || "");
+  const syncStatus = product.syncStatus || "OK";
+  const hasBlockingSync = syncStatus !== "OK";
+  const transferableStatuses = ["REGISTERED", "VERIFIED", "DELIVERED", "DELIVERED_TO_DISTRIBUTOR", "DELIVERED_TO_CLINIC", "DELIVERED_TO_PHARMACY"];
   const canTransfer =
     canInitiateTransfer(currentUser) &&
-    !hasSyncMismatch &&
+    !hasBlockingSync &&
+    Boolean(product.blockchainTx) &&
     !product.archivedAt &&
     !/^BATCH[-_:]/i.test(product.serialId) &&
-    !["ARCHIVED", "INVALID", "RECALLED", "ADMINISTERED"].includes(product.status);
+    transferableStatuses.includes(product.status);
   const canEdit = canEditProductMetadata(currentUser);
   const canArchive = isAdminAuthority(currentUser);
   const canAdminister =
@@ -280,11 +292,13 @@ export default function ProductDetailPage({ params }: PageProps) {
         <div>
           <p className="text-sm text-muted-foreground">{t("Chi tiết sản phẩm")}</p>
           <h1 className="break-all text-3xl font-bold">{product.serialId}</h1>
-          {hasSyncMismatch ? (
+          {hasBlockingSync ? (
             <p className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
-              {language === "en"
-                ? `Firebase and on-chain are out of sync (${product.syncStatus}). Reconcile before transferring.`
-                : `Firebase và on-chain đang lệch (${product.syncStatus}). Reconcile trước khi chuyển giao.`}
+              {syncStatus === "PROCESSING"
+                ? t("Đang đồng bộ giao dịch on-chain. Chờ backend xác nhận trước khi chuyển giao.")
+                : language === "en"
+                  ? `Firebase and on-chain are out of sync (${syncStatus}). Reconcile before transferring.`
+                  : `Firebase và on-chain đang lệch (${syncStatus}). Reconcile trước khi chuyển giao.`}
             </p>
           ) : null}
           {product.status === "ADMINISTERED" ? (
@@ -403,7 +417,7 @@ export default function ProductDetailPage({ params }: PageProps) {
             </div>
             <div>
               <p className="font-semibold text-gray-700">Sync Status</p>
-              <p className={hasSyncMismatch ? "font-semibold text-amber-700" : "text-muted-foreground"}>{product.syncStatus || "OK"}</p>
+              <p className={hasBlockingSync ? "font-semibold text-amber-700" : "text-muted-foreground"}>{syncStatus}</p>
             </div>
             <div>
               <p className="font-semibold text-gray-700">{t("Địa chỉ nhà sản xuất")}</p>

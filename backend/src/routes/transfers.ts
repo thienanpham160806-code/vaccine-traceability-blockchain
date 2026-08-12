@@ -91,7 +91,17 @@ function buildTransferMetadata(body: any) {
 }
 
 function pruneUndefined<T extends Record<string, any>>(value: T): Partial<T> {
-  return Object.fromEntries(Object.entries(value).filter(([, item]) => item !== undefined && item !== '')) as Partial<T>;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, item]) => item !== undefined && item !== '')
+      .map(([key, item]) => {
+        if (Array.isArray(item)) {
+          return [key, item.map((entry) => (entry && typeof entry === 'object' ? pruneUndefined(entry) : entry)).filter((entry) => entry !== undefined)];
+        }
+        if (item && typeof item === 'object') return [key, pruneUndefined(item)];
+        return [key, item];
+      })
+  ) as Partial<T>;
 }
 
 function requireReceiptEvent(receipt: any, eventName: string) {
@@ -140,7 +150,7 @@ async function resolvePendingTransfer(serialId: string, serialHash: string): Pro
     const snap = await db.ref(`transfers/${indexedId}`).once('value');
     if (snap.exists()) {
       const t = snap.val() as TransferRecord;
-      if (t.status === 'PENDING') return [indexedId, t];
+      if (t.status === 'PENDING' || t.status === 'PROCESSING') return [indexedId, t];
     }
   }
   // Fallback: indexed query (uses .indexOn serialId from database rules)
@@ -148,7 +158,7 @@ async function resolvePendingTransfer(serialId: string, serialHash: string): Pro
   let found: [string, TransferRecord] | null = null;
   snap.forEach((child: any) => {
     const t = child.val() as TransferRecord;
-    if (t.status === 'PENDING' && !found) found = [child.key as string, t];
+    if ((t.status === 'PENDING' || t.status === 'PROCESSING') && !found) found = [child.key as string, t];
   });
   return found;
 }
@@ -242,8 +252,18 @@ async function createTransferForSerial(req: AuthRequest, serialId: string, group
     throw httpError(400, 'PRODUCT_NOT_ACTIVE_INVENTORY', `Serial ${serialId} không còn là inventory hợp lệ. Không thể tạo lệnh chuyển giao.`);
   }
 
-  if (['OWNER_MISMATCH', 'STATUS_MISMATCH', 'STALE_PENDING'].includes(String(productData?.syncStatus || '').toUpperCase())) {
+  const syncStatus = String(productData?.syncStatus || '').toUpperCase();
+  if (syncStatus && syncStatus !== 'OK') {
     throw httpError(409, 'PRODUCT_SYNC_MISMATCH', `Serial ${serialId} đang lệch Firebase/on-chain. Reconcile trước khi chuyển giao.`);
+  }
+
+  if (!productData?.blockchainTx) {
+    throw httpError(409, 'PRODUCT_SYNC_MISMATCH', `Serial ${serialId} chưa có giao dịch đăng ký on-chain được đồng bộ. Chờ backend xác nhận trước khi chuyển giao.`);
+  }
+
+  const existingPendingTransfer = await resolvePendingTransfer(serialId, serialHash);
+  if (existingPendingTransfer) {
+    throw httpError(409, 'PENDING_TRANSFER_EXISTS', `Serial ${serialId} already has a transfer being processed. Confirm, reject, or wait for it to finish before creating a new one.`);
   }
 
   const senderAddress = contractClient.getRoleAddress(fromRole);
@@ -268,6 +288,7 @@ async function createTransferForSerial(req: AuthRequest, serialId: string, group
   const fromLoc = toBytes32(fromLocationHash || (fromLocation ? `location:${fromLocation}` : `from:${senderAddress}`));
   const toLoc = toBytes32(toLocationHash || `to:${receiverAddress}`);
   const transferMetadata = buildTransferMetadata(req.body);
+  const previousProductStatus = productData?.status || productRegistryStatusToProductStatus(Number(statusBefore));
 
   const now = Date.now();
   const transferId = `${serialHash}_${now}`;
@@ -289,6 +310,7 @@ async function createTransferForSerial(req: AuthRequest, serialId: string, group
   });
 
   const txHash = job.txHash;
+  const initialTransferStatus = txHash ? 'PENDING' : 'PROCESSING';
   const ipfsResult = await ipfsService.pinJson(`transfer-${serialId}-${now}`, {
     serialId,
     serialHash,
@@ -299,9 +321,10 @@ async function createTransferForSerial(req: AuthRequest, serialId: string, group
     fromLocationHash: fromLoc,
     toLocationHash: toLoc,
     ...transferMetadata,
-    status: 'PENDING',
+    status: initialTransferStatus,
     blockchainTx: txHash,
     batchTransferGroupId: groupId,
+    previousProductStatus,
     createdAt: now,
   });
 
@@ -313,25 +336,28 @@ async function createTransferForSerial(req: AuthRequest, serialId: string, group
     toAddress: receiverAddress,
     fromRole,
     toRole,
-    status: 'PENDING',
+    status: initialTransferStatus,
+    previousProductStatus,
     fromLocationHash: fromLoc,
     toLocationHash: toLoc,
     ...transferMetadata,
     ...(groupId ? { batchTransferGroupId: groupId } : {}),
     ipfsCid: ipfsResult?.cid,
     blockchainTx: txHash,
+    processingJobId: job.id,
     createdAt: now,
     updatedAt: now,
   }) as TransferRecord & { blockchainTx?: string; batchTransferGroupId?: string };
 
   await Promise.all([
-    db.ref(`transfers/${transferId}`).set(transfer),
+    db.ref(`transfers/${transferId}`).set(pruneUndefined(transfer)),
     db.ref(`products/${serialHash}`).update({
       status: 'IN_TRANSIT',
       currentOwner: senderAddress,
       ownerRole: fromRole,
       latestTransferId: transferId,
-      syncStatus: 'OK',
+      syncStatus: txHash ? 'OK' : 'PROCESSING',
+      processingTransferJobId: job.id,
       updatedAt: now,
     }),
     db.ref(`pending-transfers/${serialHash}`).set(transferId),
@@ -469,6 +495,14 @@ function isBatchLikeSerial(serialId: unknown, batchValues: string[]) {
   return batchValues.some((value) => value.toLowerCase() === normalized);
 }
 
+function isBatchShellTransferRecord(transfer: any) {
+  return (
+    transfer?.mode === 'OFF_CHAIN_BATCH_CUSTODY' ||
+    transfer?.transferMode === 'OFF_CHAIN_BATCH_CUSTODY' ||
+    /^batch[-_:]/i.test(String(transfer?.serialId || '').trim())
+  );
+}
+
 async function findBatchById(batchId: string): Promise<[string, any] | null> {
   const direct = await db.ref(`batches/${batchId}`).once('value');
   if (direct.exists()) return [batchId, direct.val()];
@@ -524,58 +558,53 @@ router.post(
       const normalizedBatchValues = batchValues.map((item) => item.toLowerCase());
       const serialsInBatch = (Object.values(productsSnapshot.val() || {}) as any[]).filter((product) => {
         if (product?.archivedAt || ['ARCHIVED', 'INVALID', 'RECALLED'].includes(String(product?.status || '').toUpperCase())) return false;
+        if (String(product?.syncStatus || '').toUpperCase() !== 'OK') return false;
+        if (!product?.blockchainTx) return false;
         if (isBatchLikeSerial(product?.serialId, batchValues)) return false;
         return productBatchValues(product)
           .map((value) => value.toLowerCase())
           .some((value) => normalizedBatchValues.includes(value));
       });
       if (serialsInBatch.length > 0) {
-        return res.status(409).json({
-          success: false,
-          error: { code: 'BATCH_HAS_SERIALS', message: 'Batch has serials. Use bulk serial transfer instead.' },
+        const batchTransferGroupId = `batch-auto-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        const successful: any[] = [];
+        const failed: any[] = [];
+
+        for (const product of serialsInBatch) {
+          try {
+            const result = await createTransferForSerial(req, product.serialId, batchTransferGroupId);
+            successful.push({ serialId: product.serialId, ...result });
+          } catch (error: any) {
+            failed.push({
+              serialId: product.serialId,
+              code: error?.code || 'TRANSFER_SCAN_ERROR',
+              message: getErrorMessage(error, 'Failed to create transfer'),
+            });
+          }
+        }
+
+        const first = successful[0];
+        return res.status(failed.length > 0 ? 207 : 200).json({
+          success: failed.length === 0,
+          data: {
+            transfer: first?.transfer,
+            transferId: first?.transfer?.id || first?.transferId || batchTransferGroupId,
+            batchTransferGroupId,
+            mode: 'BULK_SERIAL_ON_CHAIN',
+            total: serialsInBatch.length,
+            successful,
+            failed,
+          },
         });
       }
 
-      const senderAddress = contractClient.getRoleAddress(fromRole);
-      const receiverAddress = rawReceiverAddress || contractClient.getRoleAddress(toRole);
-      if (!CryptoUtils.isValidAddress(receiverAddress)) {
-        return res.status(400).json({
-          success: false,
-          error: { code: 'INVALID_RECEIVER', message: 'receiverAddress must be a valid Ethereum address' },
-        });
-      }
-
-      const now = Date.now();
-      const transferId = `batch-${toBytes32(String(batch?.batchHash || batch?.id || batchId))}_${now}`;
-      const transfer = pruneUndefined({
-        id: transferId,
-        serialId: '',
-        batchId: batch?.id || String(batchId),
-        batchHash: batch?.batchHash || batchKey,
-        fromAddress: senderAddress,
-        toAddress: receiverAddress,
-        fromRole,
-        toRole,
-        status: 'PENDING',
-        mode: 'OFF_CHAIN_BATCH_CUSTODY',
-        transferMode: 'OFF_CHAIN_BATCH_CUSTODY',
-        offChainOnly: true,
-        reasonNote: 'Batch has no serials; no on-chain serial transfer was created',
-        createdAt: now,
-        updatedAt: now,
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'BATCH_HAS_NO_SERIALS',
+          message: `Batch ${batchId} has no product serials. Register serials in this batch before creating a transfer.`,
+        },
       });
-
-      await Promise.all([
-        db.ref(`transfers/${transferId}`).set(transfer),
-        db.ref(`batch-transfers/${transferId}`).set(transfer),
-        db.ref(`batches/${batchKey}`).update({
-          pendingBatchTransferId: transferId,
-          custodyStatus: 'PENDING_TRANSFER',
-          updatedAt: now,
-        }),
-      ]);
-
-      res.json({ success: true, data: { transfer, transferId } });
     } catch (error) {
       Logger.error('Create batch shell transfer error', error);
       res.status(500).json({
@@ -801,7 +830,7 @@ router.post(
     };
 
     await Promise.all([
-      db.ref(`transfers/${transferId}`).set(transfer),
+      db.ref(`transfers/${transferId}`).set(pruneUndefined(transfer)),
       db.ref(`products/${serialHash}`).update({
         status: 'IN_TRANSIT',
         currentOwner: senderAddress,
@@ -929,7 +958,7 @@ router.post(
     };
 
     await Promise.all([
-      db.ref(`transfers/${transferId}`).set(transfer),
+      db.ref(`transfers/${transferId}`).set(pruneUndefined(transfer)),
       db.ref(`products/${serialHash}`).update({
         status: 'IN_TRANSIT',
         currentOwner: senderAddress,
@@ -959,8 +988,8 @@ router.post('/:transferId/confirm-batch-shell', verifyToken, requireRole(transfe
       return res.status(404).json({ success: false, error: { code: 'TRANSFER_NOT_FOUND', message: `Transfer ${transferId} not found` } });
     }
     const transfer = snapshot.val();
-    if (transfer.mode !== 'OFF_CHAIN_BATCH_CUSTODY' && transfer.transferMode !== 'OFF_CHAIN_BATCH_CUSTODY') {
-      return res.status(400).json({ success: false, error: { code: 'NOT_BATCH_SHELL_TRANSFER', message: 'Transfer is not an off-chain batch custody transfer' } });
+    if (!isBatchShellTransferRecord(transfer)) {
+      return res.status(400).json({ success: false, error: { code: 'NOT_BATCH_SHELL_TRANSFER', message: 'Transfer is not a batch transfer' } });
     }
     if (transfer.status !== 'PENDING') {
       return res.status(409).json({ success: false, error: { code: 'TRANSFER_NOT_PENDING', message: 'Transfer is not pending' } });
@@ -971,6 +1000,7 @@ router.post('/:transferId/confirm-batch-shell', verifyToken, requireRole(transfe
 
     const found = await findBatchById(transfer.batchHash || transfer.batchId);
     const batchKey = found?.[0] || transfer.batchHash || transfer.batchId;
+    const pendingSerialHash = transfer.serialId ? toBytes32(transfer.serialId) : null;
     const now = Date.now();
     const updates: Record<string, unknown> = {
       [`transfers/${transferId}/status`]: 'CONFIRMED',
@@ -986,6 +1016,7 @@ router.post('/:transferId/confirm-batch-shell', verifyToken, requireRole(transfe
       [`batches/${batchKey}/custodyStatus`]: 'CONFIRMED',
       [`batches/${batchKey}/updatedAt`]: now,
     };
+    if (pendingSerialHash) updates[`pending-transfers/${pendingSerialHash}`] = null;
     await db.ref().update(updates);
     res.json({ success: true, data: { ...transfer, status: 'CONFIRMED', confirmedAt: now, updatedAt: now } });
   } catch (error) {
@@ -1003,8 +1034,8 @@ router.post('/:transferId/reject-batch-shell', verifyToken, requireRole(transfer
       return res.status(404).json({ success: false, error: { code: 'TRANSFER_NOT_FOUND', message: `Transfer ${transferId} not found` } });
     }
     const transfer = snapshot.val();
-    if (transfer.mode !== 'OFF_CHAIN_BATCH_CUSTODY' && transfer.transferMode !== 'OFF_CHAIN_BATCH_CUSTODY') {
-      return res.status(400).json({ success: false, error: { code: 'NOT_BATCH_SHELL_TRANSFER', message: 'Transfer is not an off-chain batch custody transfer' } });
+    if (!isBatchShellTransferRecord(transfer)) {
+      return res.status(400).json({ success: false, error: { code: 'NOT_BATCH_SHELL_TRANSFER', message: 'Transfer is not a batch transfer' } });
     }
     if (transfer.status !== 'PENDING') {
       return res.status(409).json({ success: false, error: { code: 'TRANSFER_NOT_PENDING', message: 'Transfer is not pending' } });
@@ -1015,6 +1046,7 @@ router.post('/:transferId/reject-batch-shell', verifyToken, requireRole(transfer
 
     const found = await findBatchById(transfer.batchHash || transfer.batchId);
     const batchKey = found?.[0] || transfer.batchHash || transfer.batchId;
+    const pendingSerialHash = transfer.serialId ? toBytes32(transfer.serialId) : null;
     const now = Date.now();
     const updates: Record<string, unknown> = {
       [`transfers/${transferId}/status`]: 'REJECTED',
@@ -1029,6 +1061,7 @@ router.post('/:transferId/reject-batch-shell', verifyToken, requireRole(transfer
       [`batches/${batchKey}/custodyStatus`]: 'REJECTED',
       [`batches/${batchKey}/updatedAt`]: now,
     };
+    if (pendingSerialHash) updates[`pending-transfers/${pendingSerialHash}`] = null;
     await db.ref().update(updates);
     res.json({ success: true, data: { ...transfer, status: 'REJECTED', rejectedReason: String(rejectionReason || '').trim(), rejectedAt: now, updatedAt: now } });
   } catch (error) {

@@ -12,6 +12,7 @@ export type UserRole =
 export type ProductType = "LOCAL" | "IMPORT";
 
 export type ProductStatus =
+  | "REGISTERED"
   | "VERIFIED"
   | "IN_TRANSIT"
   | "PENDING_DELIVERY"
@@ -40,7 +41,7 @@ export type Product = {
   currentLocationName?: string | null;
   currentWarehouseName?: string | null;
   latestTransferId?: string | null;
-  syncStatus?: "OK" | "FIREBASE_ONLY" | "CHAIN_ONLY" | "OWNER_MISMATCH" | "STATUS_MISMATCH" | "STALE_PENDING";
+  syncStatus?: "OK" | "PROCESSING" | "FIREBASE_ONLY" | "CHAIN_ONLY" | "OWNER_MISMATCH" | "STATUS_MISMATCH" | "STALE_PENDING";
   status: ProductStatus;
   riskLevel: RiskLevel;
   expiryDate: string;

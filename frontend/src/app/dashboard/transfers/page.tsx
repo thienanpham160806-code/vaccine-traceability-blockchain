@@ -12,7 +12,7 @@ import type { TransferRecord, TransferStatus } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import { canInitiateTransfer, canViewAllScope, isEndUserRole } from "@/lib/role-access";
 
-const statusOptions: Array<TransferStatus | "ALL"> = ["ALL", "PENDING", "CONFIRMED", "REJECTED", "RETURNED"];
+const statusOptions: Array<TransferStatus | "ALL"> = ["ALL", "PENDING", "PROCESSING", "CONFIRMED", "REJECTED", "RETURNED"];
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -122,8 +122,11 @@ export default function TransfersPage() {
   const { data: transfers = [], isLoading } = useQuery<TransferRecord[]>({
     queryKey: ["transfers", scope],
     queryFn: () => getTransfers({ scope }),
-    staleTime: 20_000,
-    refetchInterval: 30_000,
+    staleTime: 5_000,
+    refetchInterval: (query) =>
+      (query.state.data || []).some((item) => item.status === "PROCESSING" || (item.status === "PENDING" && !item.blockchainTx))
+        ? 2500
+        : 10_000,
     refetchOnWindowFocus: false,
   });
 

@@ -98,9 +98,8 @@ export function ProductTable() {
     scope === "mine" &&
     !product.archivedAt &&
     !batchLikePattern.test(product.serialId) &&
-    product.syncStatus !== "OWNER_MISMATCH" &&
-    product.syncStatus !== "STATUS_MISMATCH" &&
-    product.syncStatus !== "STALE_PENDING" &&
+    (product.syncStatus || "OK") === "OK" &&
+    Boolean(product.blockchainTx) &&
     !["ARCHIVED", "INVALID", "RECALLED", "ADMINISTERED"].includes(product.status) &&
     ["REGISTERED", "VERIFIED", "DELIVERED", "DELIVERED_TO_DISTRIBUTOR", "DELIVERED_TO_CLINIC", "DELIVERED_TO_PHARMACY"].includes(product.status);
 

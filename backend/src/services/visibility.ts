@@ -3,7 +3,7 @@ import jwt from 'jsonwebtoken';
 import config from '../config/env';
 
 export type VisibilityScope = 'mine' | 'all';
-export type SyncStatus = 'OK' | 'FIREBASE_ONLY' | 'CHAIN_ONLY' | 'OWNER_MISMATCH' | 'STATUS_MISMATCH' | 'STALE_PENDING';
+export type SyncStatus = 'OK' | 'PROCESSING' | 'FIREBASE_ONLY' | 'CHAIN_ONLY' | 'OWNER_MISMATCH' | 'STATUS_MISMATCH' | 'STALE_PENDING';
 
 export type VisibilityContext = {
   address: string;

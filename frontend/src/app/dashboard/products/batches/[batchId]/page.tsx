@@ -144,10 +144,11 @@ export default function BatchDetailPage({ params }: PageProps) {
   const isRecalled = !!batch.recalledAt;
   const transferableSerials = serials.filter((serial) =>
     !serial.archivedAt &&
-    !["ARCHIVED", "INVALID", "RECALLED"].includes(serial.status) &&
+    ["REGISTERED", "VERIFIED", "DELIVERED", "DELIVERED_TO_DISTRIBUTOR", "DELIVERED_TO_CLINIC", "DELIVERED_TO_PHARMACY"].includes(serial.status) &&
     !/^BATCH[-_:]/i.test(serial.serialId) &&
     serial.serialId.toLowerCase() !== decoded.toLowerCase() &&
-    !["OWNER_MISMATCH", "STATUS_MISMATCH", "STALE_PENDING"].includes(serial.syncStatus || "")
+    (serial.syncStatus || "OK") === "OK" &&
+    Boolean(serial.blockchainTx)
   );
 
   const archiveBatch = async () => {
