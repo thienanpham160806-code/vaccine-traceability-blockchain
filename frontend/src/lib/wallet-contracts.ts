@@ -24,6 +24,22 @@ export const productRegistryAbi = [
     ],
     outputs: [],
   },
+  {
+    // Not wired to any wallet-signed UI flow yet (lot commissioning is
+    // demo-actor-signed only for now) — added so the ABI is ready for
+    // when wallet-signed commissioning ships.
+    type: "function",
+    name: "commissionLot",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "lotIdHash", type: "bytes32" },
+      { name: "aggregationRoot", type: "bytes32" },
+      { name: "metadataHash", type: "bytes32" },
+      { name: "zkProof", type: "bytes" },
+      { name: "timestamp", type: "uint256" },
+    ],
+    outputs: [],
+  },
 ] as const;
 
 export const transferLedgerAbi = [

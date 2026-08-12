@@ -29,8 +29,14 @@ export const config = {
   productRegistryAddress: process.env.PRODUCT_REGISTRY_ADDRESS || '',
   transferLedgerAddress: process.env.TRANSFER_LEDGER_ADDRESS || '',
   accessControlAddress: process.env.ACCESS_CONTROL_ADDRESS || '',
+  coldChainRegistryAddress: process.env.COLD_CHAIN_REGISTRY_ADDRESS || '',
   importZkpWasmPath: process.env.IMPORT_ZKP_WASM_PATH || '../smart-contract/zkp-artifacts/import-registration/import_registration_js/import_registration.wasm',
   importZkpZkeyPath: process.env.IMPORT_ZKP_ZKEY_PATH || '../smart-contract/zkp-artifacts/import-registration/import_registration_final.zkey',
+
+  // Pseudonymization salt for actor/location hashes (see CryptoUtils.hashWithSalt).
+  // Per-lot salts (lotSalt) are generated at commission time and stored in
+  // Firebase, not here — this is the one shared salt used across all lots.
+  systemSalt: process.env.SYSTEM_SALT || '',
 
   // IPFS / Pinata
   pinataJwt: process.env.PINATA_JWT || '',
@@ -66,6 +72,7 @@ const requiredEnvVars = [
   'ACCESS_CONTROL_ADDRESS',
   'FIREBASE_PROJECT_ID',
   'FIREBASE_DATABASE_URL',
+  'SYSTEM_SALT',
 ];
 
 const missingVars = requiredEnvVars.filter((key) => !process.env[key]);

@@ -20,6 +20,25 @@
     "inputs": [
       {
         "indexed": true,
+        "internalType": "address",
+        "name": "oldRegistry",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "newRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "ColdChainRegistryUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
         "internalType": "bytes32",
         "name": "serialID",
         "type": "bytes32"
@@ -159,6 +178,19 @@
   },
   {
     "inputs": [],
+    "name": "DEFAULT_ADMIN_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "DOUBLE_SCAN_WINDOW",
     "outputs": [
       {
@@ -226,6 +258,67 @@
     "inputs": [
       {
         "internalType": "bytes32",
+        "name": "lotIdHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "legId",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "envMerkleRoot",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "windowStart",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "windowEnd",
+        "type": "uint256"
+      },
+      {
+        "internalType": "bool",
+        "name": "complianceFlag",
+        "type": "bool"
+      },
+      {
+        "internalType": "bytes",
+        "name": "zkProof",
+        "type": "bytes"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "anchorEnv",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "coldChainRegistry",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
         "name": "serialID",
         "type": "bytes32"
       },
@@ -264,6 +357,72 @@
       }
     ],
     "name": "createTransferRequest",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "unitIdHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "lotIdHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32[]",
+        "name": "merkleProof",
+        "type": "bytes32[]"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "eventType",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "decommissionUnit",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "parentLotIdHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "subLotIdHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "subLotRoot",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "toActorHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "disaggregate",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -447,6 +606,75 @@
       }
     ],
     "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "lotIdHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "fromActorHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "toActorHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "payloadHash",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes",
+        "name": "actorSignature",
+        "type": "bytes"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "recordEvent",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "bytes32",
+        "name": "serialID",
+        "type": "bytes32"
+      },
+      {
+        "internalType": "bytes32",
+        "name": "reason",
+        "type": "bytes32"
+      }
+    ],
+    "name": "rejectTransfer",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "newRegistry",
+        "type": "address"
+      }
+    ],
+    "name": "setColdChainRegistry",
+    "outputs": [],
+    "stateMutability": "nonpayable",
     "type": "function"
   }
 ]

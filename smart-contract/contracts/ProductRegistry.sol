@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "./interfaces/IImportZKPVerifier.sol";
+import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 interface ISupplyChainAccessControl {
     function hasRole(bytes32 role, address account) external view returns (bool);
@@ -115,16 +116,6 @@ contract ProductRegistry {
         bytes32 indexed fromActorHash,
         bytes32 indexed toActorHash,
         bytes32 payloadHash,
-        uint256 timestamp
-    );
-
-    event EnvAnchored(
-        bytes32 indexed lotIdHash,
-        bytes32 indexed legId,
-        bytes32 indexed envMerkleRoot,
-        uint256 windowStart,
-        uint256 windowEnd,
-        bool complianceFlag,
         uint256 timestamp
     );
 
@@ -409,33 +400,6 @@ function verifyProof(
         );
     }
 
-    function anchorEnv(
-        bytes32 lotIdHash,
-        bytes32 legId,
-        bytes32 envMerkleRoot,
-        uint256 windowStart,
-        uint256 windowEnd,
-        bool complianceFlag,
-        bytes calldata zkProof,
-        uint256 timestamp
-    ) external onlyTransferLedger {
-        require(lotIdHash != bytes32(0), "Invalid lot id");
-        require(legId != bytes32(0), "Invalid leg id");
-        require(envMerkleRoot != bytes32(0), "Invalid env root");
-        require(lots[lotIdHash].exists || lotToParent[lotIdHash] != bytes32(0), "Lot not found");
-        require(zkProof.length > 0, "Invalid zk proof");
-
-        emit EnvAnchored(
-            lotIdHash,
-            legId,
-            envMerkleRoot,
-            windowStart,
-            windowEnd,
-            complianceFlag,
-            timestamp
-        );
-    }
-
     function disaggregate(
         bytes32 parentLotIdHash,
         bytes32 subLotIdHash,
@@ -465,15 +429,24 @@ function verifyProof(
     function decommissionUnit(
         bytes32 unitIdHash,
         bytes32 lotIdHash,
-        bytes32 merkleProof,
+        bytes32[] calldata merkleProof,
         bytes32 eventType,
         uint256 timestamp
     ) external onlyTransferLedger {
         require(unitIdHash != bytes32(0), "Invalid unit id");
         require(lotIdHash != bytes32(0), "Invalid lot id");
-        require(merkleProof != bytes32(0), "Invalid merkle proof");
         require(lots[lotIdHash].exists || lotToParent[lotIdHash] != bytes32(0), "Lot not found");
         require(!lots[lotIdHash].recalled, "Lot recalled");
+
+        // NOTE: merkleProof may legitimately be an empty array — a lot with
+        // exactly one unit has a single-leaf tree where aggregationRoot ==
+        // that leaf, so MerkleProof.verify(proof=[], root, leaf) is correct
+        // and must be allowed to pass. Do not add a `proof.length > 0`
+        // check here.
+        bytes32 root = lots[lotIdHash].exists
+            ? lots[lotIdHash].aggregationRoot
+            : lotToSubRoot[lotIdHash];
+        require(MerkleProof.verify(merkleProof, root, unitIdHash), "Invalid merkle proof");
 
         emit UnitDecommissioned(unitIdHash, lotIdHash, eventType, timestamp);
     }

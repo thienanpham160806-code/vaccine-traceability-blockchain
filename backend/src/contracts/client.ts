@@ -6,6 +6,7 @@ import { Logger } from '../utils/logger';
 let PRODUCT_REGISTRY_ABI: any[] = [];
 let TRANSFER_LEDGER_ABI: any[] = [];
 let ACCESS_CONTROL_ABI: any[] = [];
+let COLD_CHAIN_REGISTRY_ABI: any[] = [];
 
 // Try to load ABIs from JSON files
 try {
@@ -16,6 +17,16 @@ try {
   PRODUCT_REGISTRY_ABI = ProductRegistryABI.abi || ProductRegistryABI;
   TRANSFER_LEDGER_ABI = TransferLedgerABI.abi || TransferLedgerABI;
   ACCESS_CONTROL_ABI = AccessControlABI.abi || AccessControlABI;
+
+  try {
+    const ColdChainRegistryABI = require('./abis/ColdChainRegistry.json');
+    COLD_CHAIN_REGISTRY_ABI = ColdChainRegistryABI.abi || ColdChainRegistryABI;
+  } catch {
+    // Optional: cold-chain module may not be deployed/configured yet.
+    COLD_CHAIN_REGISTRY_ABI = [
+      'function anchorEnv(bytes32 lotIdHash, bytes32 legId, bytes32 envMerkleRoot, uint256 windowStart, uint256 windowEnd, bool complianceFlag, bytes zkProof, uint256 timestamp) external',
+    ];
+  }
 } catch (error) {
   Logger.warn('⚠️ Could not load ABIs from JSON files, using fallback');
   // Fallback to minimal ABIs
@@ -32,9 +43,17 @@ try {
     'function getCurrentOwner(bytes32 serialID) external view returns (address)',
     'function setTransferLedger(address newTransferLedger) external',
     'function recallBatch(bytes32 batchHash, bytes32 reasonHash) external',
+    'function commissionLot(bytes32 lotIdHash, bytes32 aggregationRoot, bytes32 metadataHash, bytes zkProof, uint256 timestamp) external',
+    'function recallLot(bytes32 lotIdHash, bytes32 reasonHash) external',
+    'function lotExists(bytes32 lotIdHash) external view returns (bool)',
+    'function lots(bytes32 lotIdHash) external view returns (bytes32, bytes32, bytes32, bool, bool, uint256)',
     'event ProductRegistered(bytes32 indexed serialID, bytes32 indexed batchHash, address indexed owner, bool isImported, bool zkpVerified, uint8 status)',
     'event ProductFlagged(bytes32 indexed serialID, uint8 riskLevel, bytes32 indexed reason)',
     'event BatchRecalled(bytes32 indexed batchHash, bytes32 indexed reasonHash, uint256 totalProducts)',
+    'event LotCommissioned(bytes32 indexed lotIdHash, bytes32 indexed aggregationRoot, bytes32 indexed metadataHash, uint256 timestamp)',
+    'event LotRecalled(bytes32 indexed lotIdHash, bytes32 indexed reasonHash, uint256 timestamp)',
+    'event UnitDecommissioned(bytes32 indexed unitIdHash, bytes32 indexed lotIdHash, bytes32 indexed eventType, uint256 timestamp)',
+    'event LotDisaggregated(bytes32 indexed parentLotIdHash, bytes32 indexed subLotIdHash, bytes32 indexed subLotRoot, bytes32 toActorHash, uint256 timestamp)',
   ];
 
   TRANSFER_LEDGER_ABI = [
@@ -44,6 +63,10 @@ try {
     'function pendingTransfers(bytes32 serialID) external view returns (bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, bool)',
     'function getTransferHistory(bytes32 serialID) external view returns (tuple(bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, uint256)[])',
     'function pendingTransfers(bytes32) external view returns (bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, bool)',
+    'function recordEvent(bytes32 lotIdHash, bytes32 fromActorHash, bytes32 toActorHash, bytes32 payloadHash, bytes actorSignature, uint256 timestamp) external',
+    'function anchorEnv(bytes32 lotIdHash, bytes32 legId, bytes32 envMerkleRoot, uint256 windowStart, uint256 windowEnd, bool complianceFlag, bytes zkProof, uint256 timestamp) external',
+    'function disaggregate(bytes32 parentLotIdHash, bytes32 subLotIdHash, bytes32 subLotRoot, bytes32 toActorHash, uint256 timestamp) external',
+    'function decommissionUnit(bytes32 unitIdHash, bytes32 lotIdHash, bytes32[] merkleProof, bytes32 eventType, uint256 timestamp) external',
     'event TransferRequested(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 fromLocationHash, bytes32 toLocationHash, uint256 requestedAt)',
     'event TransferConfirmed(bytes32 indexed serialID, address indexed sender, address indexed receiver, uint256 confirmedAt)',
     'event TransferRejected(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 reason)',
@@ -60,6 +83,10 @@ try {
     'function DISTRIBUTOR_ROLE() external view returns (bytes32)',
     'function CLINIC_ROLE() external view returns (bytes32)',
   ];
+
+  COLD_CHAIN_REGISTRY_ABI = [
+    'function anchorEnv(bytes32 lotIdHash, bytes32 legId, bytes32 envMerkleRoot, uint256 windowStart, uint256 windowEnd, bool complianceFlag, bytes zkProof, uint256 timestamp) external',
+  ];
 }
 
 
@@ -72,6 +99,7 @@ export class ContractClient {
   public productRegistry: ethers.Contract | null = null;
   public transferLedger: ethers.Contract | null = null;
   public accessControl: ethers.Contract | null = null;
+  public coldChainRegistry: ethers.Contract | null = null;
   private readonly roleNames = [
     'ADMIN',
     'MANUFACTURER',
@@ -151,6 +179,18 @@ export class ContractClient {
       Logger.info(`   ProductRegistry: ${registryAddr}`);
       Logger.info(`   TransferLedger: ${ledgerAddr}`);
       Logger.info(`   AccessControl: ${accessCtrlAddr}`);
+
+      const coldChainAddr = config.coldChainRegistryAddress;
+      if (coldChainAddr) {
+        this.coldChainRegistry = new ethers.Contract(
+          coldChainAddr,
+          COLD_CHAIN_REGISTRY_ABI,
+          this.wallet
+        );
+        Logger.info(`   ColdChainRegistry: ${coldChainAddr}`);
+      } else {
+        Logger.warn('⚠️ COLD_CHAIN_REGISTRY_ADDRESS not configured - cold-chain anchoring disabled');
+      }
     } catch (error) {
       Logger.error('Failed to initialize contracts', error);
       throw error;
@@ -173,6 +213,16 @@ export class ContractClient {
 
   getRoleAddress(role?: string): string {
     return this.getSigner(role).address;
+  }
+
+  /**
+   * Sign an arbitrary message as a given role's wallet — used for
+   * demo-actor custody attestations (TransferLedger.recordEvent's
+   * actorSignature). The contract only checks length > 0, matching this
+   * MVP's mock-proof pattern elsewhere; this is not verified on-chain.
+   */
+  async signMessage(message: string, role?: string): Promise<string> {
+    return this.getSigner(role).signMessage(message);
   }
 
   private normalizeRole(role?: string): keyof typeof config.rolePrivateKeys {
@@ -774,6 +824,278 @@ export class ContractClient {
       return receipt?.hash || tx.hash;
     } catch (error) {
       Logger.error('Failed to recall batch', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Commission a lot on-chain: 1 tx anchoring the Merkle aggregation root
+   * for every serial in the lot, instead of 1 tx per serial.
+   */
+  async commissionLot(
+    lotIdHash: string,
+    aggregationRoot: string,
+    metadataHash: string,
+    zkProof: string = '0x01',
+    timestamp: number = Math.floor(Date.now() / 1000),
+    signerRole: string = 'MANUFACTURER'
+  ): Promise<string> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    try {
+      Logger.info(`📝 Broadcasting lot commissioning: ${lotIdHash}`);
+
+      const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const gasOverrides = await this.getGasOverrides();
+      const tx = await registry.commissionLot(
+        lotIdHash,
+        aggregationRoot,
+        metadataHash,
+        zkProof,
+        timestamp,
+        gasOverrides
+      );
+
+      Logger.info(`📤 Lot commissioning tx submitted: ${tx.hash}`);
+      return tx.hash;
+    } catch (error) {
+      Logger.error('Failed to commission lot', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Log a lot-level custody event (SHIP/RECEIVE/STORE/DISAGGREGATE).
+   * Routed through TransferLedger, which forwards to ProductRegistry.recordEvent
+   * (only TransferLedger itself may call that function on-chain).
+   */
+  async recordEvent(
+    lotIdHash: string,
+    fromActorHash: string,
+    toActorHash: string,
+    payloadHash: string,
+    actorSignature: string,
+    timestamp: number = Math.floor(Date.now() / 1000),
+    signerRole: string = 'MANUFACTURER'
+  ): Promise<string> {
+    if (!this.transferLedger) {
+      throw new Error('TransferLedger contract not initialized');
+    }
+
+    try {
+      Logger.info(`📝 Broadcasting custody event for lot: ${lotIdHash}`);
+
+      const ledger = this.transferLedger.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const gasOverrides = await this.getGasOverrides();
+      const tx = await ledger.recordEvent(
+        lotIdHash,
+        fromActorHash,
+        toActorHash,
+        payloadHash,
+        actorSignature,
+        timestamp,
+        gasOverrides
+      );
+
+      Logger.info(`📤 Custody event tx submitted: ${tx.hash}`);
+      return tx.hash;
+    } catch (error) {
+      Logger.error('Failed to record custody event', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Anchor a sealed cold-chain leg's environmental Merkle root + compliance
+   * flag. Routed through TransferLedger, which forwards to ColdChainRegistry.
+   */
+  async anchorEnv(
+    lotIdHash: string,
+    legId: string,
+    envMerkleRoot: string,
+    windowStart: number,
+    windowEnd: number,
+    complianceFlag: boolean,
+    zkProof: string = '0x01',
+    timestamp: number = Math.floor(Date.now() / 1000),
+    signerRole: string = 'MANUFACTURER'
+  ): Promise<string> {
+    if (!this.transferLedger) {
+      throw new Error('TransferLedger contract not initialized');
+    }
+
+    try {
+      Logger.info(`📝 Broadcasting cold-chain anchor for leg: ${legId}`);
+
+      const ledger = this.transferLedger.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const gasOverrides = await this.getGasOverrides();
+      const tx = await ledger.anchorEnv(
+        lotIdHash,
+        legId,
+        envMerkleRoot,
+        windowStart,
+        windowEnd,
+        complianceFlag,
+        zkProof,
+        timestamp,
+        gasOverrides
+      );
+
+      Logger.info(`📤 Cold-chain anchor tx submitted: ${tx.hash}`);
+      return tx.hash;
+    } catch (error) {
+      Logger.error('Failed to anchor cold-chain leg', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Split a lot into a sub-lot bound for a different destination. The
+   * authenticity anchor for every unit stays the parent lot's aggregation
+   * root; this only records which sub-tree/actor a unit currently belongs
+   * to, so custody/cold-chain can be tracked per sub-lot after the split.
+   */
+  async disaggregate(
+    parentLotIdHash: string,
+    subLotIdHash: string,
+    subLotRoot: string,
+    toActorHash: string,
+    timestamp: number = Math.floor(Date.now() / 1000),
+    signerRole: string = 'MANUFACTURER'
+  ): Promise<string> {
+    if (!this.transferLedger) {
+      throw new Error('TransferLedger contract not initialized');
+    }
+
+    try {
+      Logger.info(`📝 Broadcasting lot disaggregation: ${parentLotIdHash} -> ${subLotIdHash}`);
+
+      const ledger = this.transferLedger.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const gasOverrides = await this.getGasOverrides();
+      const tx = await ledger.disaggregate(
+        parentLotIdHash,
+        subLotIdHash,
+        subLotRoot,
+        toActorHash,
+        timestamp,
+        gasOverrides
+      );
+
+      Logger.info(`📤 Disaggregation tx submitted: ${tx.hash}`);
+      return tx.hash;
+    } catch (error) {
+      Logger.error('Failed to disaggregate lot', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Decommission a single unit (dispense/consume/QA-pull) — the only point
+   * at which an individual serial touches the chain again after
+   * commissioning, verified against the lot's aggregation root via a real
+   * Merkle inclusion proof.
+   */
+  async decommissionUnit(
+    unitIdHash: string,
+    lotIdHash: string,
+    merkleProof: string[],
+    eventType: string,
+    timestamp: number = Math.floor(Date.now() / 1000),
+    signerRole: string = 'CLINIC'
+  ): Promise<string> {
+    if (!this.transferLedger) {
+      throw new Error('TransferLedger contract not initialized');
+    }
+
+    try {
+      Logger.info(`📝 Broadcasting unit decommission: ${unitIdHash}`);
+
+      const ledger = this.transferLedger.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const gasOverrides = await this.getGasOverrides();
+      const tx = await ledger.decommissionUnit(
+        unitIdHash,
+        lotIdHash,
+        merkleProof,
+        eventType,
+        timestamp,
+        gasOverrides
+      );
+
+      Logger.info(`📤 Unit decommission tx submitted: ${tx.hash}`);
+      return tx.hash;
+    } catch (error) {
+      Logger.error('Failed to decommission unit', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Recall a whole lot on-chain.
+   */
+  async recallLot(
+    lotIdHash: string,
+    reasonHash: string,
+    signerRole: string = 'RECALL_AUTHORITY'
+  ): Promise<string> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    try {
+      Logger.info(`📝 Recalling lot: ${lotIdHash}`);
+
+      const registry = this.productRegistry.connect(this.getSigner(signerRole)) as ethers.Contract;
+      const tx = await registry.recallLot(lotIdHash, reasonHash);
+
+      const receipt = await tx.wait();
+      Logger.success(`✅ Lot recalled. TX: ${receipt?.hash}`);
+
+      return receipt?.hash || tx.hash;
+    } catch (error) {
+      Logger.error('Failed to recall lot', error);
+      throw error;
+    }
+  }
+
+  async lotExists(lotIdHash: string): Promise<boolean> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    try {
+      return await this.productRegistry.lotExists(lotIdHash);
+    } catch (error) {
+      Logger.error('Failed to check lot existence', error);
+      throw error;
+    }
+  }
+
+  async getLot(lotIdHash: string): Promise<{
+    lotIdHash: string;
+    aggregationRoot: string;
+    metadataHash: string;
+    exists: boolean;
+    recalled: boolean;
+    commissionedAt: bigint;
+  }> {
+    if (!this.productRegistry) {
+      throw new Error('ProductRegistry contract not initialized');
+    }
+
+    try {
+      const lot = await this.productRegistry.lots(lotIdHash);
+      return {
+        lotIdHash: lot[0],
+        aggregationRoot: lot[1],
+        metadataHash: lot[2],
+        exists: Boolean(lot[3]),
+        recalled: Boolean(lot[4]),
+        commissionedAt: lot[5],
+      };
+    } catch (error) {
+      Logger.error('Failed to get lot', error);
       throw error;
     }
   }

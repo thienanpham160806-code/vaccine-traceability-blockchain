@@ -1,13 +1,20 @@
 import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { Logger } from '../utils/logger';
+import { markLotUnitsRecalled, markLotUnitsVerified } from './lotSync';
 
 export type OnChainTxJobType =
   | 'REGISTER_PRODUCT'
   | 'REGISTER_IMPORTED_PRODUCT'
   | 'CREATE_TRANSFER'
   | 'CONFIRM_TRANSFER'
-  | 'REJECT_TRANSFER';
+  | 'REJECT_TRANSFER'
+  | 'COMMISSION_LOT'
+  | 'RECORD_EVENT'
+  | 'ANCHOR_ENV'
+  | 'DISAGGREGATE'
+  | 'DECOMMISSION'
+  | 'RECALL_LOT';
 
 export type OnChainTxJobStatus = 'QUEUED' | 'SUBMITTED' | 'CONFIRMING' | 'CONFIRMED' | 'FAILED';
 
@@ -158,6 +165,61 @@ class OnChainTxQueue {
           payload.signerRole,
           payload.expectedReceiver
         );
+      case 'COMMISSION_LOT':
+        return contractClient.commissionLot(
+          payload.lotIdHash,
+          payload.aggregationRoot,
+          payload.metadataHash,
+          payload.zkProof,
+          payload.timestamp,
+          payload.signerRole
+        );
+      case 'RECORD_EVENT':
+        return contractClient.recordEvent(
+          payload.lotIdHash,
+          payload.fromActorHash,
+          payload.toActorHash,
+          payload.payloadHash,
+          payload.actorSignature,
+          payload.timestamp,
+          payload.signerRole
+        );
+      case 'ANCHOR_ENV':
+        return contractClient.anchorEnv(
+          payload.lotIdHash,
+          payload.legId,
+          payload.envMerkleRoot,
+          payload.windowStart,
+          payload.windowEnd,
+          payload.complianceFlag,
+          payload.zkProof,
+          payload.timestamp,
+          payload.signerRole
+        );
+      case 'DISAGGREGATE':
+        return contractClient.disaggregate(
+          payload.parentLotIdHash,
+          payload.subLotIdHash,
+          payload.subLotRoot,
+          payload.toActorHash,
+          payload.timestamp,
+          payload.signerRole
+        );
+      case 'DECOMMISSION':
+        return contractClient.decommissionUnit(
+          payload.unitIdHash,
+          payload.lotIdHash,
+          payload.merkleProof,
+          payload.eventType,
+          payload.timestamp,
+          payload.signerRole
+        );
+      case 'RECALL_LOT':
+        return contractClient.recallLot(
+          payload.lotIdHash,
+          payload.reasonHash,
+          payload.signerRole
+        );
       default:
         throw new Error(`Unsupported tx job type: ${job.type}`);
     }
@@ -174,6 +236,10 @@ class OnChainTxQueue {
     const transferId = job.metadata?.transferId;
     const serialHash = job.metadata?.serialHash || job.payload?.serialId;
     const batchHash = job.metadata?.batchHash || job.payload?.batchHash;
+    const lotIdHash = job.metadata?.lotIdHash || job.payload?.lotIdHash;
+    const legId = job.metadata?.legId || job.payload?.legId;
+    const subLotIdHash = job.metadata?.subLotIdHash || job.payload?.subLotIdHash;
+    const unitIdHash = job.metadata?.unitIdHash || job.payload?.unitIdHash;
 
     if ((job.type === 'REGISTER_PRODUCT' || job.type === 'REGISTER_IMPORTED_PRODUCT') && serialHash) {
       try {
@@ -198,6 +264,89 @@ class OnChainTxQueue {
       return;
     }
 
+    if (job.type === 'COMMISSION_LOT' && lotIdHash) {
+      try {
+        await db.ref(`batches/${lotIdHash}`).update({
+          blockchainTx: txHash,
+          syncStatus: 'PROCESSING',
+          processingJobId: job.id,
+          updatedAt: Date.now(),
+        });
+      } catch (error) {
+        Logger.warn(`Could not sync submitted lot commissioning tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'RECALL_LOT' && lotIdHash) {
+      try {
+        await db.ref(`batches/${lotIdHash}`).update({
+          processingJobId: job.id,
+          processingTxHash: txHash,
+          updatedAt: Date.now(),
+        });
+      } catch (error) {
+        Logger.warn(`Could not sync submitted lot recall tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'ANCHOR_ENV' && legId) {
+      try {
+        await db.ref(`cold-chain-legs/${legId}`).update({
+          status: 'SEALING',
+          processingJobId: job.id,
+          processingTxHash: txHash,
+          updatedAt: Date.now(),
+        });
+      } catch (error) {
+        Logger.warn(`Could not sync submitted env anchor tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'DISAGGREGATE' && subLotIdHash) {
+      try {
+        await db.ref(`sub-lots/${subLotIdHash}`).update({
+          syncStatus: 'PROCESSING',
+          processingJobId: job.id,
+          processingTxHash: txHash,
+          updatedAt: Date.now(),
+        });
+      } catch (error) {
+        Logger.warn(`Could not sync submitted disaggregate tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'DECOMMISSION' && unitIdHash) {
+      try {
+        await db.ref(`products/${unitIdHash}`).update({
+          processingJobId: job.id,
+          processingTxHash: txHash,
+          updatedAt: Date.now(),
+        });
+      } catch (error) {
+        Logger.warn(`Could not sync submitted decommission tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'RECORD_EVENT') {
+      try {
+        const now = Date.now();
+        if (transferId) {
+          await db.ref(`transfers/${transferId}`).update({ custodyTxHash: txHash, updatedAt: now });
+        }
+        if (legId) {
+          await db.ref(`cold-chain-legs/${legId}`).update({ custodyTxHash: txHash, updatedAt: now });
+        }
+      } catch (error) {
+        Logger.warn(`Could not sync submitted custody event tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
     if (!transferId) return;
 
     try {
@@ -216,10 +365,129 @@ class OnChainTxQueue {
   private async syncConfirmedTx(job: OnChainTxJob, txHash: string): Promise<void> {
     const transferId = job.metadata?.transferId;
     const serialHash = job.metadata?.serialHash || job.payload?.serialId;
+    const lotIdHash = job.metadata?.lotIdHash || job.payload?.lotIdHash;
+    const legId = job.metadata?.legId || job.payload?.legId;
+    const subLotIdHash = job.metadata?.subLotIdHash || job.payload?.subLotIdHash;
+    const unitIdHash = job.metadata?.unitIdHash || job.payload?.unitIdHash;
+    const now = Date.now();
+
+    if (job.type === 'COMMISSION_LOT' && lotIdHash) {
+      try {
+        await db.ref(`batches/${lotIdHash}`).update({
+          blockchainTx: txHash,
+          syncStatus: 'OK',
+          processingJobId: null,
+          processingTxHash: null,
+          updatedAt: now,
+        });
+        const verifiedCount = await markLotUnitsVerified(lotIdHash, txHash);
+        Logger.success(`✅ Lot commissioned on-chain: ${lotIdHash} (${verifiedCount} unit(s) marked VERIFIED)`);
+      } catch (error) {
+        Logger.warn(`Could not sync confirmed lot commissioning tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'RECALL_LOT' && lotIdHash) {
+      try {
+        await db.ref(`batches/${lotIdHash}`).update({
+          blockchainTx: txHash,
+          recalledAt: now,
+          custodyStatus: 'RECALLED',
+          processingJobId: null,
+          processingTxHash: null,
+          updatedAt: now,
+        });
+        const reasonHash = job.metadata?.reasonHash || job.payload?.reasonHash || '';
+        const recalledCount = await markLotUnitsRecalled(lotIdHash, reasonHash, txHash);
+        Logger.success(`✅ Lot recalled on-chain: ${lotIdHash} (${recalledCount} unit(s) marked RECALLED)`);
+      } catch (error) {
+        Logger.warn(`Could not sync confirmed lot recall tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'ANCHOR_ENV' && legId) {
+      try {
+        const complianceFlag = Boolean(job.metadata?.complianceFlag ?? job.payload?.complianceFlag);
+        await db.ref(`cold-chain-legs/${legId}`).update({
+          status: 'SEALED',
+          anchoredTx: txHash,
+          complianceFlag,
+          processingJobId: null,
+          processingTxHash: null,
+          updatedAt: now,
+        });
+        if (lotIdHash) {
+          await db.ref(`batches/${lotIdHash}`).update({
+            coldChainStatus: complianceFlag ? 'PASS' : 'EXCURSION',
+            updatedAt: now,
+          });
+        }
+        Logger.success(`✅ Cold-chain leg anchored on-chain: ${legId}`);
+      } catch (error) {
+        Logger.warn(`Could not sync confirmed env anchor tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'DISAGGREGATE' && subLotIdHash) {
+      try {
+        await db.ref(`sub-lots/${subLotIdHash}`).update({
+          blockchainTx: txHash,
+          syncStatus: 'OK',
+          processingJobId: null,
+          processingTxHash: null,
+          updatedAt: now,
+        });
+        Logger.success(`✅ Lot disaggregated on-chain: sub-lot ${subLotIdHash}`);
+      } catch (error) {
+        Logger.warn(`Could not sync confirmed disaggregate tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'DECOMMISSION' && unitIdHash) {
+      try {
+        const targetStatus = job.metadata?.targetStatus || 'ADMINISTERED';
+        await db.ref(`products/${unitIdHash}`).update({
+          status: targetStatus,
+          syncStatus: 'OK',
+          blockchainTx: txHash,
+          processingJobId: null,
+          processingTxHash: null,
+          updatedAt: now,
+        });
+        Logger.success(`✅ Unit decommissioned on-chain: ${unitIdHash} (${targetStatus})`);
+      } catch (error) {
+        Logger.warn(`Could not sync confirmed decommission tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
+    if (job.type === 'RECORD_EVENT') {
+      try {
+        if (transferId) {
+          const patch: Record<string, unknown> = { custodyTxHash: txHash, updatedAt: now };
+          // Lot transfers have no on-chain "pending" state machine like
+          // serial transfers do — the SHIP-side custody event confirming
+          // on-chain IS the signal that the transfer is now PENDING receipt
+          // (mirrors CREATE_TRANSFER's PROCESSING->PENDING flip above).
+          if (job.metadata?.custodyStage === 'SHIP') patch.status = 'PENDING';
+          await db.ref(`transfers/${transferId}`).update(patch);
+        }
+        if (legId) {
+          await db.ref(`cold-chain-legs/${legId}`).update({ custodyTxHash: txHash, updatedAt: now });
+        }
+      } catch (error) {
+        Logger.warn(`Could not sync confirmed custody event tx ${txHash} for job ${job.id}`, error);
+      }
+      return;
+    }
+
     if (!serialHash) return;
 
     try {
-      const now = Date.now();
       if (job.type === 'REGISTER_PRODUCT' || job.type === 'REGISTER_IMPORTED_PRODUCT') {
         const batchHash = job.metadata?.batchHash || job.payload?.batchHash;
         const updates: Record<string, unknown> = {
@@ -391,6 +659,72 @@ class OnChainTxQueue {
       } catch (err) {
         Logger.warn(`Could not reset transfer ${transferId} to PENDING after job failure`, err);
       }
+      return;
+    }
+
+    const lotIdHash = job?.metadata?.lotIdHash || job?.payload?.lotIdHash;
+    const legId = job?.metadata?.legId || job?.payload?.legId;
+    const subLotIdHash = job?.metadata?.subLotIdHash || job?.payload?.subLotIdHash;
+    const unitIdHash = job?.metadata?.unitIdHash || job?.payload?.unitIdHash;
+
+    if (lotIdHash && (job?.type === 'COMMISSION_LOT' || job?.type === 'RECALL_LOT')) {
+      try {
+        await db.ref(`batches/${lotIdHash}`).update({
+          syncStatus: 'FIREBASE_ONLY',
+          processingJobId: null,
+          processingTxHash: null,
+          syncError: errorMessage,
+          updatedAt: Date.now(),
+        });
+      } catch (err) {
+        Logger.warn(`Could not mark lot job ${jobId} as failed in Firebase`, err);
+      }
+      return;
+    }
+
+    if (legId && job?.type === 'ANCHOR_ENV') {
+      try {
+        await db.ref(`cold-chain-legs/${legId}`).update({
+          status: 'CLOSED_PENDING_SEAL',
+          processingJobId: null,
+          processingTxHash: null,
+          syncError: errorMessage,
+          updatedAt: Date.now(),
+        });
+      } catch (err) {
+        Logger.warn(`Could not mark cold-chain leg anchor job ${jobId} as failed in Firebase`, err);
+      }
+      return;
+    }
+
+    if (subLotIdHash && job?.type === 'DISAGGREGATE') {
+      try {
+        await db.ref(`sub-lots/${subLotIdHash}`).update({
+          syncStatus: 'FIREBASE_ONLY',
+          processingJobId: null,
+          processingTxHash: null,
+          syncError: errorMessage,
+          updatedAt: Date.now(),
+        });
+      } catch (err) {
+        Logger.warn(`Could not mark disaggregate job ${jobId} as failed in Firebase`, err);
+      }
+      return;
+    }
+
+    if (unitIdHash && job?.type === 'DECOMMISSION') {
+      try {
+        await db.ref(`products/${unitIdHash}`).update({
+          syncStatus: 'FIREBASE_ONLY',
+          processingJobId: null,
+          processingTxHash: null,
+          syncError: errorMessage,
+          updatedAt: Date.now(),
+        });
+      } catch (err) {
+        Logger.warn(`Could not mark decommission job ${jobId} as failed in Firebase`, err);
+      }
+      return;
     }
   }
 

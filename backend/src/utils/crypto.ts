@@ -34,6 +34,25 @@ export class CryptoUtils {
   }
 
   /**
+   * Salted hash — pseudonymizes a value so it can be published on-chain
+   * without being trivially dictionary-attacked back to the original
+   * (e.g. serialId formats are predictable, so plain keccak256(serialId)
+   * lets anyone map hashes back to serials). NOT the same salt concept as
+   * the ZKP commitment-blinding `salt` used in importZkp.ts/the import
+   * circuit — that salt hides one field inside a zero-knowledge proof,
+   * this one just pseudonymizes an otherwise-public identifier.
+   *
+   * Two salts are used across the codebase:
+   * - lotSalt: one random salt per lot (batches/{lotIdHash}.lotSalt), used
+   *   to derive every serial's unitIdHash within that lot.
+   * - systemSalt: one shared salt (env SYSTEM_SALT), used for actor/location
+   *   hashes since those identities recur across many lots.
+   */
+  static hashWithSalt(value: string, salt: string): string {
+    return this.keccak256(`${value}:${salt}`);
+  }
+
+  /**
    * Decode QR content (batchHash/metadataHash)
    */
   static decodeQRContent(content: string): { batchHash: string; metadataHash: string } {

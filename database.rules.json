@@ -4,10 +4,10 @@
     ".write": "auth != null",
 
     "products": {
-      ".indexOn": ["serialId", "serialHash", "status", "batchHash", "batchId", "manufacturerName", "currentOwner", "ownerRole", "createdAt"]
+      ".indexOn": ["serialId", "serialHash", "status", "batchHash", "batchId", "manufacturerName", "currentOwner", "ownerRole", "createdAt", "lotIdHash"]
     },
     "transfers": {
-      ".indexOn": ["serialId", "serialHash", "status", "fromRole", "toRole", "createdAt", "updatedAt"]
+      ".indexOn": ["serialId", "serialHash", "status", "fromRole", "toRole", "createdAt", "updatedAt", "lotIdHash", "legId"]
     },
     "risk-flags": {
       ".indexOn": ["serialId", "serialHash", "status", "createdAt"]
@@ -16,7 +16,7 @@
       ".indexOn": ["batchHash", "batchId", "status", "createdAt"]
     },
     "batches": {
-      ".indexOn": ["batchId", "batchHash", "manufacturerName", "createdAt"]
+      ".indexOn": ["batchId", "batchHash", "manufacturerName", "createdAt", "lotIdHash"]
     },
     "pending-transfers": {
       ".indexOn": ["serialId", "serialHash"]
@@ -24,6 +24,26 @@
     "serial-index": {
       ".read": "auth != null",
       ".write": "auth != null"
+    },
+    "lot-index": {
+      ".read": "auth != null",
+      ".write": "auth != null"
+    },
+    "sub-lots": {
+      ".indexOn": ["parentLotIdHash", "status"]
+    },
+    "cold-chain-legs": {
+      ".indexOn": ["lotIdHash", "transferId", "status"]
+    },
+    "cold-chain-readings": {
+      ".indexOn": ["legId", "deviceId", "timestamp"]
+    },
+    "devices": {
+      ".indexOn": ["address"]
+    },
+    "patient-links": {
+      ".read": false,
+      ".write": false
     }
   }
 }

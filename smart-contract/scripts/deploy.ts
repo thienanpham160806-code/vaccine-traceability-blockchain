@@ -12,65 +12,73 @@ async function main() {
   const balance = await ethers.provider.getBalance(deployer.address);
   console.log("Deployer balance:", ethers.formatEther(balance), "ETH");
 
-  // Round 1: AccessControl + ImportVerifier in parallel (no dependencies)
-  console.log("\n[Round 1] Deploying SupplyChainAccessControl + DemoImportZKPVerifier in parallel...");
-  let nonce = await deployer.getNonce();
+  // Deploys/txs below are sent sequentially (await each one, letting the
+  // provider assign nonces automatically) rather than raced in parallel
+  // with explicit nonces. Sending multiple explicit-nonce transactions via
+  // Promise.all can arrive at an automining node out of order over HTTP,
+  // which trips "Nonce too high" errors; sequential sends are immune to
+  // that and this is a one-off setup script, not a hot path, so the extra
+  // round trips don't matter.
 
-  const [AccessControlFactory, ImportVerifierFactory] = await Promise.all([
-    ethers.getContractFactory("SupplyChainAccessControl"),
-    ethers.getContractFactory("DemoImportZKPVerifier"),
-  ]);
+  // Round 1: AccessControl + ImportVerifier + ColdChainVerifier
+  console.log("\n[Round 1] Deploying SupplyChainAccessControl + DemoImportZKPVerifier + MockColdChainVerifier...");
 
-  const [accessControl, importVerifier] = await Promise.all([
-    AccessControlFactory.deploy(deployer.address, { nonce: nonce }),
-    ImportVerifierFactory.deploy({ nonce: nonce + 1 }),
-  ]);
-
-  await Promise.all([accessControl.waitForDeployment(), importVerifier.waitForDeployment()]);
-
+  const AccessControlFactory = await ethers.getContractFactory("SupplyChainAccessControl");
+  const accessControl = await AccessControlFactory.deploy(deployer.address);
+  await accessControl.waitForDeployment();
   const accessControlAddress = await accessControl.getAddress();
-  const importVerifierAddress = await importVerifier.getAddress();
   console.log("SupplyChainAccessControl:", accessControlAddress);
+
+  const ImportVerifierFactory = await ethers.getContractFactory("DemoImportZKPVerifier");
+  const importVerifier = await ImportVerifierFactory.deploy();
+  await importVerifier.waitForDeployment();
+  const importVerifierAddress = await importVerifier.getAddress();
   console.log("DemoImportZKPVerifier:", importVerifierAddress);
+
+  const ColdChainVerifierFactory = await ethers.getContractFactory("MockColdChainVerifier");
+  const coldChainVerifier = await ColdChainVerifierFactory.deploy();
+  await coldChainVerifier.waitForDeployment();
+  const coldChainVerifierAddress = await coldChainVerifier.getAddress();
+  console.log("MockColdChainVerifier:", coldChainVerifierAddress);
 
   // Round 2: ProductRegistry (needs accessControlAddress)
   console.log("\n[Round 2] Deploying ProductRegistry...");
-  nonce = await deployer.getNonce();
 
   const ProductRegistryFactory = await ethers.getContractFactory("ProductRegistry");
-  const productRegistry = await ProductRegistryFactory.deploy(accessControlAddress, { nonce });
+  const productRegistry = await ProductRegistryFactory.deploy(accessControlAddress);
   await productRegistry.waitForDeployment();
 
   const productRegistryAddress = await productRegistry.getAddress();
   console.log("ProductRegistry:", productRegistryAddress);
 
-  // Round 3: TransferLedger (needs productRegistryAddress + accessControlAddress)
-  console.log("\n[Round 3] Deploying TransferLedger...");
-  nonce = await deployer.getNonce();
+  // Round 3: TransferLedger + ColdChainRegistry (both need productRegistryAddress + accessControlAddress)
+  console.log("\n[Round 3] Deploying TransferLedger + ColdChainRegistry...");
 
   const TransferLedgerFactory = await ethers.getContractFactory("TransferLedger");
-  const transferLedger = await TransferLedgerFactory.deploy(
-    productRegistryAddress,
-    accessControlAddress,
-    { nonce }
-  );
+  const transferLedger = await TransferLedgerFactory.deploy(productRegistryAddress, accessControlAddress);
   await transferLedger.waitForDeployment();
-
   const transferLedgerAddress = await transferLedger.getAddress();
   console.log("TransferLedger:", transferLedgerAddress);
 
-  // Round 4: 3 config txs in parallel
-  console.log("\n[Round 4] Linking + configuring routes in parallel...");
-  nonce = await deployer.getNonce();
+  const ColdChainRegistryFactory = await ethers.getContractFactory("ColdChainRegistry");
+  const coldChainRegistry = await ColdChainRegistryFactory.deploy(accessControlAddress, productRegistryAddress);
+  await coldChainRegistry.waitForDeployment();
+  const coldChainRegistryAddress = await coldChainRegistry.getAddress();
+  console.log("ColdChainRegistry:", coldChainRegistryAddress);
 
-  const [setLedgerTx, setImportVerifierTx, configureRoutesTx] = await Promise.all([
-    productRegistry.setTransferLedger(transferLedgerAddress, { nonce }),
-    productRegistry.setImportVerifier(importVerifierAddress, { nonce: nonce + 1 }),
-    accessControl.configureMvpRoutes({ nonce: nonce + 2 }),
-  ]);
+  // Round 4: linking + route configuration
+  console.log("\n[Round 4] Linking + configuring routes...");
 
-  await Promise.all([setLedgerTx.wait(), setImportVerifierTx.wait(), configureRoutesTx.wait()]);
+  await (await productRegistry.setTransferLedger(transferLedgerAddress)).wait();
+  await (await productRegistry.setImportVerifier(importVerifierAddress)).wait();
+  await (await accessControl.configureMvpRoutes()).wait();
+  await (await transferLedger.setColdChainRegistry(coldChainRegistryAddress)).wait();
+  await (await coldChainRegistry.setTransferLedger(transferLedgerAddress)).wait();
+  await (await coldChainRegistry.setVerifier(coldChainVerifierAddress)).wait();
+
   console.log("ProductRegistry linked with TransferLedger and ImportVerifier");
+  console.log("TransferLedger linked with ColdChainRegistry");
+  console.log("ColdChainRegistry linked with TransferLedger and MockColdChainVerifier");
   console.log("MVP routes configured");
 
   // Local dev: grant roles
@@ -107,11 +115,14 @@ async function main() {
       importVerifier: importVerifierAddress,
       productRegistry: productRegistryAddress,
       transferLedger: transferLedgerAddress,
+      coldChainRegistry: coldChainRegistryAddress,
+      coldChainVerifier: coldChainVerifierAddress,
     },
     setup: {
       transferLedgerLinked: true,
       importVerifierLinked: true,
       mvpRoutesConfigured: true,
+      coldChainRegistryLinked: true,
       localDemoRolesConfigured,
     },
   };
@@ -131,6 +142,8 @@ async function main() {
   console.log("ImportVerifier:          ", importVerifierAddress);
   console.log("ProductRegistry:         ", productRegistryAddress);
   console.log("TransferLedger:          ", transferLedgerAddress);
+  console.log("ColdChainRegistry:       ", coldChainRegistryAddress);
+  console.log("ColdChainVerifier:       ", coldChainVerifierAddress);
 }
 
 main().catch((error) => {

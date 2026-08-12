@@ -11,10 +11,12 @@ import { txQueue } from '../services/txQueue';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 import { validateRequest } from '../middleware/validation';
 import { decorateTransfer, getVisibilityContext, transferVisibleTo } from '../services/visibility';
+import config from '../config/env';
 import {
   transferBulkScanSchema,
   transferConfirmSchema,
   transferIdParamsSchema,
+  transferLotScanSchema,
   transferRejectSchema,
   transferScanSchema,
 } from '../schemas/transferSchemas';
@@ -366,6 +368,189 @@ async function createTransferForSerial(req: AuthRequest, serialId: string, group
   return { transfer, serialHash, jobId: job.id };
 }
 
+async function resolveLot(lotId: string): Promise<[string, any] | null> {
+  const direct = await db.ref(`batches/${lotId}`).once('value');
+  if (direct.exists()) return [lotId, direct.val()];
+
+  const indexSnap = await db.ref(`lot-index/${lotId}`).once('value');
+  const indexedLotIdHash: string | null = indexSnap.val();
+  if (indexedLotIdHash) {
+    const snap = await db.ref(`batches/${indexedLotIdHash}`).once('value');
+    if (snap.exists()) return [indexedLotIdHash, snap.val()];
+  }
+
+  return null;
+}
+
+function isLotTransferRecord(transfer: any) {
+  return transfer?.mode === 'LOT_CUSTODY';
+}
+
+const DEFAULT_COLD_CHAIN_MIN_C = 2;
+const DEFAULT_COLD_CHAIN_MAX_C = 8;
+
+/**
+ * Create a lot-level custody transfer (SHIP side). Unlike
+ * createTransferForSerial, this has no on-chain "pending transfer" state
+ * machine (TransferLedger.pendingTransfers is serial-scoped) — custody is a
+ * signed audit-log entry (recordEvent) plus Firebase-tracked workflow state
+ * (PENDING -> CONFIRMED/REJECTED), matching lot-Merkle units which have no
+ * on-chain per-unit record until decommissionUnit.
+ */
+async function createLotTransfer(req: AuthRequest, lotIdOrCode: string, groupId?: string) {
+  const {
+    receiverAddress: rawReceiverAddress,
+    fromRole,
+    toRole,
+    fromLocationHash,
+    toLocationHash,
+    fromLocation,
+  } = req.body;
+
+  if (!lotIdOrCode || !fromRole || !toRole) {
+    throw httpError(400, 'MISSING_FIELDS', 'Missing required fields: lotId, fromRole, toRole');
+  }
+
+  if (!canActAsRole(req, fromRole)) {
+    throw httpError(403, 'ROLE_MISMATCH', `Only ${fromRole} can create this transfer`);
+  }
+
+  if (!isAllowedTransferRoute(fromRole, toRole)) {
+    throw httpError(400, 'INVALID_TRANSFER_ROUTE', `Route ${fromRole} -> ${toRole} is not allowed by the supply-chain route matrix`);
+  }
+
+  if (!config.systemSalt) {
+    throw httpError(503, 'SYSTEM_SALT_NOT_CONFIGURED', 'SYSTEM_SALT is not configured on the backend');
+  }
+
+  const receiverAddress = rawReceiverAddress || contractClient.getRoleAddress(toRole);
+  if (!CryptoUtils.isValidAddress(receiverAddress)) {
+    throw httpError(400, 'INVALID_RECEIVER', 'receiverAddress must be a valid Ethereum address');
+  }
+
+  if (!contractClient.isInitialized()) {
+    throw httpError(503, 'CONTRACTS_NOT_READY', 'Smart contracts are not initialized');
+  }
+
+  const found = await resolveLot(String(lotIdOrCode));
+  if (!found) {
+    throw httpError(404, 'LOT_NOT_FOUND', `Lot ${lotIdOrCode} not found`);
+  }
+  const [lotIdHash, batch] = found;
+
+  if (batch?.archivedAt || ['ARCHIVED', 'INVALID', 'RECALLED'].includes(String(batch?.status || '').toUpperCase()) || batch?.recalledAt) {
+    throw httpError(400, 'LOT_NOT_ACTIVE', `Lot ${lotIdOrCode} is not active inventory`);
+  }
+
+  const syncStatus = String(batch?.syncStatus || '').toUpperCase();
+  if (syncStatus && syncStatus !== 'OK') {
+    throw httpError(409, 'LOT_SYNC_MISMATCH', `Lot ${lotIdOrCode} đang lệch Firebase/on-chain. Chờ commission xong trước khi chuyển giao.`);
+  }
+
+  if (batch?.pendingLotTransferId) {
+    throw httpError(409, 'PENDING_TRANSFER_EXISTS', `Lot ${lotIdOrCode} already has a transfer being processed.`);
+  }
+
+  const lotExistsOnChain = await contractClient.lotExists(lotIdHash);
+  if (!lotExistsOnChain) {
+    throw httpError(409, 'LOT_SYNC_MISMATCH', `Lot ${lotIdOrCode} chưa được xác nhận trên chain. Chờ commission xong trước khi chuyển giao.`);
+  }
+
+  const senderAddress = contractClient.getRoleAddress(fromRole);
+  const fromActorHash = CryptoUtils.hashWithSalt(senderAddress, config.systemSalt);
+  const toActorHash = CryptoUtils.hashWithSalt(receiverAddress, config.systemSalt);
+  const fromLoc = toBytes32(fromLocationHash || (fromLocation ? `location:${fromLocation}` : `from:${senderAddress}`));
+  const toLoc = toBytes32(toLocationHash || `to:${receiverAddress}`);
+  const transferMetadata = buildTransferMetadata(req.body);
+
+  const now = Date.now();
+  const transferId = `${lotIdHash}_${now}`;
+  const legId = CryptoUtils.hashWithSalt(`${lotIdHash}:${transferId}`, config.systemSalt);
+  const unitCount = Number(batch?.quantity) || (Array.isArray(batch?.unitLeaves) ? batch.unitLeaves.length : 0);
+
+  const manifest = {
+    lotIdHash,
+    fromRole,
+    toRole,
+    fromAddress: senderAddress,
+    toAddress: receiverAddress,
+    unitCount,
+    ...transferMetadata,
+    createdAt: now,
+  };
+  const payloadHash = CryptoUtils.keccak256(JSON.stringify(manifest));
+  const ipfsResult = await ipfsService.pinJson(`lot-transfer-${lotIdHash}-${now}`, manifest);
+  const actorSignature = await contractClient.signMessage(payloadHash, fromRole);
+
+  const job = await txQueue.enqueue({
+    type: 'RECORD_EVENT',
+    payload: {
+      lotIdHash,
+      fromActorHash,
+      toActorHash,
+      payloadHash,
+      actorSignature,
+      timestamp: Math.floor(now / 1000),
+      signerRole: fromRole,
+    },
+    metadata: { transferId, legId, lotIdHash, custodyStage: 'SHIP', ...(groupId ? { batchTransferGroupId: groupId } : {}) },
+  });
+
+  const transfer: TransferRecord & { mode?: string; lotIdHash?: string; legId?: string; unitCount?: number; payloadHash?: string } = pruneUndefined({
+    id: transferId,
+    serialId: '',
+    batchId: batch?.id || String(lotIdOrCode),
+    batchHash: lotIdHash,
+    mode: 'LOT_CUSTODY',
+    lotIdHash,
+    legId,
+    unitCount,
+    payloadHash,
+    fromAddress: senderAddress,
+    toAddress: receiverAddress,
+    fromRole,
+    toRole,
+    status: 'PROCESSING',
+    fromLocationHash: fromLoc,
+    toLocationHash: toLoc,
+    ...transferMetadata,
+    ...(groupId ? { batchTransferGroupId: groupId } : {}),
+    ipfsCid: ipfsResult?.cid,
+    processingJobId: job.id,
+    createdAt: now,
+    updatedAt: now,
+  }) as TransferRecord & { mode?: string; lotIdHash?: string; legId?: string; unitCount?: number; payloadHash?: string };
+
+  const thresholdMinC = transferMetadata.temperatureMinC ?? DEFAULT_COLD_CHAIN_MIN_C;
+  const thresholdMaxC = transferMetadata.temperatureMaxC ?? DEFAULT_COLD_CHAIN_MAX_C;
+
+  await Promise.all([
+    db.ref(`transfers/${transferId}`).set(pruneUndefined(transfer)),
+    db.ref(`batches/${lotIdHash}`).update({
+      pendingLotTransferId: transferId,
+      custodyStatus: 'IN_TRANSIT',
+      updatedAt: now,
+    }),
+    db.ref(`cold-chain-legs/${legId}`).set({
+      legId,
+      lotIdHash,
+      transferId,
+      fromRole,
+      toRole,
+      status: 'OPEN',
+      thresholdMinC,
+      thresholdMaxC,
+      readingCount: 0,
+      excursionCount: 0,
+      openedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    }),
+  ]);
+
+  return { transfer, lotIdHash, legId, jobId: job.id };
+}
+
 /**
  * GET /transfers
  * List all transfer records from Firebase
@@ -610,6 +795,31 @@ router.post(
       res.status(500).json({
         success: false,
         error: { code: 'BATCH_SHELL_TRANSFER_ERROR', message: getErrorMessage(error, 'Failed to create batch custody transfer') },
+      });
+    }
+  }
+);
+
+/**
+ * POST /transfers/lot-scan
+ * Create a lot-level custody transfer for a lot-Merkle-commissioned lot
+ * (initiate: SHIP side, opens a cold-chain leg).
+ */
+router.post(
+  '/lot-scan',
+  verifyToken,
+  requireRole(['MANUFACTURER', 'IMPORTER', 'DISTRIBUTOR', 'ADMIN']),
+  validateRequest({ body: transferLotScanSchema }),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const data = await createLotTransfer(req, req.body.lotId);
+      res.json({ success: true, data });
+    } catch (error: any) {
+      Logger.error('Create lot transfer error', error);
+      res.status(error.statusCode || 500).json({
+        success: false,
+        error: { code: error.code || 'LOT_TRANSFER_ERROR', message: getErrorMessage(error, 'Failed to create lot transfer') },
+        timestamp: Date.now(),
       });
     }
   }
@@ -979,6 +1189,152 @@ router.post(
   }
   }
 );
+
+async function chunkedFirebaseUpdate(updates: Record<string, unknown>, chunkSize = 500): Promise<void> {
+  const entries = Object.entries(updates);
+  for (let i = 0; i < entries.length; i += chunkSize) {
+    const chunk = Object.fromEntries(entries.slice(i, i + chunkSize));
+    await db.ref().update(chunk);
+  }
+}
+
+/**
+ * POST /transfers/:transferId/confirm-lot
+ * RECEIVE side of a lot custody transfer: closes the cold-chain leg
+ * (pending seal), logs a second custody event on-chain, and bulk-updates
+ * every unit in the lot to the new owner (off-chain only — units have no
+ * on-chain per-unit record until decommissionUnit).
+ */
+router.post('/:transferId/confirm-lot', verifyToken, requireRole(transferReceiverActionRoles), async (req: AuthRequest, res: Response) => {
+  try {
+    const { transferId } = req.params;
+    const snapshot = await db.ref(`transfers/${transferId}`).once('value');
+    if (!snapshot.exists()) {
+      return res.status(404).json({ success: false, error: { code: 'TRANSFER_NOT_FOUND', message: `Transfer ${transferId} not found` } });
+    }
+    const transfer = snapshot.val();
+    if (!isLotTransferRecord(transfer)) {
+      return res.status(400).json({ success: false, error: { code: 'NOT_LOT_TRANSFER', message: 'Transfer is not a lot custody transfer' } });
+    }
+    if (transfer.status !== 'PENDING') {
+      return res.status(409).json({ success: false, error: { code: 'TRANSFER_NOT_PENDING', message: 'Transfer is not pending (SHIP-side custody event may still be confirming on-chain)' } });
+    }
+    if (!canActAsRole(req, transfer.toRole)) {
+      return res.status(403).json({ success: false, error: { code: 'ROLE_MISMATCH', message: `Only ${transfer.toRole} can confirm this transfer` } });
+    }
+    if (!config.systemSalt) {
+      return res.status(503).json({ success: false, error: { code: 'SYSTEM_SALT_NOT_CONFIGURED', message: 'SYSTEM_SALT is not configured on the backend' } });
+    }
+
+    const lotIdHash = transfer.lotIdHash;
+    const legId = transfer.legId;
+    const now = Date.now();
+
+    const receivePayloadHash = CryptoUtils.keccak256(JSON.stringify({
+      lotIdHash,
+      legId,
+      transferId,
+      fromAddress: transfer.fromAddress,
+      toAddress: transfer.toAddress,
+      confirmedAt: now,
+    }));
+    const receiveSignature = await contractClient.signMessage(receivePayloadHash, transfer.toRole);
+    const receiveJob = await txQueue.enqueue({
+      type: 'RECORD_EVENT',
+      payload: {
+        lotIdHash,
+        fromActorHash: CryptoUtils.hashWithSalt(transfer.fromAddress, config.systemSalt),
+        toActorHash: CryptoUtils.hashWithSalt(transfer.toAddress, config.systemSalt),
+        payloadHash: receivePayloadHash,
+        actorSignature: receiveSignature,
+        timestamp: Math.floor(now / 1000),
+        signerRole: transfer.toRole,
+      },
+      metadata: { transferId, legId, lotIdHash },
+    });
+
+    const deliveredStatus = getDeliveredStatus(transfer.toRole);
+    const productUpdates: Record<string, unknown> = {};
+    let unitsUpdated = 0;
+    if (lotIdHash) {
+      const unitsSnapshot = await db.ref('products').orderByChild('lotIdHash').equalTo(lotIdHash).once('value');
+      unitsSnapshot.forEach((child: any) => {
+        const key = child.key;
+        if (!key) return false;
+        productUpdates[`products/${key}/currentOwner`] = transfer.toAddress;
+        productUpdates[`products/${key}/ownerRole`] = transfer.toRole;
+        productUpdates[`products/${key}/status`] = deliveredStatus;
+        productUpdates[`products/${key}/updatedAt`] = now;
+        unitsUpdated += 1;
+        return false;
+      });
+    }
+
+    await chunkedFirebaseUpdate({
+      [`transfers/${transferId}/status`]: 'CONFIRMED',
+      [`transfers/${transferId}/confirmedAt`]: now,
+      [`transfers/${transferId}/updatedAt`]: now,
+      [`transfers/${transferId}/receiveJobId`]: receiveJob.id,
+      [`batches/${lotIdHash}/currentOwner`]: transfer.toAddress,
+      [`batches/${lotIdHash}/ownerRole`]: transfer.toRole,
+      [`batches/${lotIdHash}/pendingLotTransferId`]: null,
+      [`batches/${lotIdHash}/custodyStatus`]: 'CONFIRMED',
+      [`batches/${lotIdHash}/updatedAt`]: now,
+      [`cold-chain-legs/${legId}/status`]: 'CLOSED_PENDING_SEAL',
+      [`cold-chain-legs/${legId}/closedAt`]: now,
+      [`cold-chain-legs/${legId}/updatedAt`]: now,
+      ...productUpdates,
+    });
+
+    res.json({ success: true, data: { ...transfer, status: 'CONFIRMED', confirmedAt: now, updatedAt: now, unitsUpdated } });
+  } catch (error) {
+    Logger.error('Confirm lot transfer error', error);
+    res.status(500).json({ success: false, error: { code: 'LOT_TRANSFER_CONFIRM_ERROR', message: getErrorMessage(error, 'Failed to confirm lot transfer') } });
+  }
+});
+
+/**
+ * POST /transfers/:transferId/reject-lot
+ */
+router.post('/:transferId/reject-lot', verifyToken, requireRole(transferReceiverActionRoles), async (req: AuthRequest, res: Response) => {
+  try {
+    const { transferId } = req.params;
+    const { rejectionReason = '' } = req.body || {};
+    const snapshot = await db.ref(`transfers/${transferId}`).once('value');
+    if (!snapshot.exists()) {
+      return res.status(404).json({ success: false, error: { code: 'TRANSFER_NOT_FOUND', message: `Transfer ${transferId} not found` } });
+    }
+    const transfer = snapshot.val();
+    if (!isLotTransferRecord(transfer)) {
+      return res.status(400).json({ success: false, error: { code: 'NOT_LOT_TRANSFER', message: 'Transfer is not a lot custody transfer' } });
+    }
+    if (transfer.status !== 'PENDING') {
+      return res.status(409).json({ success: false, error: { code: 'TRANSFER_NOT_PENDING', message: 'Transfer is not pending' } });
+    }
+    if (!canActAsRole(req, transfer.toRole)) {
+      return res.status(403).json({ success: false, error: { code: 'ROLE_MISMATCH', message: `Only ${transfer.toRole} can reject this transfer` } });
+    }
+
+    const now = Date.now();
+    await db.ref().update({
+      [`transfers/${transferId}/status`]: 'REJECTED',
+      [`transfers/${transferId}/rejectedReason`]: String(rejectionReason || '').trim(),
+      [`transfers/${transferId}/rejectedAt`]: now,
+      [`transfers/${transferId}/updatedAt`]: now,
+      [`batches/${transfer.lotIdHash}/pendingLotTransferId`]: null,
+      [`batches/${transfer.lotIdHash}/custodyStatus`]: 'REJECTED',
+      [`batches/${transfer.lotIdHash}/updatedAt`]: now,
+      [`cold-chain-legs/${transfer.legId}/status`]: 'CLOSED_PENDING_SEAL',
+      [`cold-chain-legs/${transfer.legId}/closedAt`]: now,
+      [`cold-chain-legs/${transfer.legId}/updatedAt`]: now,
+    });
+
+    res.json({ success: true, data: { ...transfer, status: 'REJECTED', rejectedReason: String(rejectionReason || '').trim(), rejectedAt: now, updatedAt: now } });
+  } catch (error) {
+    Logger.error('Reject lot transfer error', error);
+    res.status(500).json({ success: false, error: { code: 'LOT_TRANSFER_REJECT_ERROR', message: getErrorMessage(error, 'Failed to reject lot transfer') } });
+  }
+});
 
 router.post('/:transferId/confirm-batch-shell', verifyToken, requireRole(transferReceiverActionRoles), async (req: AuthRequest, res: Response) => {
   try {

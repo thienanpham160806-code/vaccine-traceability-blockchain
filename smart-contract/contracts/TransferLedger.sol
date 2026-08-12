@@ -28,6 +28,31 @@ interface IProductRegistry {
     ) external;
 
     function revertTransit(bytes32 serialID) external;
+
+    function recordEvent(
+        bytes32 lotIdHash,
+        bytes32 fromActorHash,
+        bytes32 toActorHash,
+        bytes32 payloadHash,
+        bytes calldata actorSignature,
+        uint256 timestamp
+    ) external;
+
+    function disaggregate(
+        bytes32 parentLotIdHash,
+        bytes32 subLotIdHash,
+        bytes32 subLotRoot,
+        bytes32 toActorHash,
+        uint256 timestamp
+    ) external;
+
+    function decommissionUnit(
+        bytes32 unitIdHash,
+        bytes32 lotIdHash,
+        bytes32[] calldata merkleProof,
+        bytes32 eventType,
+        uint256 timestamp
+    ) external;
 }
 
 interface ISupplyChainAccessControl {
@@ -41,6 +66,21 @@ interface ISupplyChainAccessControl {
     function canInitiateTransfer(bytes32 role) external pure returns (bool);
 
     function canReceiveTransfer(bytes32 role) external pure returns (bool);
+
+    function hasRole(bytes32 role, address account) external view returns (bool);
+}
+
+interface IColdChainRegistry {
+    function anchorEnv(
+        bytes32 lotIdHash,
+        bytes32 legId,
+        bytes32 envMerkleRoot,
+        uint256 windowStart,
+        uint256 windowEnd,
+        bool complianceFlag,
+        bytes calldata zkProof,
+        uint256 timestamp
+    ) external;
 }
 
 contract TransferLedger {
@@ -75,6 +115,7 @@ contract TransferLedger {
 
     uint8 public constant RISK_HIGH = 3;
 
+    bytes32 public constant DEFAULT_ADMIN_ROLE = bytes32(0);
     bytes32 public constant REASON_DOUBLE_SCAN = keccak256("DOUBLE_SCAN");
     bytes32 public constant REASON_INVALID_ROUTE = keccak256("INVALID_ROUTE");
 
@@ -82,6 +123,7 @@ contract TransferLedger {
 
     IProductRegistry public productRegistry;
     ISupplyChainAccessControl public accessControl;
+    address public coldChainRegistry;
 
     // TransferLedger tracks one product serial per pending transfer.
     // Batch-level moves must be expanded by the backend into serial-level requests.
@@ -89,31 +131,7 @@ contract TransferLedger {
     mapping(bytes32 => TransferRecord[]) private transferHistory;
     mapping(bytes32 => LastScan) public lastScans;
 
-    event CustodyEvent(
-        bytes32 indexed lotIdHash,
-        bytes32 indexed fromActorHash,
-        bytes32 indexed toActorHash,
-        bytes32 payloadHash,
-        uint256 timestamp
-    );
-
-    event EnvAnchored(
-        bytes32 indexed lotIdHash,
-        bytes32 indexed legId,
-        bytes32 indexed envMerkleRoot,
-        uint256 windowStart,
-        uint256 windowEnd,
-        bool complianceFlag,
-        uint256 timestamp
-    );
-
-    event LotDisaggregated(
-        bytes32 indexed parentLotIdHash,
-        bytes32 indexed subLotIdHash,
-        bytes32 indexed subLotRoot,
-        bytes32 toActorHash,
-        uint256 timestamp
-    );
+    event ColdChainRegistryUpdated(address indexed oldRegistry, address indexed newRegistry);
 
     event TransferRequested(
         bytes32 indexed serialID,
@@ -152,6 +170,20 @@ contract TransferLedger {
 
         productRegistry = IProductRegistry(productRegistryAddress);
         accessControl = ISupplyChainAccessControl(accessControlAddress);
+    }
+
+    modifier onlyAdmin() {
+        require(accessControl.hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Not admin");
+        _;
+    }
+
+    function setColdChainRegistry(address newRegistry) external onlyAdmin {
+        require(newRegistry != address(0), "Invalid cold chain registry");
+
+        address oldRegistry = coldChainRegistry;
+        coldChainRegistry = newRegistry;
+
+        emit ColdChainRegistryUpdated(oldRegistry, newRegistry);
     }
 
     function createTransferRequest(
@@ -321,15 +353,12 @@ contract TransferLedger {
         bytes calldata actorSignature,
         uint256 timestamp
     ) external {
-        require(lotIdHash != bytes32(0), "Invalid lot id");
-        require(payloadHash != bytes32(0), "Invalid payload");
-        require(actorSignature.length > 0, "Invalid signature");
-
-        emit CustodyEvent(
+        productRegistry.recordEvent(
             lotIdHash,
             fromActorHash,
             toActorHash,
             payloadHash,
+            actorSignature,
             timestamp
         );
     }
@@ -344,18 +373,16 @@ contract TransferLedger {
         bytes calldata zkProof,
         uint256 timestamp
     ) external {
-        require(lotIdHash != bytes32(0), "Invalid lot id");
-        require(legId != bytes32(0), "Invalid leg id");
-        require(envMerkleRoot != bytes32(0), "Invalid env root");
-        require(zkProof.length > 0, "Invalid zk proof");
+        require(coldChainRegistry != address(0), "Cold chain registry not set");
 
-        emit EnvAnchored(
+        IColdChainRegistry(coldChainRegistry).anchorEnv(
             lotIdHash,
             legId,
             envMerkleRoot,
             windowStart,
             windowEnd,
             complianceFlag,
+            zkProof,
             timestamp
         );
     }
@@ -367,16 +394,27 @@ contract TransferLedger {
         bytes32 toActorHash,
         uint256 timestamp
     ) external {
-        require(parentLotIdHash != bytes32(0), "Invalid parent lot id");
-        require(subLotIdHash != bytes32(0), "Invalid sub lot id");
-        require(subLotRoot != bytes32(0), "Invalid sub lot root");
-        require(toActorHash != bytes32(0), "Invalid recipient");
-
-        emit LotDisaggregated(
+        productRegistry.disaggregate(
             parentLotIdHash,
             subLotIdHash,
             subLotRoot,
             toActorHash,
+            timestamp
+        );
+    }
+
+    function decommissionUnit(
+        bytes32 unitIdHash,
+        bytes32 lotIdHash,
+        bytes32[] calldata merkleProof,
+        bytes32 eventType,
+        uint256 timestamp
+    ) external {
+        productRegistry.decommissionUnit(
+            unitIdHash,
+            lotIdHash,
+            merkleProof,
+            eventType,
             timestamp
         );
     }

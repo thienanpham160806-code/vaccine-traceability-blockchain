@@ -121,7 +121,7 @@ it("Should initialize transfer ledger as zero address", async function () {
       expect(lot.exists).to.equal(true);
     });
 
-    it("Should allow manufacturer to record custody event, anchor env, and disaggregate a lot", async function () {
+    it("Should allow manufacturer to record custody event and disaggregate a lot", async function () {
       const lotIdHash = ethers.id("LOT-2");
       const aggregationRoot = ethers.id("ROOT-2");
       const metadataHash = ethers.id("META-LOT-2");
@@ -149,18 +149,8 @@ it("Should initialize transfer ledger as zero address", async function () {
           1700000010
         );
 
-      await registry
-        .connect(manufacturer)
-        .anchorEnv(
-          lotIdHash,
-          ethers.id("LEG-1"),
-          ethers.id("ENV-ROOT"),
-          1700000000,
-          1700000100,
-          true,
-          "0x5678",
-          1700000110
-        );
+      // anchorEnv now lives on ColdChainRegistry (see ColdChainRegistry.test.ts),
+      // not on ProductRegistry anymore.
 
       await registry
         .connect(manufacturer)
@@ -204,8 +194,19 @@ it("Should initialize transfer ledger as zero address", async function () {
 
     it("Should support decommission flow for a unit in a valid lot", async function () {
       const lotIdHash = ethers.id("LOT-DECOMMISSION");
-      const aggregationRoot = ethers.id("ROOT-DECOMMISSION");
       const metadataHash = ethers.id("META-DECOMMISSION");
+
+      // Build a real 2-leaf Merkle tree matching OpenZeppelin MerkleProof's
+      // sorted-pair keccak256 semantics, so decommissionUnit's on-chain
+      // MerkleProof.verify() actually has something valid to check.
+      const hashPair = (a: string, b: string) => {
+        const [lo, hi] = BigInt(a) <= BigInt(b) ? [a, b] : [b, a];
+        return ethers.keccak256(ethers.concat([lo, hi]));
+      };
+      const unitLeaf = ethers.id("UNIT-1");
+      const siblingLeaf = ethers.id("UNIT-2");
+      const aggregationRoot = hashPair(unitLeaf, siblingLeaf);
+      const proof = [siblingLeaf];
 
       await registry.setTransferLedger(manufacturer.address);
 
@@ -222,15 +223,76 @@ it("Should initialize transfer ledger as zero address", async function () {
       await registry
         .connect(manufacturer)
         .decommissionUnit(
-          ethers.id("UNIT-1"),
+          unitLeaf,
           lotIdHash,
-          ethers.id("MERKLE-PROOF"),
+          proof,
           ethers.id("DISPENSE"),
           1700000200
         );
 
       const hasLot = await registry.lotExists(lotIdHash);
       expect(hasLot).to.equal(true);
+    });
+
+    it("Should reject decommission with an invalid merkle proof", async function () {
+      const lotIdHash = ethers.id("LOT-DECOMMISSION-BAD-PROOF");
+      const metadataHash = ethers.id("META-DECOMMISSION-BAD-PROOF");
+      const aggregationRoot = ethers.id("ROOT-DECOMMISSION-BAD-PROOF");
+
+      await registry.setTransferLedger(manufacturer.address);
+
+      await registry
+        .connect(manufacturer)
+        .commissionLot(
+          lotIdHash,
+          aggregationRoot,
+          metadataHash,
+          "0x1234",
+          1700000000
+        );
+
+      await expect(
+        registry
+          .connect(manufacturer)
+          .decommissionUnit(
+            ethers.id("UNIT-NOT-IN-TREE"),
+            lotIdHash,
+            [ethers.id("SOME-OTHER-HASH")],
+            ethers.id("DISPENSE"),
+            1700000200
+          )
+      ).to.be.revertedWith("Invalid merkle proof");
+    });
+
+    it("Should decommission the sole unit of a single-unit lot with an empty proof", async function () {
+      // A lot with exactly one serial has a single-leaf merkle tree, where
+      // aggregationRoot IS the leaf itself — so the correct proof is an
+      // empty array. This must not be rejected as "no proof provided".
+      const lotIdHash = ethers.id("LOT-SINGLE-UNIT");
+      const metadataHash = ethers.id("META-SINGLE-UNIT");
+      const soleUnitLeaf = ethers.id("SOLE-UNIT");
+
+      await registry.setTransferLedger(manufacturer.address);
+
+      await registry
+        .connect(manufacturer)
+        .commissionLot(
+          lotIdHash,
+          soleUnitLeaf, // aggregationRoot == the only leaf
+          metadataHash,
+          "0x1234",
+          1700000000
+        );
+
+      await registry
+        .connect(manufacturer)
+        .decommissionUnit(
+          soleUnitLeaf,
+          lotIdHash,
+          [], // empty proof is correct/expected here
+          ethers.id("DISPENSE"),
+          1700000200
+        );
     });
 
   });

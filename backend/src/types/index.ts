@@ -111,6 +111,11 @@ export interface Product {
   administeredAuditId?: string;
   registeredAt?: number;
 
+  // Lot-Merkle commissioning (see services/merkle.ts, routes/products.ts commissionLot flow).
+  unitIdHash?: string; // keccak256(serialId:lotSalt) — this record's leaf in the lot's aggregationRoot
+  lotIdHash?: string; // current lot this unit belongs to (parent lot, or a sub-lot after disaggregation)
+  patientToken?: string; // set at dispense time; points into patient-links/{token}, never PII
+
   createdAt: number;
   updatedAt: number;
 }
@@ -137,6 +142,13 @@ export interface Batch {
   custodyStatus?: string;
   createdAt: number;
   updatedAt: number;
+
+  // Lot-Merkle commissioning
+  lotIdHash?: string; // keccak256(lotCode) — on-chain lot identifier, unsalted (must stay derivable from the human code)
+  aggregationRoot?: string; // Merkle root of all unitIdHashes in the lot, anchored on-chain via commissionLot
+  lotSalt?: string; // secret — never returned from public/consumer verify endpoints
+  unitLeaves?: string[]; // full ordered leaf list, needed to rebuild Merkle proofs at dispense/decommission time
+  coldChainStatus?: 'NONE' | 'IN_TRANSIT' | 'PASS' | 'EXCURSION';
 }
 
 // ============= Transfer =============

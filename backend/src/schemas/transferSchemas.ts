@@ -132,3 +132,53 @@ export const transferRejectSchema = z.object({
     .min(1, 'rejectionReason is required')
     .max(1000, 'rejectionReason is too long'),
 });
+
+// --- Lot-level custody transfer (lot-Merkle commissioned lots) ---
+
+const lotId = z
+  .string({ message: 'lotId must be a string' })
+  .trim()
+  .min(1, 'lotId is required')
+  .max(160, 'lotId is too long');
+
+const transferLotScanBaseSchema = z.object({
+  lotId,
+  receiverAddress: z.string().trim().regex(ethAddressPattern, 'receiverAddress must be an Ethereum address').optional(),
+  fromRole: initiatorRole,
+  toRole: receiverRole,
+  fromLocationHash: optionalLocationHash,
+  toLocationHash: optionalLocationHash,
+  fromLocation: z.string().trim().max(200, 'fromLocation is too long').optional(),
+  fromLocationName: optionalText(200, 'fromLocationName'),
+  toLocationName: optionalText(200, 'toLocationName'),
+  fromWarehouseName: optionalText(200, 'fromWarehouseName'),
+  toWarehouseName: optionalText(200, 'toWarehouseName'),
+  carrierName: optionalText(160, 'carrierName'),
+  vehicleId: optionalText(80, 'vehicleId'),
+  departedAt: optionalTimestamp,
+  arrivedAt: optionalTimestamp,
+  temperatureMinC: optionalTemperature,
+  temperatureMaxC: optionalTemperature,
+  temperatureUnit: z.enum(['C', 'F']).optional(),
+  handlingNotes: optionalText(1000, 'handlingNotes'),
+});
+
+export const transferLotScanSchema = transferLotScanBaseSchema
+  .refine((value) => allowedTransferRoutes[value.fromRole as z.infer<typeof initiatorRole>].includes(value.toRole), {
+    path: ['toRole'],
+    message: 'Transfer route is not allowed by the route matrix',
+  })
+  .refine((value) => {
+    if (value.departedAt === undefined || value.arrivedAt === undefined) return true;
+    return value.arrivedAt >= value.departedAt;
+  }, {
+    path: ['arrivedAt'],
+    message: 'arrivedAt must be after departedAt',
+  })
+  .refine((value) => {
+    if (value.temperatureMinC === undefined || value.temperatureMaxC === undefined) return true;
+    return value.temperatureMaxC >= value.temperatureMinC;
+  }, {
+    path: ['temperatureMaxC'],
+    message: 'temperatureMaxC must be greater than or equal to temperatureMinC',
+  });

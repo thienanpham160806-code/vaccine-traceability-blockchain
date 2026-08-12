@@ -10,6 +10,8 @@ import { QRCodeGenerator } from '../utils/qr';
 import { Logger } from '../utils/logger';
 import { Batch, Product } from '../types';
 import { txQueue } from '../services/txQueue';
+import { merkleService } from '../services/merkle';
+import config from '../config/env';
 import {
   decorateProduct,
   getVisibilityContext,
@@ -888,15 +890,13 @@ router.get('/:serialId', validateRequest({ params: productParamsSchema }), async
 
     Logger.info(`Fetching product: ${serialId}`);
 
-    const productKey = toBytes32(serialId);
-    const productRef = db.ref(`products/${productKey}`);
-    let snapshot = await productRef.once('value');
+    // Must go through serial-index (not just products/{toBytes32(serialId)})
+    // because lot-Merkle-commissioned units are stored at products/{unitIdHash},
+    // where unitIdHash = hashWithSalt(serialId, lotSalt) — a salted hash that
+    // does not equal the plain toBytes32(serialId) key.
+    const resolved = await resolveProductBySerial(serialId);
 
-    if (!snapshot.exists()) {
-      snapshot = await db.ref(`products/${serialId}`).once('value');
-    }
-
-    if (!snapshot.exists()) {
+    if (!resolved) {
       return res.status(404).json({
         success: false,
         error: {
@@ -906,7 +906,7 @@ router.get('/:serialId', validateRequest({ params: productParamsSchema }), async
       });
     }
 
-    const product = snapshot.val() as Product;
+    const product = resolved.product;
     const ctx = getVisibilityContext(req);
     const transfersSnapshot = await db.ref('transfers').once('value');
     const decoratedProduct = decorateProduct(product, Object.values(transfersSnapshot.val() || {}) as any[]);
@@ -937,16 +937,44 @@ router.get('/:serialId', validateRequest({ params: productParamsSchema }), async
   }
 });
 
+function packGroth16Proof(proof: { a: [string, string]; b: [[string, string], [string, string]]; c: [string, string]; input: [string, string, string, string, string] }): string {
+  return ethers.AbiCoder.defaultAbiCoder().encode(
+    ['uint256[2]', 'uint256[2][2]', 'uint256[2]', 'uint256[5]'],
+    [proof.a, proof.b, proof.c, proof.input]
+  );
+}
+
+function generateLotSerials(prefix: string, quantity: number): string[] {
+  const width = String(quantity).length < 4 ? 4 : String(quantity).length;
+  return Array.from({ length: quantity }, (_, i) => `${prefix}-${String(i + 1).padStart(width, '0')}`);
+}
+
+async function chunkedFirebaseUpdate(updates: Record<string, unknown>, chunkSize = 500): Promise<void> {
+  const entries = Object.entries(updates);
+  for (let i = 0; i < entries.length; i += chunkSize) {
+    const chunk = Object.fromEntries(entries.slice(i, i + chunkSize));
+    await db.ref().update(chunk);
+  }
+}
+
 /**
  * POST /products/register
- * Register new product (batch)
+ * Commission a lot: build a Merkle tree over N generated serials and anchor
+ * a single aggregationRoot on-chain (1 tx/lot instead of 1 tx/serial).
+ * `serialId` in the request body is used as the SERIAL PREFIX; `quantity`
+ * genuinely drives how many serials are generated (1-10000).
+ *
+ * NOTE: /products/bulk and /products/sync-wallet-register intentionally
+ * still use the legacy per-serial registerProduct/registerImportedProductZK
+ * on-chain path — they cover different UX (CSV import of pre-existing,
+ * possibly cross-batch serials; wallet-signed writes) that this lot-Merkle
+ * flow does not replace this round.
  */
 router.post('/register', validateRequest({ body: registerProductSchema }), async (req: Request, res: Response) => {
   try {
     const {
-      serialId,
+      serialId: serialPrefix,
       batchId,
-      batchHash: rawBatchHash,
       metadataHash: rawMetadataHash,
       productName,
       manufacturerName = 'Unknown manufacturer',
@@ -954,12 +982,10 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       expiryDate,
       quantity = 1,
       origin = 'MANUFACTURED',
-      importDocHash: rawImportDocHash,
-      zkpProof,
       importDocument,
     } = req.body;
 
-    if (!serialId || !productName || !expiryDate) {
+    if (!serialPrefix || !productName || !expiryDate) {
       return res.status(400).json({
         success: false,
         error: {
@@ -969,68 +995,66 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       });
     }
 
-    Logger.info(`Registering product: ${serialId}`);
+    if (!config.systemSalt) {
+      return res.status(503).json({
+        success: false,
+        error: { code: 'SYSTEM_SALT_NOT_CONFIGURED', message: 'SYSTEM_SALT is not configured on the backend' },
+      });
+    }
+
+    Logger.info(`Commissioning lot: prefix=${serialPrefix} quantity=${quantity}`);
 
     if (!contractClient.isInitialized()) {
       return res.status(503).json({
         success: false,
-        error: {
-          code: 'CONTRACTS_NOT_READY',
-          message: 'Smart contracts are not initialized',
-        },
-      });
-    }
-
-    const serialHash = toBytes32(serialId);
-    const existingProductSnapshot = await db.ref(`products/${serialHash}`).once('value');
-    if (existingProductSnapshot.exists()) {
-      return res.status(409).json({
-        success: false,
-        error: {
-          code: 'SERIAL_ALREADY_EXISTS',
-          message: `Product with serial ID ${serialId} already exists`,
-        },
-        timestamp: Date.now(),
+        error: { code: 'CONTRACTS_NOT_READY', message: 'Smart contracts are not initialized' },
       });
     }
 
     const isImported = origin === 'IMPORTED';
-    const batchQR = isImported
+    const lotCode = isImported
       ? (importDocument?.batchNo || batchId || QRCodeGenerator.generateBatchId())
       : (batchId || QRCodeGenerator.generateBatchId());
-    const batchHash = isImported
-      ? importZkpService.batchNoToBytes32(batchQR)
-      : (rawBatchHash ? toBytes32(rawBatchHash) : toBytes32(batchQR));
-    const existingBatchSnapshot = await db.ref(`batches/${batchHash}`).once('value');
+    const lotIdHash = isImported
+      ? importZkpService.batchNoToBytes32(lotCode)
+      : toBytes32(lotCode);
+
+    const [existingBatchSnapshot, lotExistsOnChain] = await Promise.all([
+      db.ref(`batches/${lotIdHash}`).once('value'),
+      contractClient.lotExists(lotIdHash).catch(() => false),
+    ]);
     const existingBatch = existingBatchSnapshot.val();
     if (existingBatch?.archivedAt || ['ARCHIVED', 'INVALID'].includes(String(existingBatch?.status || '').toUpperCase())) {
       return res.status(409).json({
         success: false,
-        error: {
-          code: 'BATCH_ARCHIVED',
-          message: `Batch ${batchQR} is archived or invalidated. Choose another batch or create a new one.`,
-        },
-        timestamp: Date.now(),
+        error: { code: 'BATCH_ARCHIVED', message: `Lot ${lotCode} is archived or invalidated. Choose another lot code.` },
       });
     }
-    const metadataPayload = {
-      serialId,
-      serialHash,
-      batchId: batchQR,
-      batchHash,
-      productName,
-      manufacturerName,
-      manufacturerAddress: manufacturerAddress || contractClient.getWalletAddress(),
-      expiryDate,
-      quantity,
-      origin,
-      createdAt: Date.now(),
-    };
-    const metadataHash = rawMetadataHash
-      ? toBytes32(rawMetadataHash)
-      : toBytes32(JSON.stringify(metadataPayload));
-    const importDocHash = rawImportDocHash ? toBytes32(rawImportDocHash) : ZERO_BYTES32;
-    const proofBytes = zkpProof || '0x';
+    if (existingBatch?.aggregationRoot || lotExistsOnChain) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'LOT_ALREADY_COMMISSIONED',
+          message: `Lot ${lotCode} was already commissioned (aggregationRoot is anchored on-chain and can't be changed). Choose a different lot code.`,
+        },
+      });
+    }
+
+    const serials = generateLotSerials(serialPrefix, quantity);
+    const serialExistenceSnaps = await Promise.all(
+      serials.map((sid) => db.ref(`serial-index/${sid}`).once('value'))
+    );
+    const collidingSerials = serials.filter((_, i) => serialExistenceSnaps[i].exists());
+    if (collidingSerials.length > 0) {
+      return res.status(409).json({
+        success: false,
+        error: {
+          code: 'SERIAL_ALREADY_EXISTS',
+          message: `${collidingSerials.length} generated serial(s) already exist (e.g. ${collidingSerials[0]}). Choose a different prefix.`,
+        },
+      });
+    }
+
     const signerRole = isImported ? 'IMPORTER' : 'MANUFACTURER';
     const signerHasRequiredRole = await contractClient.signerHasRole(signerRole);
     if (!signerHasRequiredRole) {
@@ -1040,38 +1064,64 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
           code: 'SIGNER_ROLE_NOT_GRANTED',
           message: `Backend ${signerRole} signer does not have ${signerRole}_ROLE on the active AccessControl contract. Grant the role or update the role private key for the current network.`,
         },
-        timestamp: Date.now(),
       });
     }
 
-    const qrContent = QRCodeGenerator.encodeQRContent(batchHash, metadataHash);
+    const lotSalt = CryptoUtils.randomHash();
+    const unitLeaves = serials.map((sid) => CryptoUtils.hashWithSalt(sid, lotSalt));
+    const tree = merkleService.build(unitLeaves);
+    const aggregationRoot = tree.root;
+
+    const manufacturerAddr = manufacturerAddress || contractClient.getRoleAddress(signerRole);
+    const metadataPayload = {
+      lotCode,
+      lotIdHash,
+      productName,
+      manufacturerName,
+      manufacturerAddress: manufacturerAddr,
+      expiryDate,
+      quantity: serials.length,
+      origin,
+      createdAt: Date.now(),
+    };
+    const metadataHash = rawMetadataHash ? toBytes32(rawMetadataHash) : toBytes32(JSON.stringify(metadataPayload));
+
+    const qrContent = QRCodeGenerator.encodeQRContent(lotIdHash, metadataHash);
     const qrImage = await QRCodeGenerator.generateQRImage(qrContent);
-    const ipfsResult = await ipfsService.pinJson(`batch-${batchQR}-${serialId}`, {
+    const ipfsResult = await ipfsService.pinJson(`lot-${lotCode}`, {
       ...metadataPayload,
       metadataHash,
+      aggregationRoot,
+      unitLeaves,
+      serials,
       qrContent,
     });
 
-    let txHash: string | undefined;
     let importDocumentIpfsCid: string | undefined;
-    let queueJobType: 'REGISTER_PRODUCT' | 'REGISTER_IMPORTED_PRODUCT' = 'REGISTER_PRODUCT';
     let importDocCommitment: string | undefined;
     let approvedImportRoot: string | undefined;
     let importProofMode: string | undefined;
-    let zkpProofPayload: any = undefined;
+    let zkProof = '0x01';
 
     if (isImported) {
-      const importDocIpfsResult = await ipfsService.pinJson(`import-doc-${batchQR}-${serialId}`, {
+      const importDocIpfsResult = await ipfsService.pinJson(`import-doc-${lotCode}`, {
         ...importDocument,
-        serialId,
-        batchHash,
+        lotCode,
+        lotIdHash,
         metadataHash,
       });
       importDocumentIpfsCid = importDocIpfsResult?.cid;
 
+      // Real Groth16 ZKP proof + verification happens off-chain here, same
+      // trust/pattern as the legacy per-serial import flow — one import
+      // document authorizes the whole lot instead of a single serial.
+      // commissionLot's on-chain check stays the existing mock
+      // verifyProof(metadataHash, zkProof) (out of this round's narrow
+      // contract-change scope); the real proof is still packed into zkProof
+      // so it's anchored in calldata for audit.
       const zkp = await importZkpService.generateRegistrationProof({
         importDocument,
-        batchHash,
+        batchHash: lotIdHash,
         vaccineExpiryDate: expiryDate,
       });
 
@@ -1083,45 +1133,37 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
             code: 'IMPORT_ROOT_NOT_APPROVED_ON_CHAIN',
             message: 'Approved import root is not set on-chain. Run POST /import-zkp/approvals before registering imported products.',
           },
-          timestamp: Date.now(),
         });
       }
 
-      queueJobType = 'REGISTER_IMPORTED_PRODUCT';
-      zkpProofPayload = zkp.proof;
+      zkProof = packGroth16Proof(zkp.proof);
       importDocCommitment = zkp.commitment;
       approvedImportRoot = zkp.approvedRoot;
       importProofMode = zkp.proof.mode;
     }
 
     const job = await txQueue.enqueue({
-      type: queueJobType,
+      type: 'COMMISSION_LOT',
       payload: {
-        serialId: serialHash,
-        batchHash,
+        lotIdHash,
+        aggregationRoot,
         metadataHash,
-        importDocHash,
-        zkpProof: proofBytes,
+        zkProof,
+        timestamp: Math.floor(Date.now() / 1000),
         signerRole,
-        proof: zkpProofPayload,
       },
-      metadata: {
-        serialId,
-        batchHash,
-        batchQR,
-        serialHash,
-      },
+      metadata: { lotIdHash, lotCode, quantity: serials.length },
     });
 
     const now = Date.now();
-    const batchPatch = {
-      id: batchQR,
-      batchHash,
-      batchQR,
+    const batch: Batch & { syncStatus?: string; processingJobId?: string } = {
+      id: lotCode,
+      batchHash: lotIdHash,
+      batchQR: lotCode,
       metadataHash,
       productName,
-      quantity,
-      manufacturerAddress: manufacturerAddress || contractClient.getRoleAddress(signerRole),
+      quantity: serials.length,
+      manufacturerAddress: manufacturerAddr,
       manufacturerName,
       expiryDate,
       origin: isImported ? 'IMPORTED' : 'MANUFACTURED',
@@ -1131,61 +1173,81 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       ...(approvedImportRoot ? { approvedImportRoot } : {}),
       createdAt: now,
       updatedAt: now,
+      lotIdHash,
+      aggregationRoot,
+      lotSalt,
+      unitLeaves,
+      coldChainStatus: 'NONE',
       syncStatus: 'PROCESSING',
       processingJobId: job.id,
-    } as Batch & { syncStatus?: string; processingJobId?: string };
-    const batch: Batch & { syncStatus?: string; processingJobId?: string } = mergeBatchRecord(existingBatch, batchPatch, quantity);
-
-    const product: Product & { syncStatus?: string; processingJobId?: string } = {
-      serialId,
-      batchId: batchQR,
-      batchHash,
-      productName,
-      manufacturerName,
-      manufacturerAddress: batch.manufacturerAddress,
-      currentOwner: contractClient.getRoleAddress(signerRole),
-      ownerRole: signerRole,
-      status: 'REGISTERED',
-      riskLevel: 'LOW',
-      expiryDate,
-      isImported,
-      zkpVerified: isImported ? true : Boolean(zkpProof && importDocHash !== ZERO_BYTES32),
-      ...(importDocumentIpfsCid ? { importDocumentIpfsCid } : {}),
-      ...(importDocCommitment ? { importDocCommitment } : {}),
-      ...(approvedImportRoot ? { approvedImportRoot } : {}),
-      ...(importProofMode ? { importProofMode } : {}),
-      syncStatus: 'PROCESSING',
-      processingJobId: job.id,
-      createdAt: now,
-      updatedAt: now,
     };
 
+    const firebaseUpdates: Record<string, unknown> = {
+      [`batches/${lotIdHash}`]: batch,
+      [`lot-index/${lotCode}`]: lotIdHash,
+    };
+    const products: Array<Product & { syncStatus?: string; processingJobId?: string }> = [];
+    for (let i = 0; i < serials.length; i++) {
+      const serialId = serials[i];
+      const unitIdHash = unitLeaves[i];
+      const product: Product & { syncStatus?: string; processingJobId?: string } = {
+        serialId,
+        unitIdHash,
+        lotIdHash,
+        batchId: lotCode,
+        batchHash: lotIdHash,
+        productName,
+        manufacturerName,
+        manufacturerAddress: manufacturerAddr,
+        currentOwner: contractClient.getRoleAddress(signerRole),
+        ownerRole: signerRole,
+        status: 'REGISTERED',
+        riskLevel: 'LOW',
+        expiryDate,
+        isImported,
+        zkpVerified: isImported,
+        ...(importDocumentIpfsCid ? { importDocumentIpfsCid } : {}),
+        ...(importDocCommitment ? { importDocCommitment } : {}),
+        ...(approvedImportRoot ? { approvedImportRoot } : {}),
+        ...(importProofMode ? { importProofMode } : {}),
+        syncStatus: 'PROCESSING',
+        processingJobId: job.id,
+        createdAt: now,
+        updatedAt: now,
+      };
+      products.push(product);
+      firebaseUpdates[`products/${unitIdHash}`] = product;
+      firebaseUpdates[`serial-index/${serialId}`] = unitIdHash;
+    }
+
     try {
-      await Promise.all([
-        db.ref(`batches/${batchHash}`).update(batch),
-        db.ref(`products/${serialHash}`).set(product),
-        db.ref(`serial-index/${serialId}`).set(serialHash),
-      ]);
+      await chunkedFirebaseUpdate(firebaseUpdates);
     } catch (firebaseError) {
-      Logger.error('Firebase write failed after on-chain registration', firebaseError);
+      Logger.error('Firebase write failed after lot commissioning tx was queued', firebaseError);
       return res.status(207).json({
         success: false,
         error: {
           code: 'FIREBASE_WRITE_FAILED',
-          message: `Product was queued for on-chain registration (jobId: ${job.id}) but Firebase sync failed. Use POST /products/sync-wallet-register with the queued tx once it is confirmed.`,
+          message: `Lot was queued for on-chain commissioning (jobId: ${job.id}) but Firebase sync failed.`,
           jobId: job.id,
         },
       });
     }
 
+    // lotSalt is never returned — it's only needed server-side to rebuild
+    // Merkle proofs at dispense/decommission time.
+    const { lotSalt: _omitLotSalt, ...batchWithoutSalt } = batch;
+
     res.json({
       success: true,
       data: {
-        product,
-        batch,
-        batchHash,
+        lot: batchWithoutSalt,
+        lotIdHash,
+        aggregationRoot,
+        serials,
+        unitIdHashes: unitLeaves,
+        products,
         metadataHash,
-        serialHash,
         ipfsCid: ipfsResult?.cid,
         importDocumentIpfsCid,
         importDocCommitment,
@@ -1197,12 +1259,12 @@ router.post('/register', validateRequest({ body: registerProductSchema }), async
       },
     });
   } catch (error) {
-    Logger.error('Register product error', error);
+    Logger.error('Register (commission lot) error', error);
     res.status(500).json({
       success: false,
       error: {
         code: 'REGISTER_ERROR',
-        message: getErrorMessage(error, 'Failed to register product'),
+        message: getErrorMessage(error, 'Failed to commission lot'),
       },
     });
   }

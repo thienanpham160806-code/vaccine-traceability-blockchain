@@ -8,8 +8,10 @@
     "compile": "hardhat compile",
     "clean": "hardhat clean",
     "zkp:setup": "node scripts/setup-import-zkp.js",
-    "deploy:local": "hardhat run scripts/deploy.ts",
-    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia",
+    "sync-abis": "hardhat run scripts/sync-abis.ts",
+    "node:local": "hardhat node",
+    "deploy:local": "hardhat run scripts/deploy.ts --network localhost && npm run sync-abis",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia && npm run sync-abis",
     "routes:local": "hardhat run scripts/configure-routes.ts --network localhost",
     "routes:sepolia": "hardhat run scripts/configure-routes.ts --network sepolia"
   },
