@@ -17,8 +17,19 @@ const config: HardhatUserConfig = {
   },
 
   networks: {
+    hardhat: {
+      chainId: 31337,
+    },
     sepolia: {
       url: process.env.SEPOLIA_RPC_URL || "",
+      accounts:
+        process.env.PRIVATE_KEY !== undefined && process.env.PRIVATE_KEY !== ""
+          ? [process.env.PRIVATE_KEY]
+          : [],
+    },
+    amoy: {
+      url: process.env.AMOY_RPC_URL || "",
+      chainId: 80002,
       accounts:
         process.env.PRIVATE_KEY !== undefined && process.env.PRIVATE_KEY !== ""
           ? [process.env.PRIVATE_KEY]
@@ -27,7 +38,10 @@ const config: HardhatUserConfig = {
   },
 
   etherscan: {
-    apiKey: process.env.ETHERSCAN_API_KEY || "",
+    apiKey: {
+      sepolia: process.env.ETHERSCAN_API_KEY || "",
+      polygonAmoy: process.env.POLYGONSCAN_API_KEY || "",
+    },
   },
 };
 

@@ -69,6 +69,7 @@ contract ProductRegistry {
     mapping(bytes32 => Lot) public lots;
     mapping(bytes32 => bytes32) public lotToParent;
     mapping(bytes32 => bytes32) public lotToSubRoot;
+    mapping(bytes32 => bool) public unitDecommissioned;
 
     event ProductRegistered(
         bytes32 indexed serialID,
@@ -437,6 +438,7 @@ function verifyProof(
         require(lotIdHash != bytes32(0), "Invalid lot id");
         require(lots[lotIdHash].exists || lotToParent[lotIdHash] != bytes32(0), "Lot not found");
         require(!lots[lotIdHash].recalled, "Lot recalled");
+        require(!unitDecommissioned[unitIdHash], "Unit already decommissioned");
 
         // NOTE: merkleProof may legitimately be an empty array — a lot with
         // exactly one unit has a single-leaf tree where aggregationRoot ==
@@ -447,6 +449,8 @@ function verifyProof(
             ? lots[lotIdHash].aggregationRoot
             : lotToSubRoot[lotIdHash];
         require(MerkleProof.verify(merkleProof, root, unitIdHash), "Invalid merkle proof");
+
+        unitDecommissioned[unitIdHash] = true;
 
         emit UnitDecommissioned(unitIdHash, lotIdHash, eventType, timestamp);
     }
@@ -641,11 +645,17 @@ function verifyProof(
 
     function getRiskLevel(bytes32 serialID) external view returns (uint8) {
         require(products[serialID].exists, "Product not found");
+        if (recalledBatches[products[serialID].batchHash]) {
+            return RISK_CRITICAL;
+        }
         return products[serialID].riskLevel;
     }
 
     function getFlagReason(bytes32 serialID) external view returns (bytes32) {
         require(products[serialID].exists, "Product not found");
+        if (recalledBatches[products[serialID].batchHash]) {
+            return batchRecallReasons[products[serialID].batchHash];
+        }
         return products[serialID].flagReason;
     }
 
