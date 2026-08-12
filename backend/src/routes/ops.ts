@@ -4,6 +4,7 @@ import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
 import { CryptoUtils } from '../utils/crypto';
 import { Logger } from '../utils/logger';
+import { txQueue } from '../services/txQueue';
 import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
 import {
   decorateProduct,
@@ -804,6 +805,64 @@ router.post('/recalls', verifyToken, requireRole(['RECALL_AUTHORITY', 'ADMIN']),
   } catch (error) {
     Logger.error('Create recall error', error);
     res.status(500).json({ success: false, error: { code: 'RECALL_ERROR', message: getErrorMessage(error, 'Failed to recall batch') } });
+  }
+});
+
+/**
+ * POST /recalls/lot
+ * Recall a lot-Merkle-commissioned lot (as opposed to /recalls, which
+ * recalls a batch registered via the legacy per-serial flow). Goes through
+ * txQueue (RECALL_LOT) rather than a synchronous on-chain call, since the
+ * fan-out to every unit in the lot is potentially large.
+ */
+router.post('/recalls/lot', verifyToken, requireRole(['RECALL_AUTHORITY', 'ADMIN']), async (req: AuthRequest, res: Response) => {
+  try {
+    const { lotId, reason } = req.body;
+    if (!lotId || !reason) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'MISSING_FIELDS', message: 'Missing required fields: lotId, reason' },
+      });
+    }
+
+    let lotIdHash = String(lotId);
+    const directSnap = await db.ref(`batches/${lotIdHash}`).once('value');
+    if (!directSnap.exists()) {
+      const indexSnap = await db.ref(`lot-index/${lotIdHash}`).once('value');
+      const indexed: string | null = indexSnap.val();
+      if (indexed) lotIdHash = indexed;
+    }
+
+    const batchSnap = await db.ref(`batches/${lotIdHash}`).once('value');
+    if (!batchSnap.exists()) {
+      return res.status(404).json({ success: false, error: { code: 'LOT_NOT_FOUND', message: `Lot ${lotId} not found` } });
+    }
+    const batch = batchSnap.val();
+    if (batch.recalledAt) {
+      return res.status(409).json({ success: false, error: { code: 'LOT_ALREADY_RECALLED', message: `Lot ${lotId} is already recalled` } });
+    }
+
+    const reasonHash = toBytes32(reason);
+    const now = Date.now();
+    const job = await txQueue.enqueue({
+      type: 'RECALL_LOT',
+      payload: { lotIdHash, reasonHash, signerRole: 'RECALL_AUTHORITY' },
+      metadata: { lotIdHash, reasonHash },
+    });
+
+    await db.ref(`batches/${lotIdHash}`).update({
+      syncStatus: 'PROCESSING',
+      processingJobId: job.id,
+      updatedAt: now,
+    });
+
+    res.json({ success: true, data: { lotIdHash, reasonHash, jobId: job.id } });
+  } catch (error) {
+    Logger.error('Create lot recall error', error);
+    res.status(500).json({
+      success: false,
+      error: { code: 'LOT_RECALL_ERROR', message: getErrorMessage(error, 'Failed to recall lot') },
+    });
   }
 });
 

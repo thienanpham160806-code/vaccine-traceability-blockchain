@@ -1,8 +1,12 @@
 import { ethers } from 'ethers';
 import { db } from '../config/firebase';
 import { contractClient } from '../contracts/client';
+import { CryptoUtils } from '../utils/crypto';
 import { Logger } from '../utils/logger';
 import { txQueue } from './txQueue';
+import { markLotUnitsRecalled, markLotUnitsVerified } from './lotSync';
+
+const DISPENSE_EVENT_TYPE = CryptoUtils.keccak256('DISPENSE');
 
 const productStatuses = ['REGISTERED', 'VERIFIED', 'IN_TRANSIT', 'DELIVERED', 'FLAGGED', 'RECALLED'];
 const riskLevels = ['SAFE', 'ALERT', 'ALERT', 'HIGH', 'CRITICAL'];
@@ -127,6 +131,12 @@ export class EventListener {
         this.setupTransferLedgerListeners(contractClient.transferLedger);
       }
 
+      if (contractClient.coldChainRegistry) {
+        this.setupColdChainRegistryListeners(contractClient.coldChainRegistry);
+      } else {
+        Logger.warn('⚠️ ColdChainRegistry not initialized — EnvAnchored events will not be synced');
+      }
+
       // Log polling status
       Logger.info('📡 Listening for blockchain events...');
     } catch (error) {
@@ -247,9 +257,151 @@ export class EventListener {
         }
       });
 
+      // Listen to LotCommissioned event — authoritative backstop for
+      // txQueue's optimistic COMMISSION_LOT confirm handling (e.g. if the
+      // backend restarted mid-flight and never saw the tx confirm itself).
+      // markLotUnitsVerified is idempotent, so this is safe to re-run.
+      contract.on('LotCommissioned', async (lotIdHash: any, aggregationRoot: any, metadataHash: any, timestamp: any, event: any) => {
+        Logger.info(`📦 LotCommissioned: ${lotIdHash}`);
+
+        try {
+          const lotIdHashStr = asString(lotIdHash);
+          const now = Date.now();
+          const txHash = eventTxHash(event);
+
+          await db.ref(`batches/${lotIdHashStr}`).update(compactRecord({
+            aggregationRoot: asString(aggregationRoot),
+            metadataHash: asString(metadataHash),
+            blockchainTx: txHash,
+            syncStatus: 'OK',
+            processingJobId: null,
+            updatedAt: now,
+          }));
+
+          const verifiedCount = await markLotUnitsVerified(lotIdHashStr, txHash || '');
+          await updateJobStatusByTx(txHash, 'CONFIRMED');
+          Logger.success(`✅ Synced lot commission: ${lotIdHash} (${verifiedCount} unit(s))`);
+        } catch (err) {
+          Logger.error('Failed to sync lot commission', err);
+        }
+      });
+
+      // Listen to LotRecalled event
+      contract.on('LotRecalled', async (lotIdHash: any, reasonHash: any, timestamp: any, event: any) => {
+        Logger.info(`🛑 LotRecalled: ${lotIdHash}`);
+
+        try {
+          const lotIdHashStr = asString(lotIdHash);
+          const now = Date.now();
+          const txHash = eventTxHash(event);
+
+          await db.ref(`batches/${lotIdHashStr}`).update({
+            recalledAt: now,
+            custodyStatus: 'RECALLED',
+            blockchainTx: txHash,
+            updatedAt: now,
+          });
+
+          const recalledCount = await markLotUnitsRecalled(lotIdHashStr, asString(reasonHash), txHash || '');
+          await updateJobStatusByTx(txHash, 'CONFIRMED');
+          Logger.success(`✅ Synced lot recall: ${lotIdHash} (${recalledCount} unit(s))`);
+        } catch (err) {
+          Logger.error('Failed to sync lot recall', err);
+        }
+      });
+
+      // Listen to LotDisaggregated event
+      contract.on('LotDisaggregated', async (parentLotIdHash: any, subLotIdHash: any, subLotRoot: any, toActorHash: any, timestamp: any, event: any) => {
+        Logger.info(`✂️ LotDisaggregated: ${parentLotIdHash} -> ${subLotIdHash}`);
+
+        try {
+          const subLotIdHashStr = asString(subLotIdHash);
+          const now = Date.now();
+          const txHash = eventTxHash(event);
+
+          await db.ref(`sub-lots/${subLotIdHashStr}`).update({
+            blockchainTx: txHash,
+            syncStatus: 'OK',
+            processingJobId: null,
+            updatedAt: now,
+          });
+
+          await updateJobStatusByTx(txHash, 'CONFIRMED');
+          Logger.success(`✅ Synced lot disaggregation: ${subLotIdHash}`);
+        } catch (err) {
+          Logger.error('Failed to sync lot disaggregation', err);
+        }
+      });
+
+      // Listen to UnitDecommissioned event (dispense/decommission)
+      contract.on('UnitDecommissioned', async (unitIdHash: any, lotIdHash: any, eventType: any, timestamp: any, event: any) => {
+        Logger.info(`💉 UnitDecommissioned: ${unitIdHash}`);
+
+        try {
+          const unitIdHashStr = asString(unitIdHash);
+          const now = Date.now();
+          const txHash = eventTxHash(event);
+          const targetStatus = asString(eventType).toLowerCase() === DISPENSE_EVENT_TYPE.toLowerCase() ? 'ADMINISTERED' : 'DECOMMISSIONED';
+
+          await db.ref(`products/${unitIdHashStr}`).update({
+            status: targetStatus,
+            syncStatus: 'OK',
+            blockchainTx: txHash,
+            processingJobId: null,
+            updatedAt: now,
+          });
+
+          await updateJobStatusByTx(txHash, 'CONFIRMED');
+          Logger.success(`✅ Synced unit decommission: ${unitIdHash} (${targetStatus})`);
+        } catch (err) {
+          Logger.error('Failed to sync unit decommission', err);
+        }
+      });
+
       Logger.info('✅ ProductRegistry listeners ready');
     } catch (error) {
       Logger.error('Failed to setup ProductRegistry listeners', error);
+    }
+  }
+
+  /**
+   * Setup ColdChainRegistry event listeners
+   */
+  private setupColdChainRegistryListeners(contract: ethers.Contract): void {
+    try {
+      contract.on('EnvAnchored', async (lotIdHash: any, legId: any, envMerkleRoot: any, windowStart: any, windowEnd: any, complianceFlag: any, timestamp: any, event: any) => {
+        Logger.info(`🌡️ EnvAnchored: ${lotIdHash} / ${legId}`);
+
+        try {
+          const legIdStr = asString(legId);
+          const now = Date.now();
+          const txHash = eventTxHash(event);
+          const compliant = Boolean(complianceFlag);
+
+          await db.ref(`cold-chain-legs/${legIdStr}`).update({
+            status: 'SEALED',
+            envMerkleRoot: asString(envMerkleRoot),
+            complianceFlag: compliant,
+            anchoredTx: txHash,
+            processingJobId: null,
+            updatedAt: now,
+          });
+
+          await db.ref(`batches/${asString(lotIdHash)}`).update({
+            coldChainStatus: compliant ? 'PASS' : 'EXCURSION',
+            updatedAt: now,
+          });
+
+          await updateJobStatusByTx(txHash, 'CONFIRMED');
+          Logger.success(`✅ Synced env anchor: ${legId}`);
+        } catch (err) {
+          Logger.error('Failed to sync env anchor', err);
+        }
+      });
+
+      Logger.info('✅ ColdChainRegistry listeners ready');
+    } catch (error) {
+      Logger.error('Failed to setup ColdChainRegistry listeners', error);
     }
   }
 
