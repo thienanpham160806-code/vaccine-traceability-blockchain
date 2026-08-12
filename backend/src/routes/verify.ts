@@ -1,9 +1,16 @@
+import crypto from 'crypto';
 import { Router, Request, Response } from 'express';
 import { db } from '../config/firebase';
 import { Logger } from '../utils/logger';
 import { CryptoUtils } from '../utils/crypto';
 import { contractClient } from '../contracts/client';
 import { assessRisk } from '../services/riskEngine';
+import { txQueue } from '../services/txQueue';
+import { merkleService } from '../services/merkle';
+import { resolveRootLot } from '../services/lotResolution';
+import { verifyToken, requireRole, AuthRequest } from '../middleware/auth';
+import { validateRequest } from '../middleware/validation';
+import { dispenseSchema } from '../schemas/verify';
 import {
   OrganizationProfile,
   PublicOrganizationProfile,
@@ -395,5 +402,113 @@ router.get('/consumer/:serialId', async (req: Request, res: Response) => {
     });
   }
 });
+
+/**
+ * POST /verify/:serialId/dispense
+ * The ONLY point a lot-Merkle unit touches the chain again after
+ * commissioning — verifies (and anchors) a real Merkle inclusion proof
+ * against the unit's ROOT ancestor lot (see services/lotResolution.ts for
+ * why this must never be a sub-lot's own root), then decommissions it
+ * on-chain and links an anonymous, PII-free patient token.
+ */
+router.post(
+  '/:serialId/dispense',
+  verifyToken,
+  requireRole(['CLINIC', 'PHARMACY', 'ADMIN', 'RECALL_AUTHORITY']),
+  validateRequest({ body: dispenseSchema }),
+  async (req: AuthRequest, res: Response) => {
+    try {
+      const { serialId } = req.params;
+      const { reason, patientToken: providedToken, niisRef } = req.body || {};
+
+      const resolved = await resolveProduct(serialId);
+      if (!resolved) {
+        return res.status(404).json({ success: false, error: { code: 'PRODUCT_NOT_FOUND', message: `Product ${serialId} not found` } });
+      }
+      const { product, lookupHash } = resolved;
+      const unitIdHash = product.unitIdHash || lookupHash;
+      const lotIdHash = product.lotIdHash;
+
+      if (!lotIdHash) {
+        return res.status(409).json({
+          success: false,
+          error: {
+            code: 'NOT_LOT_MERKLE_PRODUCT',
+            message: `Serial ${serialId} was not commissioned via lot-Merkle and has no on-chain unit proof to dispense with. Use POST /products/:serialId/administer instead.`,
+          },
+        });
+      }
+
+      const status = String(product.status || '').toUpperCase();
+      if (['RECALLED', 'ADMINISTERED', 'ARCHIVED', 'INVALID'].includes(status)) {
+        return res.status(409).json({ success: false, error: { code: 'PRODUCT_NOT_DISPENSABLE', message: `Serial ${serialId} is ${status} and cannot be dispensed.` } });
+      }
+
+      const rootLot = await resolveRootLot(lotIdHash);
+      if (!rootLot) {
+        return res.status(409).json({ success: false, error: { code: 'ROOT_LOT_NOT_FOUND', message: `Could not resolve the root-ancestor lot for serial ${serialId}.` } });
+      }
+      if (rootLot.recalled) {
+        return res.status(409).json({ success: false, error: { code: 'LOT_RECALLED', message: `The lot for serial ${serialId} has been recalled.` } });
+      }
+      if (!rootLot.lotSalt) {
+        return res.status(500).json({ success: false, error: { code: 'MISSING_LOT_SALT', message: `Root lot for serial ${serialId} is missing its lotSalt; cannot rebuild the merkle proof.` } });
+      }
+      if (!rootLot.unitLeaves.includes(unitIdHash)) {
+        return res.status(500).json({ success: false, error: { code: 'UNIT_NOT_IN_ROOT_LOT', message: `Unit ${unitIdHash} is not part of its root lot's original leaf set.` } });
+      }
+
+      const tree = merkleService.build(rootLot.unitLeaves);
+      const merkleProof = merkleService.getProof(tree, unitIdHash);
+      if (!merkleService.verify(tree.root, unitIdHash, merkleProof) || tree.root !== rootLot.aggregationRoot) {
+        return res.status(500).json({ success: false, error: { code: 'MERKLE_PROOF_BUILD_FAILED', message: 'Could not build a valid merkle proof for this unit.' } });
+      }
+
+      const eventType = CryptoUtils.keccak256('DISPENSE');
+      const now = Date.now();
+      const patientToken = providedToken || crypto.randomUUID();
+
+      const job = await txQueue.enqueue({
+        type: 'DECOMMISSION',
+        payload: {
+          unitIdHash,
+          lotIdHash: rootLot.rootLotIdHash,
+          merkleProof,
+          eventType,
+          timestamp: Math.floor(now / 1000),
+          signerRole: req.user?.role || 'CLINIC',
+        },
+        metadata: { unitIdHash, targetStatus: 'ADMINISTERED' },
+      });
+
+      await db.ref().update({
+        [`products/${unitIdHash}/status`]: 'ADMINISTERED',
+        [`products/${unitIdHash}/syncStatus`]: 'PROCESSING',
+        [`products/${unitIdHash}/processingJobId`]: job.id,
+        [`products/${unitIdHash}/patientToken`]: patientToken,
+        [`products/${unitIdHash}/updatedAt`]: now,
+        // patient-links is locked to .read:false/.write:false in
+        // database.rules.json — firebase-admin (server-side) bypasses
+        // client rules, which is exactly why this write is only ever done
+        // here, never from the frontend directly.
+        [`patient-links/${patientToken}`]: {
+          token: patientToken,
+          serialHash: unitIdHash,
+          lotIdHash: rootLot.rootLotIdHash,
+          niisRef: niisRef || null,
+          dispensedAt: now,
+          dispensedBy: req.user?.address || null,
+          dispensedByRole: req.user?.role || null,
+          reason: reason || null,
+        },
+      });
+
+      res.json({ success: true, data: { serialId, unitIdHash, lotIdHash: rootLot.rootLotIdHash, patientToken, jobId: job.id } });
+    } catch (error) {
+      Logger.error('Dispense product error', error);
+      res.status(500).json({ success: false, error: { code: 'DISPENSE_ERROR', message: 'Failed to dispense product' } });
+    }
+  }
+);
 
 export default router;
