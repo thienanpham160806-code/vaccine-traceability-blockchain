@@ -17,6 +17,15 @@ contract ProductRegistry {
         RECALLED
     }
 
+    struct Lot {
+        bytes32 lotIdHash;
+        bytes32 aggregationRoot;
+        bytes32 metadataHash;
+        bool exists;
+        bool recalled;
+        uint256 commissionedAt;
+    }
+
     struct Product {
         bytes32 serialID;
         bytes32 batchHash;
@@ -56,6 +65,9 @@ contract ProductRegistry {
     mapping(bytes32 => bytes32[]) private batchToSerials;
     mapping(bytes32 => bool) public recalledBatches;
     mapping(bytes32 => bytes32) public batchRecallReasons;
+    mapping(bytes32 => Lot) public lots;
+    mapping(bytes32 => bytes32) public lotToParent;
+    mapping(bytes32 => bytes32) public lotToSubRoot;
 
     event ProductRegistered(
         bytes32 indexed serialID,
@@ -76,6 +88,52 @@ contract ProductRegistry {
         bytes32 indexed batchHash,
         bool recalled,
         uint256 totalProducts
+    );
+
+    event LotCommissioned(
+        bytes32 indexed lotIdHash,
+        bytes32 indexed aggregationRoot,
+        bytes32 indexed metadataHash,
+        uint256 timestamp
+    );
+
+    event LotRecalled(
+        bytes32 indexed lotIdHash,
+        bytes32 indexed reasonHash,
+        uint256 timestamp
+    );
+
+    event UnitDecommissioned(
+        bytes32 indexed unitIdHash,
+        bytes32 indexed lotIdHash,
+        bytes32 indexed eventType,
+        uint256 timestamp
+    );
+
+    event CustodyEvent(
+        bytes32 indexed lotIdHash,
+        bytes32 indexed fromActorHash,
+        bytes32 indexed toActorHash,
+        bytes32 payloadHash,
+        uint256 timestamp
+    );
+
+    event EnvAnchored(
+        bytes32 indexed lotIdHash,
+        bytes32 indexed legId,
+        bytes32 indexed envMerkleRoot,
+        uint256 windowStart,
+        uint256 windowEnd,
+        bool complianceFlag,
+        uint256 timestamp
+    );
+
+    event LotDisaggregated(
+        bytes32 indexed parentLotIdHash,
+        bytes32 indexed subLotIdHash,
+        bytes32 indexed subLotRoot,
+        bytes32 toActorHash,
+        uint256 timestamp
     );
 
     event TransferLedgerUpdated(address indexed oldLedger, address indexed newLedger);
@@ -304,6 +362,135 @@ function verifyProof(
     return importDocHash != bytes32(0) && zkpProof.length > 0;
 }
 
+    function commissionLot(
+        bytes32 lotIdHash,
+        bytes32 aggregationRoot,
+        bytes32 metadataHash,
+        bytes calldata zkProof,
+        uint256 timestamp
+    ) external onlyManufacturerOrImporter {
+        require(lotIdHash != bytes32(0), "Invalid lot id");
+        require(aggregationRoot != bytes32(0), "Invalid aggregation root");
+        require(metadataHash != bytes32(0), "Invalid metadata hash");
+        require(!lots[lotIdHash].exists, "Lot already exists");
+        require(verifyProof(metadataHash, zkProof), "Invalid proof");
+
+        lots[lotIdHash] = Lot({
+            lotIdHash: lotIdHash,
+            aggregationRoot: aggregationRoot,
+            metadataHash: metadataHash,
+            exists: true,
+            recalled: false,
+            commissionedAt: timestamp
+        });
+
+        emit LotCommissioned(lotIdHash, aggregationRoot, metadataHash, timestamp);
+    }
+
+    function recordEvent(
+        bytes32 lotIdHash,
+        bytes32 fromActorHash,
+        bytes32 toActorHash,
+        bytes32 payloadHash,
+        bytes calldata actorSignature,
+        uint256 timestamp
+    ) external onlyTransferLedger {
+        require(lotIdHash != bytes32(0), "Invalid lot id");
+        require(payloadHash != bytes32(0), "Invalid payload");
+        require(actorSignature.length > 0, "Invalid signature");
+        require(lots[lotIdHash].exists || lotToParent[lotIdHash] != bytes32(0), "Lot not found");
+
+        emit CustodyEvent(
+            lotIdHash,
+            fromActorHash,
+            toActorHash,
+            payloadHash,
+            timestamp
+        );
+    }
+
+    function anchorEnv(
+        bytes32 lotIdHash,
+        bytes32 legId,
+        bytes32 envMerkleRoot,
+        uint256 windowStart,
+        uint256 windowEnd,
+        bool complianceFlag,
+        bytes calldata zkProof,
+        uint256 timestamp
+    ) external onlyTransferLedger {
+        require(lotIdHash != bytes32(0), "Invalid lot id");
+        require(legId != bytes32(0), "Invalid leg id");
+        require(envMerkleRoot != bytes32(0), "Invalid env root");
+        require(lots[lotIdHash].exists || lotToParent[lotIdHash] != bytes32(0), "Lot not found");
+        require(zkProof.length > 0, "Invalid zk proof");
+
+        emit EnvAnchored(
+            lotIdHash,
+            legId,
+            envMerkleRoot,
+            windowStart,
+            windowEnd,
+            complianceFlag,
+            timestamp
+        );
+    }
+
+    function disaggregate(
+        bytes32 parentLotIdHash,
+        bytes32 subLotIdHash,
+        bytes32 subLotRoot,
+        bytes32 toActorHash,
+        uint256 timestamp
+    ) external onlyTransferLedger {
+        require(parentLotIdHash != bytes32(0), "Invalid parent lot id");
+        require(subLotIdHash != bytes32(0), "Invalid sub lot id");
+        require(subLotRoot != bytes32(0), "Invalid sub lot root");
+        require(toActorHash != bytes32(0), "Invalid recipient");
+        require(lots[parentLotIdHash].exists, "Parent lot not found");
+        require(lotToParent[subLotIdHash] == bytes32(0), "Sub lot already exists");
+
+        lotToParent[subLotIdHash] = parentLotIdHash;
+        lotToSubRoot[subLotIdHash] = subLotRoot;
+
+        emit LotDisaggregated(
+            parentLotIdHash,
+            subLotIdHash,
+            subLotRoot,
+            toActorHash,
+            timestamp
+        );
+    }
+
+    function decommissionUnit(
+        bytes32 unitIdHash,
+        bytes32 lotIdHash,
+        bytes32 merkleProof,
+        bytes32 eventType,
+        uint256 timestamp
+    ) external onlyTransferLedger {
+        require(unitIdHash != bytes32(0), "Invalid unit id");
+        require(lotIdHash != bytes32(0), "Invalid lot id");
+        require(merkleProof != bytes32(0), "Invalid merkle proof");
+        require(lots[lotIdHash].exists || lotToParent[lotIdHash] != bytes32(0), "Lot not found");
+        require(!lots[lotIdHash].recalled, "Lot recalled");
+
+        emit UnitDecommissioned(unitIdHash, lotIdHash, eventType, timestamp);
+    }
+
+    function recallLot(
+        bytes32 lotIdHash,
+        bytes32 reasonHash
+    ) external onlyRecallAuthority {
+        require(lotIdHash != bytes32(0), "Invalid lot id");
+        require(reasonHash != bytes32(0), "Invalid reason");
+        require(lots[lotIdHash].exists, "Lot not found");
+        require(!lots[lotIdHash].recalled, "Lot already recalled");
+
+        lots[lotIdHash].recalled = true;
+        emit LotRecalled(lotIdHash, reasonHash, block.timestamp);
+    }
+
     function recallBatch(
         bytes32 batchHash,
         bytes32 reasonHash
@@ -408,6 +595,10 @@ function verifyProof(
         product.flagReason = reason;
 
         emit ProductFlagged(serialID, riskLevel, reason);
+    }
+
+    function lotExists(bytes32 lotIdHash) external view returns (bool) {
+        return lots[lotIdHash].exists || lotToParent[lotIdHash] != bytes32(0);
     }
 
     function getStatus(bytes32 serialID) external view returns (Status) {

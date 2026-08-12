@@ -89,6 +89,32 @@ contract TransferLedger {
     mapping(bytes32 => TransferRecord[]) private transferHistory;
     mapping(bytes32 => LastScan) public lastScans;
 
+    event CustodyEvent(
+        bytes32 indexed lotIdHash,
+        bytes32 indexed fromActorHash,
+        bytes32 indexed toActorHash,
+        bytes32 payloadHash,
+        uint256 timestamp
+    );
+
+    event EnvAnchored(
+        bytes32 indexed lotIdHash,
+        bytes32 indexed legId,
+        bytes32 indexed envMerkleRoot,
+        uint256 windowStart,
+        uint256 windowEnd,
+        bool complianceFlag,
+        uint256 timestamp
+    );
+
+    event LotDisaggregated(
+        bytes32 indexed parentLotIdHash,
+        bytes32 indexed subLotIdHash,
+        bytes32 indexed subLotRoot,
+        bytes32 toActorHash,
+        uint256 timestamp
+    );
+
     event TransferRequested(
         bytes32 indexed serialID,
         address indexed sender,
@@ -285,6 +311,74 @@ contract TransferLedger {
         productRegistry.revertTransit(serialID);
 
         emit TransferRejected(serialID, sender, receiver, reason);
+    }
+
+    function recordEvent(
+        bytes32 lotIdHash,
+        bytes32 fromActorHash,
+        bytes32 toActorHash,
+        bytes32 payloadHash,
+        bytes calldata actorSignature,
+        uint256 timestamp
+    ) external {
+        require(lotIdHash != bytes32(0), "Invalid lot id");
+        require(payloadHash != bytes32(0), "Invalid payload");
+        require(actorSignature.length > 0, "Invalid signature");
+
+        emit CustodyEvent(
+            lotIdHash,
+            fromActorHash,
+            toActorHash,
+            payloadHash,
+            timestamp
+        );
+    }
+
+    function anchorEnv(
+        bytes32 lotIdHash,
+        bytes32 legId,
+        bytes32 envMerkleRoot,
+        uint256 windowStart,
+        uint256 windowEnd,
+        bool complianceFlag,
+        bytes calldata zkProof,
+        uint256 timestamp
+    ) external {
+        require(lotIdHash != bytes32(0), "Invalid lot id");
+        require(legId != bytes32(0), "Invalid leg id");
+        require(envMerkleRoot != bytes32(0), "Invalid env root");
+        require(zkProof.length > 0, "Invalid zk proof");
+
+        emit EnvAnchored(
+            lotIdHash,
+            legId,
+            envMerkleRoot,
+            windowStart,
+            windowEnd,
+            complianceFlag,
+            timestamp
+        );
+    }
+
+    function disaggregate(
+        bytes32 parentLotIdHash,
+        bytes32 subLotIdHash,
+        bytes32 subLotRoot,
+        bytes32 toActorHash,
+        uint256 timestamp
+    ) external {
+        require(parentLotIdHash != bytes32(0), "Invalid parent lot id");
+        require(subLotIdHash != bytes32(0), "Invalid sub lot id");
+        require(subLotRoot != bytes32(0), "Invalid sub lot root");
+        require(toActorHash != bytes32(0), "Invalid recipient");
+
+        emit LotDisaggregated(
+            parentLotIdHash,
+            subLotIdHash,
+            subLotRoot,
+            toActorHash,
+            timestamp
+        );
     }
 
     function getTransferHistory(

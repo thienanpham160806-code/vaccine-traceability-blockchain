@@ -97,6 +97,144 @@ it("Should initialize transfer ledger as zero address", async function () {
 });
 
 
+  describe("Lot-Merkle Commissioning", function () {
+
+    it("Should allow manufacturer to commission a batch lot with aggregation root", async function () {
+      const lotIdHash = ethers.id("LOT-1");
+      const aggregationRoot = ethers.id("ROOT-1");
+      const metadataHash = ethers.id("META-LOT-1");
+
+      await registry
+        .connect(manufacturer)
+        .commissionLot(
+          lotIdHash,
+          aggregationRoot,
+          metadataHash,
+          "0x1234",
+          1700000000
+        );
+
+      const lot = await registry.lots(lotIdHash);
+      expect(lot.lotIdHash).to.equal(lotIdHash);
+      expect(lot.aggregationRoot).to.equal(aggregationRoot);
+      expect(lot.metadataHash).to.equal(metadataHash);
+      expect(lot.exists).to.equal(true);
+    });
+
+    it("Should allow manufacturer to record custody event, anchor env, and disaggregate a lot", async function () {
+      const lotIdHash = ethers.id("LOT-2");
+      const aggregationRoot = ethers.id("ROOT-2");
+      const metadataHash = ethers.id("META-LOT-2");
+
+      await registry.setTransferLedger(manufacturer.address);
+
+      await registry
+        .connect(manufacturer)
+        .commissionLot(
+          lotIdHash,
+          aggregationRoot,
+          metadataHash,
+          "0x1234",
+          1700000000
+        );
+
+      await registry
+        .connect(manufacturer)
+        .recordEvent(
+          lotIdHash,
+          ethers.id("FROM-ACTOR"),
+          ethers.id("TO-ACTOR"),
+          ethers.id("PAYLOAD"),
+          "0x1234",
+          1700000010
+        );
+
+      await registry
+        .connect(manufacturer)
+        .anchorEnv(
+          lotIdHash,
+          ethers.id("LEG-1"),
+          ethers.id("ENV-ROOT"),
+          1700000000,
+          1700000100,
+          true,
+          "0x5678",
+          1700000110
+        );
+
+      await registry
+        .connect(manufacturer)
+        .disaggregate(
+          lotIdHash,
+          ethers.id("SUB-LOT-1"),
+          ethers.id("SUB-ROOT-1"),
+          ethers.id("TO-ACTOR"),
+          1700000120
+        );
+
+      const hasParent = await registry.lotToParent(ethers.id("SUB-LOT-1"));
+      expect(hasParent).to.equal(lotIdHash);
+    });
+
+    it("Should allow recall authority to recall a commissioned lot", async function () {
+      const lotIdHash = ethers.id("LOT-RECALL");
+      const aggregationRoot = ethers.id("ROOT-RECALL");
+      const metadataHash = ethers.id("META-RECALL");
+      const recallAuthorityRole = await accessControl.RECALL_AUTHORITY_ROLE();
+
+      await accessControl.grantUserRole(user1.address, recallAuthorityRole);
+
+      await registry
+        .connect(manufacturer)
+        .commissionLot(
+          lotIdHash,
+          aggregationRoot,
+          metadataHash,
+          "0x1234",
+          1700000000
+        );
+
+      await registry
+        .connect(user1)
+        .recallLot(lotIdHash, ethers.id("REASON-RECALL"));
+
+      const lot = await registry.lots(lotIdHash);
+      expect(lot.recalled).to.equal(true);
+    });
+
+    it("Should support decommission flow for a unit in a valid lot", async function () {
+      const lotIdHash = ethers.id("LOT-DECOMMISSION");
+      const aggregationRoot = ethers.id("ROOT-DECOMMISSION");
+      const metadataHash = ethers.id("META-DECOMMISSION");
+
+      await registry.setTransferLedger(manufacturer.address);
+
+      await registry
+        .connect(manufacturer)
+        .commissionLot(
+          lotIdHash,
+          aggregationRoot,
+          metadataHash,
+          "0x1234",
+          1700000000
+        );
+
+      await registry
+        .connect(manufacturer)
+        .decommissionUnit(
+          ethers.id("UNIT-1"),
+          lotIdHash,
+          ethers.id("MERKLE-PROOF"),
+          ethers.id("DISPENSE"),
+          1700000200
+        );
+
+      const hasLot = await registry.lotExists(lotIdHash);
+      expect(hasLot).to.equal(true);
+    });
+
+  });
+
   describe("Register Product", function () {
 
     it("Should allow manufacturer to register product", async function () {
