@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { ArrowRight, CheckCircle2, ExternalLink, ListChecks, RefreshCw, Truck, XCircle } from "lucide-react";
-import { bulkScanTransfer, confirmBatchShellTransfer, confirmTransfer, getApiErrorMessage, getDemoActors, getTransferableProducts, getTransfers, rejectBatchShellTransfer, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
+import { bulkScanTransfer, confirmLotTransfer, confirmTransfer, createLotTransfer, getApiErrorMessage, getBatches, getDemoActors, getTransferableProducts, getTransfers, rejectLotTransfer, rejectTransfer, scanTransfer, syncWalletTransferConfirm, syncWalletTransferCreate, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { translateRole } from "@/lib/i18n";
 import { getTransferStatusLabel } from "@/lib/status";
@@ -58,7 +58,7 @@ function isReceiverRole(value: string): value is TransferReceiverRole {
 
 function getInitialTransferForm() {
   if (typeof window === "undefined") {
-    return { serialId: "", fromRole: "MANUFACTURER" as TransferInitiatorRole };
+    return { serialId: "", lotId: "", fromRole: "MANUFACTURER" as TransferInitiatorRole };
   }
 
   const params = new URLSearchParams(window.location.search);
@@ -66,6 +66,7 @@ function getInitialTransferForm() {
   return {
     serialId: params.get("serialId") || "",
     batchId: params.get("batchId") || "",
+    lotId: params.get("lotId") || "",
     autoSelectAllBatch: params.get("autoSelect") === "all",
     fromRole: user?.role && isInitiatorRole(user.role) ? user.role : ("MANUFACTURER" as TransferInitiatorRole),
   };
@@ -194,22 +195,18 @@ function TransferList() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const isBatchTransfer = (transfer?: TransferRecord) =>
-    Boolean(
-      transfer &&
-      (transfer.mode === "OFF_CHAIN_BATCH_CUSTODY" ||
-        transfer.transferMode === "OFF_CHAIN_BATCH_CUSTODY" ||
-        isBatchLikeSerial(transfer.serialId))
-    );
+  const isLotTransfer = (transfer?: TransferRecord) =>
+    Boolean(transfer && (transfer.mode === "LOT_CUSTODY" || transfer.transferMode === "LOT_CUSTODY"));
 
   const handleConfirm = async (transfer: TransferRecord) => {
     setBusy(true);
     setError(null);
     try {
-      if (isBatchTransfer(transfer)) {
-        await confirmBatchShellTransfer(transfer.id);
+      if (isLotTransfer(transfer)) {
+        await confirmLotTransfer(transfer.id);
         qc.invalidateQueries({ queryKey: ["transfers"] });
         qc.invalidateQueries({ queryKey: ["transferable-products"] });
+        qc.invalidateQueries({ queryKey: ["lot-batches"] });
         return;
       }
       const parsed = transferConfirmFormSchema.safeParse({ serialId: transfer.serialId });
@@ -245,32 +242,18 @@ function TransferList() {
     }
   };
 
-  const handleConfirmBatchShell = async (transferId: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await confirmBatchShellTransfer(transferId);
-      qc.invalidateQueries({ queryKey: ["transfers"] });
-      qc.invalidateQueries({ queryKey: ["batches"] });
-      qc.invalidateQueries({ queryKey: ["transferable-products"] });
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, tLabel("Xác nhận batch thất bại.")));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const handleReject = async (transfer: TransferRecord) => {
     if (!rejectReason.trim()) return;
     setBusy(true);
     setError(null);
     try {
-      if (isBatchTransfer(transfer)) {
-        await rejectBatchShellTransfer(transfer.id, rejectReason.trim());
+      if (isLotTransfer(transfer)) {
+        await rejectLotTransfer(transfer.id, rejectReason.trim());
         setRejectingId(null);
         setRejectReason("");
         qc.invalidateQueries({ queryKey: ["transfers"] });
         qc.invalidateQueries({ queryKey: ["transferable-products"] });
+        qc.invalidateQueries({ queryKey: ["lot-batches"] });
         return;
       }
       const parsed = transferRejectFormSchema.safeParse({ serialId: transfer.serialId, rejectionReason: rejectReason });
@@ -303,24 +286,6 @@ function TransferList() {
       qc.invalidateQueries({ queryKey: ["transferable-products"] });
   } catch (err: unknown) {
       setError(getApiErrorMessage(err, tLabel("Từ chối thất bại.")));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const handleRejectBatchShell = async (transferId: string) => {
-    if (!rejectReason.trim()) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await rejectBatchShellTransfer(transferId, rejectReason.trim());
-      setRejectingId(null);
-      setRejectReason("");
-      qc.invalidateQueries({ queryKey: ["transfers"] });
-      qc.invalidateQueries({ queryKey: ["batches"] });
-      qc.invalidateQueries({ queryKey: ["transferable-products"] });
-    } catch (err: unknown) {
-      setError(getApiErrorMessage(err, tLabel("Từ chối batch thất bại.")));
     } finally {
       setBusy(false);
     }
@@ -361,10 +326,11 @@ function TransferList() {
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <p className="font-mono text-xs font-semibold text-zinc-700 truncate">
-                {t.mode === "OFF_CHAIN_BATCH_CUSTODY" || t.transferMode === "OFF_CHAIN_BATCH_CUSTODY"
-                  ? t.batchId || t.batchHash || tLabel("Batch")
-                  : t.serialId}
+                {isLotTransfer(t) ? t.batchId || t.batchHash || tLabel("Lô") : t.serialId}
               </p>
+              {isLotTransfer(t) && t.unitCount ? (
+                <p className="mt-0.5 font-mono text-[10px] text-zinc-400">{t.unitCount} serial</p>
+              ) : null}
               <p className="mt-0.5 text-xs text-zinc-400">
                 {translateRole(t.fromRole || "", language) || tLabel("Không rõ")} <ArrowRight className="inline h-3 w-3" /> {translateRole(t.toRole || "", language) || tLabel("Không rõ")}
               </p>
@@ -401,11 +367,7 @@ function TransferList() {
                 />
                 <button
                   disabled={busy || !rejectReason.trim()}
-                  onClick={() =>
-                    isBatchTransfer(t)
-                      ? handleRejectBatchShell(t.id)
-                      : handleReject(t)
-                  }
+                  onClick={() => handleReject(t)}
                   className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50"
                 >
                   {tLabel("Xác nhận từ chối")}
@@ -420,18 +382,14 @@ function TransferList() {
             ) : (
               <div className="flex gap-2 flex-wrap">
                 <button
-                  disabled={busy || (!isBatchTransfer(t) && !transferConfirmFormSchema.safeParse({ serialId: t.serialId }).success)}
-                  onClick={() =>
-                    isBatchTransfer(t)
-                      ? handleConfirmBatchShell(t.id)
-                      : handleConfirm(t)
-                  }
+                  disabled={busy || (!isLotTransfer(t) && !transferConfirmFormSchema.safeParse({ serialId: t.serialId }).success)}
+                  onClick={() => handleConfirm(t)}
                   className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
                 >
                   <CheckCircle2 className="h-3.5 w-3.5" /> {tLabel("Xác nhận")}
                 </button>
                 <button
-                  disabled={busy || (!isBatchTransfer(t) && !transferRejectFormSchema.safeParse({ serialId: t.serialId, rejectionReason: "valid reason" }).success)}
+                  disabled={busy || (!isLotTransfer(t) && !transferRejectFormSchema.safeParse({ serialId: t.serialId, rejectionReason: "valid reason" }).success)}
                   onClick={() => setRejectingId(t.id)}
                   className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs font-bold text-red-700 hover:bg-red-100 disabled:opacity-50"
                 >
@@ -472,7 +430,6 @@ export default function ScanTransferPage() {
   const initialBatchId = initialTransferForm.batchId;
   const [fromRole, setFromRole] = useState<TransferInitiatorRole>(initialTransferForm.fromRole);
   const [toRole, setToRole] = useState<TransferReceiverRole>("DISTRIBUTOR");
-  const [selectedBatchShellId, setSelectedBatchShellId] = useState("");
   const [user] = useState<DemoUser | null>(() => (typeof window === "undefined" ? null : getStoredUser()));
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -480,6 +437,16 @@ export default function ScanTransferPage() {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [isBusy, setIsBusy] = useState(false);
+
+  // "serial": chuyển từng serial (flow cũ). "lot": chuyển cả lô lot-Merkle
+  // qua createLotTransfer — pre-chọn "lot" nếu đến từ link ?lotId=.
+  const [transferKind, setTransferKind] = useState<"serial" | "lot">(() => (initialTransferForm.lotId ? "lot" : "serial"));
+  const [lotId, setLotId] = useState(initialTransferForm.lotId);
+  const [lotTempMinC, setLotTempMinC] = useState("2");
+  const [lotTempMaxC, setLotTempMaxC] = useState("8");
+  const [lotError, setLotError] = useState<string | null>(null);
+  const [lotStatusMsg, setLotStatusMsg] = useState<string | null>(null);
+  const [isLotBusy, setIsLotBusy] = useState(false);
 
   const selectableFromRoles = useMemo<TransferInitiatorRole[]>(() => {
     if (user?.role === "ADMIN" || user?.role === "RECALL_AUTHORITY") return fromRoleOptions;
@@ -503,6 +470,27 @@ export default function ScanTransferPage() {
   });
   const transferableProducts = useMemo(() => transferableInventory?.items || [], [transferableInventory?.items]);
   const canCreateTransfer = Boolean(transferableInventory?.canTransfer);
+
+  // Lô lot-Merkle thuộc sở hữu inventoryRole, chưa có lệnh chuyển đang mở,
+  // chưa bị thu hồi/ẩn — đây là danh sách "Lô có thể chuyển" cho tab "Theo lô".
+  const { data: allBatches = [], isLoading: lotsLoading, error: lotsError, refetch: refetchLots } = useQuery({
+    queryKey: ["lot-batches", user?.address],
+    queryFn: () => getBatches({ scope: "mine" }),
+    enabled: Boolean(user),
+    staleTime: 10_000,
+  });
+  const transferableLots = useMemo(
+    () =>
+      allBatches.filter(
+        (batch) =>
+          Boolean(batch.aggregationRoot) &&
+          !batch.archivedAt &&
+          !batch.recalledAt &&
+          !batch.pendingLotTransferId &&
+          (!batch.ownerRole || batch.ownerRole === inventoryRole)
+      ),
+    [allBatches, inventoryRole]
+  );
 
   const batchGroups = useMemo(() => groupProductsByBatch(transferableProducts), [transferableProducts]);
   const batchCodeSet = useMemo(() => {
@@ -552,12 +540,7 @@ export default function ScanTransferPage() {
     const serialsToTransfer = Array.from(new Set((selectedSerialIds.length ? selectedSerialIds : [serialId]).map((item) => item.trim()).filter(Boolean)));
     const primarySerialId = serialsToTransfer[0] || "";
     if (isBusy) return;
-    if (!primarySerialId && !selectedBatchShellId) return;
-    if (selectedBatchShellId && serialsToTransfer.length === 0) {
-      setError(t("Batch chưa có serial hợp lệ, hãy đăng ký serial vào batch trước khi chuyển giao."));
-      setStatusMsg(null);
-      return;
-    }
+    if (!primarySerialId) return;
     if (serialsToTransfer.some((item) => !safeIdPattern.test(item))) {
       setError(t(safeIdMessage));
       return;
@@ -679,6 +662,33 @@ export default function ScanTransferPage() {
     }
   };
 
+  const createLot = async () => {
+    if (!lotId.trim() || isLotBusy) return;
+    setIsLotBusy(true);
+    setLotError(null);
+    setLotStatusMsg(`${t("Đang tạo lệnh")} ${fromRole} -> ${effectiveToRole} (${lotId.trim()})...`);
+    try {
+      const minC = lotTempMinC.trim() ? Number(lotTempMinC) : undefined;
+      const maxC = lotTempMaxC.trim() ? Number(lotTempMaxC) : undefined;
+      const result = await createLotTransfer({
+        lotId: lotId.trim(),
+        fromRole,
+        toRole: effectiveToRole,
+        temperatureMinC: Number.isFinite(minC) ? minC : undefined,
+        temperatureMaxC: Number.isFinite(maxC) ? maxC : undefined,
+      });
+      setLotStatusMsg(t("Đã tạo lệnh chuyển cho cả lô. Xác nhận giao hàng ở danh sách bên phải."));
+      setTransferId(result.transfer.id);
+      qc.invalidateQueries({ queryKey: ["transfers"] });
+      qc.invalidateQueries({ queryKey: ["lot-batches"] });
+    } catch (err: unknown) {
+      setLotError(getApiErrorMessage(err, t("Tạo lệnh thất bại.")));
+      setLotStatusMsg(null);
+    } finally {
+      setIsLotBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-5 pb-20 lg:pb-0">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -703,6 +713,29 @@ export default function ScanTransferPage() {
             <p className="text-xs text-zinc-500">{t("Ghi nhận chuyển giao vaccine lên blockchain.")}</p>
         </div>
 
+        <div className="mb-4 flex gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-1">
+          <button
+            type="button"
+            onClick={() => setTransferKind("serial")}
+            className={`flex-1 rounded-md px-3 py-2 text-xs font-bold transition ${
+              transferKind === "serial" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            {t("Theo serial")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setTransferKind("lot")}
+            className={`flex-1 rounded-md px-3 py-2 text-xs font-bold transition ${
+              transferKind === "lot" ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500 hover:text-zinc-700"
+            }`}
+          >
+            {t("Theo lô")}
+          </button>
+        </div>
+
+        {transferKind === "serial" ? (
+        <>
         <div className="space-y-4">
           <Field label="Serial ID">
             <input
@@ -712,7 +745,6 @@ export default function ScanTransferPage() {
                 setFieldErrors({});
                 setSerialId(e.target.value);
                 setSelectedSerialIds(e.target.value.trim() ? [e.target.value.trim()] : []);
-                setSelectedBatchShellId("");
               }}
               placeholder="VCN-…"
             />
@@ -830,7 +862,6 @@ export default function ScanTransferPage() {
                                 const ids = validProducts.map((product) => product.serialId);
                                 setSelectedSerialIds((current) => Array.from(new Set([...current, ...ids])));
                                 setSerialId(ids[0] || serialId);
-                                setSelectedBatchShellId("");
                                 setFieldErrors({});
                                 setError(null);
                               }}
@@ -864,7 +895,6 @@ export default function ScanTransferPage() {
                               const exists = current.includes(product.serialId);
                               const next = exists ? current.filter((id) => id !== product.serialId) : [...current, product.serialId];
                               setSerialId(next[0] || product.serialId);
-                              setSelectedBatchShellId("");
                               return next;
                             });
                             setFieldErrors({});
@@ -962,6 +992,120 @@ export default function ScanTransferPage() {
             {t("Xác minh")}
           </Link>
         </div>
+        </>
+        ) : (
+        <div className="space-y-4">
+          <Field label={t("Mã lô")}>
+            <input
+              className={`${inputCls} font-mono`}
+              value={lotId}
+              onChange={(e) => setLotId(e.target.value)}
+              placeholder="BATCH-VCN-…"
+            />
+          </Field>
+
+          {canCreateTransfer ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label={t("Từ")}>
+                <select
+                  className={inputCls}
+                  value={fromRole}
+                  disabled={selectableFromRoles.length <= 1}
+                  onChange={(e) => { if (isInitiatorRole(e.target.value)) setFromRole(e.target.value); }}
+                >
+                  {(selectableFromRoles.length ? selectableFromRoles : fromRoleOptions).map((r) => (
+                    <option key={r} value={r}>{translateRole(r, language)}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t("Đến")}>
+                <select
+                  className={inputCls}
+                  value={effectiveToRole}
+                  onChange={(e) => { if (isReceiverRole(e.target.value)) setToRole(e.target.value); }}
+                >
+                  {toRoleOptions.map((r) => (
+                    <option key={r} value={r}>{translateRole(r, language)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          ) : null}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label={t("Ngưỡng nhiệt độ tối thiểu (°C)")}>
+              <input type="number" className={inputCls} value={lotTempMinC} onChange={(e) => setLotTempMinC(e.target.value)} />
+            </Field>
+            <Field label={t("Ngưỡng nhiệt độ tối đa (°C)")}>
+              <input type="number" className={inputCls} value={lotTempMaxC} onChange={(e) => setLotTempMaxC(e.target.value)} />
+            </Field>
+          </div>
+
+          <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/60">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-bold text-zinc-900 dark:text-zinc-100">{t("Lô có thể chuyển")}</h3>
+              <span className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-200">
+                {transferableLots.length} {t("lô")}
+              </span>
+            </div>
+
+            {lotsLoading ? (
+              <div className="mt-3 space-y-2">
+                {[1, 2].map((item) => <div key={item} className="h-14 animate-pulse rounded-lg bg-white dark:bg-zinc-950" />)}
+              </div>
+            ) : lotsError ? (
+              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-4 text-xs text-red-700">
+                <p className="font-semibold">{getApiErrorMessage(lotsError, t("Không thể tải danh sách lô."))}</p>
+                <button type="button" onClick={() => refetchLots()} className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-2.5 py-1.5 font-bold text-red-700 hover:bg-red-50">
+                  <RefreshCw className="h-3.5 w-3.5" /> {t("Làm mới")}
+                </button>
+              </div>
+            ) : transferableLots.length === 0 ? (
+              <div className="mt-3 rounded-lg border border-dashed border-zinc-300 bg-white px-3 py-6 text-center text-xs text-zinc-500">
+                {t("Không có lô lot-Merkle nào sẵn sàng chuyển giao.")}
+              </div>
+            ) : (
+              <div className="mt-3 max-h-72 space-y-2 overflow-y-auto pr-1">
+                {transferableLots.map((batch) => (
+                  <button
+                    key={batch.lotIdHash || batch.id}
+                    type="button"
+                    onClick={() => setLotId(batch.id)}
+                    className={`w-full rounded-lg border p-3 text-left transition ${
+                      sameId(lotId, batch.id) ? "border-blue-500 bg-blue-50" : "border-zinc-200 bg-white hover:border-blue-300 hover:bg-blue-50/50"
+                    }`}
+                  >
+                    <p className="truncate text-sm font-bold text-zinc-900">{batch.productName}</p>
+                    <p className="mt-0.5 font-mono text-[11px] text-zinc-500">{batch.id}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {batch.unitCount ?? batch.quantity} serial · {batch.coldChainStatus ? t(batch.coldChainStatus) : t("NONE")}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {lotStatusMsg && (
+            <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700">{lotStatusMsg}</div>
+          )}
+          {lotError && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">{lotError}</div>
+          )}
+
+          <div className="flex flex-wrap gap-2.5">
+            {canCreateTransfer ? (
+              <button
+                disabled={isLotBusy || !lotId.trim()}
+                onClick={createLot}
+                className="btn-brand rounded-lg px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"
+              >
+                {isLotBusy ? <ActionSpinner label={t("Đang xử lý...")} /> : t("Tạo lệnh chuyển cả lô")}
+              </button>
+            ) : null}
+          </div>
+        </div>
+        )}
       </div>
 
       {/* Danh sách lệnh chuyển giao */}

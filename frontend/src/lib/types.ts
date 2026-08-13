@@ -67,6 +67,12 @@ export type Product = {
   administeredAuditId?: string;
   registeredAt?: number;
 
+  // Lot-Merkle commissioning — set for units registered via commissionLot.
+  unitIdHash?: string;
+  lotIdHash?: string;
+  merkleProof?: string[];
+  patientToken?: string;
+
   createdAt?: number;
   updatedAt?: number;
 };
@@ -221,6 +227,75 @@ export type Batch = {
   custodyStatus?: string;
   createdAt?: number;
   updatedAt?: number;
+
+  // Lot-Merkle commissioning
+  lotIdHash?: string;
+  aggregationRoot?: string;
+  unitCount?: number;
+  coldChainStatus?: "NONE" | "IN_TRANSIT" | "PASS" | "EXCURSION";
+  pendingLotTransferId?: string | null;
+  syncStatus?: "OK" | "PROCESSING" | "FIREBASE_ONLY" | "CHAIN_ONLY";
+};
+
+export type SubLot = {
+  id: string;
+  subLotIdHash: string;
+  parentLotIdHash: string;
+  aggregationRoot: string;
+  unitLeaves: string[];
+  quantity: number;
+  productName?: string;
+  manufacturerName?: string;
+  manufacturerAddress?: string;
+  expiryDate?: string;
+  origin?: "MANUFACTURED" | "IMPORTED";
+  toActor: string;
+  toRole: UserRole;
+  status: "ACTIVE" | "CONSUMED";
+  syncStatus?: "OK" | "PROCESSING" | "FIREBASE_ONLY";
+  processingJobId?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type ColdChainLegStatus = "OPEN" | "CLOSED_PENDING_SEAL" | "SEALING" | "SEALED";
+
+export type ColdChainReading = {
+  legId: string;
+  deviceId: string;
+  timestamp: number;
+  temperatureC: number;
+  humidityPct?: number;
+  gpsLat?: number;
+  gpsLng?: number;
+  signature: string;
+  receivedAt?: number;
+};
+
+export type ColdChainLeg = {
+  legId: string;
+  lotIdHash: string;
+  transferId?: string;
+  fromRole?: UserRole;
+  toRole?: UserRole;
+  status: ColdChainLegStatus;
+  thresholdMinC: number;
+  thresholdMaxC: number;
+  readingCount: number;
+  excursionCount: number;
+  windowStart?: number;
+  windowEnd?: number;
+  envMerkleRoot?: string;
+  complianceFlag?: boolean;
+  sealedCid?: string;
+  anchoredTx?: string;
+  custodyTxHash?: string;
+  openedAt?: number;
+  closedAt?: number;
+  sealedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+  readings?: ColdChainReading[];
 };
 
 export type VerifyResult = {
@@ -308,11 +383,18 @@ export type TransferRecord = {
   status: TransferStatus;
   visibilityScope?: "mine" | "all";
   batchTransferGroupId?: string;
-  mode?: "SERIAL_ON_CHAIN" | "BULK_SERIAL_ON_CHAIN" | "OFF_CHAIN_BATCH_CUSTODY";
-  transferMode?: "SERIAL_ON_CHAIN" | "BULK_SERIAL_ON_CHAIN" | "OFF_CHAIN_BATCH_CUSTODY";
+  mode?: "SERIAL_ON_CHAIN" | "BULK_SERIAL_ON_CHAIN" | "LOT_CUSTODY";
+  transferMode?: "SERIAL_ON_CHAIN" | "BULK_SERIAL_ON_CHAIN" | "LOT_CUSTODY";
   batchHash?: string;
   offChainOnly?: boolean;
   reasonNote?: string;
+  // Lot-level custody transfer (see mode: "LOT_CUSTODY")
+  lotIdHash?: string;
+  legId?: string;
+  unitCount?: number;
+  payloadHash?: string;
+  custodyTxHash?: string;
+  receiveJobId?: string;
   fromLocationHash?: string;
   toLocationHash?: string;
   fromLocationName?: string;

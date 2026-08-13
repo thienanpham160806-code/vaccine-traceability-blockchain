@@ -2,6 +2,7 @@
 import type {
   ApiResponse,
   Batch,
+  ColdChainLeg,
   DashboardActivity,
   DashboardStats,
   Product,
@@ -11,6 +12,7 @@ import type {
   RecallRecord,
   RoleRequest,
   RiskFlag,
+  SubLot,
   TransferRecord,
   VerifyResult,
   WalletRoleInfo,
@@ -62,11 +64,13 @@ function requireApiData<T>(data: T | undefined, fallback: string): T {
 }
 
 export type RegisterProductResponse = {
-  product: Product;
-  batch: Batch;
-  batchHash: string;
+  lot: Batch;
+  lotIdHash: string;
+  aggregationRoot: string;
+  serials: string[];
+  unitIdHashes: string[];
+  products: Product[];
   metadataHash: string;
-  serialHash: string;
   ipfsCid?: string;
   importDocumentIpfsCid?: string;
   importDocCommitment?: string;
@@ -74,7 +78,7 @@ export type RegisterProductResponse = {
   importProofMode?: string;
   qrContent?: string;
   qrImage?: string;
-  txHash?: string;
+  jobId: string;
 };
 
 export type BulkRegisterResponse = {
@@ -104,9 +108,38 @@ export type TransferActionResponse = {
   txHash?: string;
 };
 
-export type BatchShellTransferResponse = {
+export type LotTransferActionResponse = {
   transfer: TransferRecord;
-  transferId: string;
+  lotIdHash: string;
+  legId: string;
+  jobId: string;
+};
+
+export type DisaggregateResponse = {
+  subLot: SubLot;
+  subLotIdHash: string;
+  parentLotIdHash: string;
+  unitCount: number;
+  jobId: string;
+};
+
+export type SealLegResponse = {
+  legId: string;
+  envMerkleRoot: string;
+  windowStart: number;
+  windowEnd: number;
+  complianceFlag: boolean;
+  readingCount: number;
+  sealedCid?: string;
+  jobId: string;
+};
+
+export type DispenseResponse = {
+  serialId: string;
+  unitIdHash: string;
+  lotIdHash: string;
+  patientToken: string;
+  jobId: string;
 };
 
 export type ReconcileItem = {
@@ -282,9 +315,9 @@ export const endpoints = {
   getTransfers: "/transfers",
   getTransfer: (transferId: string) => `/transfers/${transferId}`,
   scanTransfer: "/transfers/scan",
-  batchShellTransfer: "/transfers/batch-shell",
-  confirmBatchShellTransfer: (transferId: string) => `/transfers/${encodeURIComponent(transferId)}/confirm-batch-shell`,
-  rejectBatchShellTransfer: (transferId: string) => `/transfers/${encodeURIComponent(transferId)}/reject-batch-shell`,
+  lotScanTransfer: "/transfers/lot-scan",
+  confirmLotTransfer: (transferId: string) => `/transfers/${encodeURIComponent(transferId)}/confirm-lot`,
+  rejectLotTransfer: (transferId: string) => `/transfers/${encodeURIComponent(transferId)}/reject-lot`,
   confirmTransfer: "/transfers/confirm",
   rejectTransfer: "/transfers/reject",
   clearStaleTransfer: (transferId: string) => `/transfers/${encodeURIComponent(transferId)}/clear-stale`,
@@ -293,8 +326,18 @@ export const endpoints = {
   syncWalletTransferConfirm: "/transfers/sync-wallet-confirm",
   syncWalletTransferReject: "/transfers/sync-wallet-reject",
 
+  disaggregate: "/disaggregate",
+  getSubLots: (lotId: string) => `/disaggregate/${encodeURIComponent(lotId)}/sub-lots`,
+
+  coldChainDevices: "/coldchain/devices",
+  coldChainReadings: "/coldchain/readings",
+  sealColdChainLeg: (legId: string) => `/coldchain/legs/${encodeURIComponent(legId)}/seal`,
+  getColdChainLegs: "/coldchain/legs",
+  getColdChainLeg: (legId: string) => `/coldchain/legs/${encodeURIComponent(legId)}`,
+
   verify: (serialId: string) => `/verify/${encodeURIComponent(serialId)}`,
   consumerVerify: (serialId: string) => `/verify/${encodeURIComponent(serialId)}`,
+  dispenseProduct: (serialId: string) => `/verify/${encodeURIComponent(serialId)}/dispense`,
 
   riskFlags: "/risk-flags",
   getRiskFlag: (id: string) => `/risk-flags/${id}`,
@@ -305,6 +348,7 @@ export const endpoints = {
   addDisputeEvidence: (id: string) => `/disputes/${id}/evidence`,
 
   recalls: "/recalls",
+  recallLot: "/recalls/lot",
   syncWalletRecall: "/recalls/sync-wallet",
   reconcilePreview: "/admin/reconcile/preview",
   reconcileApply: "/admin/reconcile/apply",
@@ -673,24 +717,78 @@ export async function scanTransfer(payload: {
   return requireApiData(res.data.data, "Scan transfer response did not include data.");
 }
 
-export async function createBatchShellTransfer(payload: {
-  batchId: string;
+export async function createLotTransfer(payload: {
+  lotId: string;
   fromRole: string;
   toRole: string;
   receiverAddress?: string;
+  fromLocationName?: string;
+  toLocationName?: string;
+  fromWarehouseName?: string;
+  toWarehouseName?: string;
+  carrierName?: string;
+  vehicleId?: string;
+  departedAt?: number;
+  arrivedAt?: number;
+  temperatureMinC?: number;
+  temperatureMaxC?: number;
+  temperatureUnit?: "C" | "F";
+  handlingNotes?: string;
 }) {
-  const res = await api.post<ApiResponse<BatchShellTransferResponse>>(endpoints.batchShellTransfer, payload);
-  return requireApiData(res.data.data, "Batch shell transfer response did not include data.");
+  const res = await api.post<ApiResponse<LotTransferActionResponse>>(endpoints.lotScanTransfer, payload);
+  return requireApiData(res.data.data, "Lot transfer response did not include data.");
 }
 
-export async function confirmBatchShellTransfer(transferId: string) {
-  const res = await api.post<ApiResponse<TransferRecord>>(endpoints.confirmBatchShellTransfer(transferId));
-  return requireApiData(res.data.data, "Confirm batch shell transfer response did not include data.");
+export async function confirmLotTransfer(transferId: string) {
+  const res = await api.post<ApiResponse<TransferRecord>>(endpoints.confirmLotTransfer(transferId));
+  return requireApiData(res.data.data, "Confirm lot transfer response did not include data.");
 }
 
-export async function rejectBatchShellTransfer(transferId: string, rejectionReason: string) {
-  const res = await api.post<ApiResponse<TransferRecord>>(endpoints.rejectBatchShellTransfer(transferId), { rejectionReason });
-  return requireApiData(res.data.data, "Reject batch shell transfer response did not include data.");
+export async function rejectLotTransfer(transferId: string, rejectionReason: string) {
+  const res = await api.post<ApiResponse<TransferRecord>>(endpoints.rejectLotTransfer(transferId), { rejectionReason });
+  return requireApiData(res.data.data, "Reject lot transfer response did not include data.");
+}
+
+// ============= Disaggregation =============
+
+export async function disaggregateLot(payload: {
+  lotId: string;
+  unitIdHashes?: string[];
+  quantity?: number;
+  toRole: string;
+  receiverAddress?: string;
+}) {
+  const res = await api.post<ApiResponse<DisaggregateResponse>>(endpoints.disaggregate, payload);
+  return requireApiData(res.data.data, "Disaggregate response did not include data.");
+}
+
+export async function getSubLots(lotId: string) {
+  const res = await api.get<ApiResponse<SubLot[]>>(endpoints.getSubLots(lotId));
+  return res.data.data || [];
+}
+
+// ============= Cold chain =============
+
+export async function registerColdChainDevice(payload: { deviceId: string; address: string; label?: string }) {
+  const res = await api.post<ApiResponse<{ deviceId: string; address: string; label?: string }>>(endpoints.coldChainDevices, payload);
+  return requireApiData(res.data.data, "Register device response did not include data.");
+}
+
+export async function sealColdChainLeg(legId: string) {
+  const res = await api.post<ApiResponse<SealLegResponse>>(endpoints.sealColdChainLeg(legId));
+  return requireApiData(res.data.data, "Seal leg response did not include data.");
+}
+
+export async function getColdChainLegs(lotIdHash?: string) {
+  const res = await api.get<ApiResponse<ColdChainLeg[]>>(endpoints.getColdChainLegs, {
+    params: lotIdHash ? { lotIdHash } : undefined,
+  });
+  return res.data.data || [];
+}
+
+export async function getColdChainLeg(legId: string) {
+  const res = await api.get<ApiResponse<ColdChainLeg>>(endpoints.getColdChainLeg(legId));
+  return requireApiData(res.data.data, "Cold-chain leg response did not include data.");
 }
 
 export async function bulkScanTransfer(payload: {
@@ -806,6 +904,11 @@ export async function createRecall(payload: { batchHash: string; reason: string;
   return requireApiData(res.data.data, "Create recall response did not include data.");
 }
 
+export async function recallLot(payload: { lotId: string; reason: string }) {
+  const res = await api.post<ApiResponse<{ lotIdHash: string; reasonHash: string; jobId: string }>>(endpoints.recallLot, payload);
+  return requireApiData(res.data.data, "Recall lot response did not include data.");
+}
+
 export async function getTransferableProducts(role?: string) {
   const res = await api.get<
     ApiResponse<{
@@ -900,6 +1003,11 @@ export async function addDisputeEvidence(
 export async function verifyProduct(serialId: string) {
   const res = await api.get<ApiResponse<VerifyResult>>(endpoints.verify(serialId));
   return requireApiData(res.data.data, "Verify response did not include data.");
+}
+
+export async function dispenseProduct(serialId: string, payload?: { reason?: string; patientToken?: string; niisRef?: string }) {
+  const res = await api.post<ApiResponse<DispenseResponse>>(endpoints.dispenseProduct(serialId), payload || {});
+  return requireApiData(res.data.data, "Dispense response did not include data.");
 }
 
 export async function reregisterProduct(serialId: string) {

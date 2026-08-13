@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAccount, usePublicClient, useWriteContract } from "wagmi";
 import { AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Clock, ExternalLink, XCircle } from "lucide-react";
-import { clearStaleTransfer, confirmBatchShellTransfer, confirmTransfer, getApiErrorMessage, getTransfer, rejectBatchShellTransfer, rejectTransfer, syncWalletTransferConfirm, syncWalletTransferReject } from "@/lib/api";
+import { clearStaleTransfer, confirmLotTransfer, confirmTransfer, getApiErrorMessage, getTransfer, rejectLotTransfer, rejectTransfer, syncWalletTransferConfirm, syncWalletTransferReject } from "@/lib/api";
 import { getStoredUser, type DemoUser } from "@/lib/auth";
 import { getStatusChipClass, getTransferStatusLabel } from "@/lib/status";
 import type { TransferRecord } from "@/lib/types";
@@ -31,11 +31,25 @@ function MetaField({ label, value, mono = false }: { label: string; value?: stri
   );
 }
 
+function getTransactionUrl(hash?: string) {
+  if (!hash) return null;
+  const baseUrl = process.env.NEXT_PUBLIC_CHAIN_EXPLORER_BASE_URL;
+  return baseUrl ? `${baseUrl.replace(/\/$/, "")}/tx/${hash}` : null;
+}
+
 function TxLink({ hash, label = "Mở transaction" }: { hash?: string; label?: string }) {
   if (!hash) return null;
+  const url = getTransactionUrl(hash);
+  if (!url) {
+    return (
+      <span className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-zinc-200 bg-zinc-50 px-3 font-mono text-xs font-semibold text-zinc-500">
+        {hash.slice(0, 10)}...{hash.slice(-8)}
+      </span>
+    );
+  }
   return (
     <a
-      href={`https://sepolia.etherscan.io/tx/${hash}`}
+      href={url}
       target="_blank"
       rel="noreferrer"
       className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 text-xs font-bold text-blue-700 hover:bg-blue-100"
@@ -108,16 +122,17 @@ function sameAddress(left?: string, right?: string) {
 }
 
 function actionResultMeta(result: { txHash?: string; jobId?: string; transferId?: string; serialId?: string }, transfer: TransferRecord, t: (key: string) => string) {
+  const lotTransfer = isLotTransfer(transfer);
   return [
-    { label: transfer.offChainOnly ? "Batch" : "Serial", value: transfer.offChainOnly ? transfer.batchId : result.serialId || transfer.serialId },
+    { label: lotTransfer ? t("Lô") : "Serial", value: lotTransfer ? transfer.batchId : result.serialId || transfer.serialId },
     { label: t("Lô"), value: transfer.batchId },
     { label: "Job ID", value: result.jobId },
     { label: "Transfer ID", value: result.transferId || transfer.id },
   ];
 }
 
-function isBatchShellTransfer(transfer: TransferRecord) {
-  return !!(transfer.offChainOnly || transfer.transferMode === "OFF_CHAIN_BATCH_CUSTODY" || transfer.mode === "OFF_CHAIN_BATCH_CUSTODY");
+function isLotTransfer(transfer: TransferRecord) {
+  return transfer.transferMode === "LOT_CUSTODY" || transfer.mode === "LOT_CUSTODY";
 }
 
 export default function TransferDetailPage({ params }: PageProps) {
@@ -153,8 +168,8 @@ export default function TransferDetailPage({ params }: PageProps) {
     setStaleTransferDetected(false);
     try {
       let result;
-      if (isBatchShellTransfer(transfer)) {
-        const updated = await confirmBatchShellTransfer(transfer.id);
+      if (isLotTransfer(transfer)) {
+        const updated = await confirmLotTransfer(transfer.id);
         result = { transferId: updated.id, serialId: updated.serialId };
       } else if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
         if (!sameAddress(connectedAddress, transfer.toAddress)) {
@@ -177,7 +192,7 @@ export default function TransferDetailPage({ params }: PageProps) {
         title: result.txHash ? t("Đã xác nhận giao hàng") : t("Đã gửi yêu cầu xác nhận"),
         description: result.txHash
           ? t("Lệnh chuyển đã được xác nhận và quyền sở hữu sẽ được đồng bộ về web.")
-          : isBatchShellTransfer(transfer)
+          : isLotTransfer(transfer)
             ? t("Lệnh chuyển đã được xác nhận thành công.")
             : t("Backend đã đưa lệnh xác nhận vào hàng đợi. Trạng thái sẽ tự cập nhật khi hoàn tất."),
         txHash: result.txHash,
@@ -191,7 +206,7 @@ export default function TransferDetailPage({ params }: PageProps) {
         tone: "error",
         title: t("Không thể xác nhận giao hàng"),
         description: getApiErrorMessage(err, t("Xác nhận thất bại.")),
-        meta: [{ label: isBatchShellTransfer(transfer) ? "Batch" : "Serial", value: isBatchShellTransfer(transfer) ? transfer.batchId : transfer.serialId }, { label: t("Lô"), value: transfer.batchId }],
+        meta: [{ label: isLotTransfer(transfer) ? t("Lô") : "Serial", value: isLotTransfer(transfer) ? transfer.batchId : transfer.serialId }, { label: t("Lô"), value: transfer.batchId }],
       });
     } finally {
       setBusy(false);
@@ -205,8 +220,8 @@ export default function TransferDetailPage({ params }: PageProps) {
     setStaleTransferDetected(false);
     try {
       let result;
-      if (isBatchShellTransfer(transfer)) {
-        const updated = await rejectBatchShellTransfer(transfer.id, rejectReason.trim());
+      if (isLotTransfer(transfer)) {
+        const updated = await rejectLotTransfer(transfer.id, rejectReason.trim());
         result = { transferId: updated.id, serialId: updated.serialId };
       } else if (user?.authMode === "wallet" && sameAddress(user.address, transfer.toAddress)) {
         if (!sameAddress(connectedAddress, transfer.toAddress)) {
@@ -229,7 +244,7 @@ export default function TransferDetailPage({ params }: PageProps) {
         title: result.txHash ? t("Đã từ chối lệnh chuyển") : t("Đã gửi yêu cầu từ chối"),
         description: result.txHash
           ? t("Lệnh chuyển đã bị từ chối và sản phẩm sẽ được trả về bên gửi.")
-          : isBatchShellTransfer(transfer)
+          : isLotTransfer(transfer)
             ? t("Lệnh chuyển đã bị từ chối.")
             : t("Backend đã đưa yêu cầu từ chối vào hàng đợi. Trạng thái sẽ tự cập nhật khi hoàn tất."),
         txHash: result.txHash,
@@ -252,7 +267,7 @@ export default function TransferDetailPage({ params }: PageProps) {
         tone: "error",
         title: t("Không thể từ chối lệnh chuyển"),
         description: getApiErrorMessage(err, t("Từ chối thất bại.")),
-        meta: [{ label: isBatchShellTransfer(transfer) ? "Batch" : "Serial", value: isBatchShellTransfer(transfer) ? transfer.batchId : transfer.serialId }, { label: t("Lô"), value: transfer.batchId }],
+        meta: [{ label: isLotTransfer(transfer) ? t("Lô") : "Serial", value: isLotTransfer(transfer) ? transfer.batchId : transfer.serialId }, { label: t("Lô"), value: transfer.batchId }],
       });
     } finally {
       setBusy(false);
@@ -318,7 +333,7 @@ export default function TransferDetailPage({ params }: PageProps) {
     (assignedRoles.has(transfer.toRole) || isAdminAuthority(user));
   const canCreateTransfer = canInitiateTransfer(user);
   const endUser = isEndUserRole(user);
-  const batchShell = isBatchShellTransfer(transfer);
+  const lotTransfer = isLotTransfer(transfer);
 
   return (
     <div className="max-w-3xl space-y-5 pb-20 lg:pb-0">
@@ -331,8 +346,11 @@ export default function TransferDetailPage({ params }: PageProps) {
           {getTransferStatusLabel(transfer.status)}
         </span>
         <div>
-          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">{batchShell ? "Batch ID" : "Serial ID"}</p>
-          <p className="font-mono text-sm font-semibold text-zinc-800">{batchShell ? transfer.batchId : transfer.serialId}</p>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">{lotTransfer ? t("Mã lô") : "Serial ID"}</p>
+          <p className="font-mono text-sm font-semibold text-zinc-800">{lotTransfer ? transfer.batchId : transfer.serialId}</p>
+          {lotTransfer && transfer.unitCount ? (
+            <p className="mt-0.5 font-mono text-[10px] text-zinc-400">{transfer.unitCount} serial</p>
+          ) : null}
         </div>
       </div>
 
@@ -442,7 +460,7 @@ export default function TransferDetailPage({ params }: PageProps) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {!batchShell ? (
+        {!lotTransfer ? (
           <Link href={`/dashboard/verify/${encodeURIComponent(transfer.serialId)}`} className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50">
             <ExternalLink className="h-3.5 w-3.5" /> {t("Xác minh sản phẩm")}
           </Link>
@@ -452,7 +470,7 @@ export default function TransferDetailPage({ params }: PageProps) {
         </Link>
         {canCreateTransfer ? (
           <Link
-            href={batchShell ? `/dashboard/transfers/create?batchId=${encodeURIComponent(transfer.batchId || "")}&autoSelect=all` : `/dashboard/transfers/create?serialId=${encodeURIComponent(transfer.serialId)}`}
+            href={lotTransfer ? `/dashboard/transfers/create?lotId=${encodeURIComponent(transfer.lotIdHash || transfer.batchId || "")}` : `/dashboard/transfers/create?serialId=${encodeURIComponent(transfer.serialId)}`}
             className="flex min-h-10 items-center gap-1.5 rounded-lg border border-zinc-200 px-4 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
           >
             <ArrowRight className="h-3.5 w-3.5" /> {t("Tạo lệnh chuyển")}
