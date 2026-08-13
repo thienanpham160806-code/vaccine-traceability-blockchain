@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Scanner } from "@yudiel/react-qr-scanner";
 import { Camera, CheckCircle2, ExternalLink, Keyboard, Search, ShieldAlert, Syringe, XCircle } from "lucide-react";
-import { administerProduct, getApiErrorMessage } from "@/lib/api";
+import { administerProduct, dispenseProduct, getApiErrorCode, getApiErrorMessage } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import { parseVaxiTrustQr, verifyHrefFromQr } from "@/lib/qr";
 import { useTranslation } from "@/providers/LanguageProvider";
@@ -13,7 +13,7 @@ type AdministerState =
   | { phase: "idle" }
   | { phase: "confirm"; serialId: string }
   | { phase: "loading"; serialId: string }
-  | { phase: "success"; serialId: string; auditId: string }
+  | { phase: "success"; serialId: string; auditId?: string; patientToken?: string; onChain: boolean }
   | { phase: "error"; serialId: string; message: string };
 
 export default function DashboardScanPage() {
@@ -24,6 +24,7 @@ export default function DashboardScanPage() {
   const [isPaused, setIsPaused] = useState(false);
   const [administer, setAdminister] = useState<AdministerState>({ phase: "idle" });
   const [reason, setReason] = useState("");
+  const [patientToken, setPatientToken] = useState("");
 
   const user = typeof window !== "undefined" ? getStoredUser() : null;
   const isEndUser = user?.role === "CLINIC" || user?.role === "PHARMACY";
@@ -52,8 +53,26 @@ export default function DashboardScanPage() {
   const handleAdminister = async (serialId: string) => {
     setAdminister({ phase: "loading", serialId });
     try {
+      // Try the real on-chain dispense (lot-Merkle proof + decommission) first.
+      // Units registered before the lot-Merkle migration have no unit-level
+      // proof to verify, so the backend rejects them with NOT_LOT_MERKLE_PRODUCT
+      // — fall back to the legacy Firebase-only "administer" flow for those.
+      const result = await dispenseProduct(serialId, {
+        reason: reason.trim() || undefined,
+        patientToken: patientToken.trim() || undefined,
+      });
+      setAdminister({ phase: "success", serialId, patientToken: result.patientToken, onChain: true });
+      return;
+    } catch (err: unknown) {
+      if (getApiErrorCode(err) !== "NOT_LOT_MERKLE_PRODUCT") {
+        setAdminister({ phase: "error", serialId, message: getApiErrorMessage(err, t("Không thể dispense sản phẩm.")) });
+        return;
+      }
+    }
+
+    try {
       const result = await administerProduct(serialId, { reason: reason.trim() || undefined });
-      setAdminister({ phase: "success", serialId, auditId: result.auditId });
+      setAdminister({ phase: "success", serialId, auditId: result.auditId, onChain: false });
     } catch (err: unknown) {
       setAdminister({ phase: "error", serialId, message: getApiErrorMessage(err, t("Không thể đánh dấu đã tiêm.")) });
     }
@@ -72,6 +91,7 @@ export default function DashboardScanPage() {
     setAdminister({ phase: "idle" });
     setIsPaused(false);
     setReason("");
+    setPatientToken("");
     setMessage(null);
   };
 
@@ -128,6 +148,20 @@ export default function DashboardScanPage() {
                   placeholder={t("Ví dụ: Tiêm mũi 1 cho BN Nguyễn Văn A")}
                 />
               </div>
+              <div className="space-y-1.5">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-amber-700 dark:text-amber-300">
+                  {t("Mã token bệnh nhân (tuỳ chọn, không PII)")}
+                </p>
+                <input
+                  className="w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm text-zinc-800 outline-none placeholder:text-zinc-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 dark:border-amber-500/30 dark:bg-zinc-900 dark:text-zinc-100"
+                  value={patientToken}
+                  onChange={(e) => setPatientToken(e.target.value)}
+                  placeholder={t("Để trống để tự sinh")}
+                />
+                <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
+                  {t("Chỉ áp dụng cho lọ đã commission on-chain qua lot-Merkle; lọ cũ sẽ tự động dùng luồng legacy off-chain.")}
+                </p>
+              </div>
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
@@ -169,9 +203,18 @@ export default function DashboardScanPage() {
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-700 dark:text-emerald-300" />
                 <div>
-                  <p className="font-bold text-emerald-900 dark:text-emerald-100">{t("Đã đánh dấu tiêm thành công")}</p>
+                  <p className="font-bold text-emerald-900 dark:text-emerald-100">
+                    {administer.onChain ? t("Đã dispense on-chain thành công") : `${t("Đã đánh dấu tiêm thành công")} (legacy)`}
+                  </p>
                   <p className="mt-0.5 font-mono text-xs text-emerald-700 dark:text-emerald-300">{administer.serialId}</p>
-                  <p className="mt-1 font-mono text-[10px] text-emerald-600 dark:text-emerald-400">Audit: {administer.auditId}</p>
+                  {administer.onChain && administer.patientToken ? (
+                    <p className="mt-1 break-all font-mono text-[10px] text-emerald-600 dark:text-emerald-400">
+                      {t("Token bệnh nhân (không PII)")}: {administer.patientToken}
+                    </p>
+                  ) : null}
+                  {!administer.onChain && administer.auditId ? (
+                    <p className="mt-1 font-mono text-[10px] text-emerald-600 dark:text-emerald-400">Audit: {administer.auditId}</p>
+                  ) : null}
                 </div>
               </div>
               <button

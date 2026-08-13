@@ -20,6 +20,7 @@ import {
   Settings,
   ShieldAlert,
   Sun,
+  Thermometer,
   Truck,
   UserCheck,
   UserCircle,
@@ -47,6 +48,7 @@ const menuItems = [
   { title: "Tổng quan", href: "/dashboard", icon: LayoutDashboard },
   { title: "Sản phẩm và lô", href: "/dashboard/products", icon: ClipboardList },
   { title: "Chuyển giao", href: "/dashboard/transfers", icon: Truck },
+  { title: "Bảo quản lạnh", href: "/dashboard/coldchain", icon: Thermometer },
   { title: "Rủi ro & tranh chấp", href: "/dashboard/risk-dispute", icon: ShieldAlert },
   { title: "Khiếu nại", href: "/dashboard/disputes", icon: Scale },
   { title: "Thu hồi", href: "/dashboard/recall", icon: RotateCcw },
@@ -134,6 +136,7 @@ export function Sidebar({ mobile = false, onNavigate }: { mobile?: boolean; onNa
   const visibleMenuItems = menuItems
     .filter((item) => {
       if (item.href === "/dashboard/products") return canViewInternalProducts(user);
+      if (item.href === "/dashboard/coldchain") return canViewInternalProducts(user);
       if (item.href === "/dashboard/transfers") return canViewTransfers(user);
       if (item.href === "/dashboard/risk-dispute") return canViewOperationalRisk(user);
       if (item.href === "/dashboard/disputes") return false;

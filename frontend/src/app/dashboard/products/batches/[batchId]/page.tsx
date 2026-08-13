@@ -6,10 +6,10 @@ import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { QRCodeSVG } from "qrcode.react";
 import { ArrowLeft, Download, ExternalLink, QrCode, X } from "lucide-react";
-import { archiveProducts, getApiErrorMessage, getBatch, getBatchSerials } from "@/lib/api";
+import { archiveProducts, getApiErrorMessage, getBatch, getBatchSerials, getColdChainLegs, getSubLots } from "@/lib/api";
 import { getConsumerVerifyQrValue } from "@/lib/qr";
 import { getProductStatusLabel, getStatusChipClass } from "@/lib/status";
-import type { Batch, Product } from "@/lib/types";
+import type { Batch, ColdChainLeg, Product, SubLot } from "@/lib/types";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 import { getStoredUser } from "@/lib/auth";
 import { canInitiateTransfer, canRegisterProducts, canViewAllScope, isAdminAuthority } from "@/lib/role-access";
@@ -82,6 +82,197 @@ function StatCard({ label, value }: { label: string; value: number | string }) {
     <div className="rounded-2xl border border-zinc-200 bg-white p-4 text-center shadow-sm">
       <p className="text-2xl font-bold text-zinc-900">{value}</p>
       <p className="mt-0.5 text-xs text-zinc-500">{label}</p>
+    </div>
+  );
+}
+
+function truncateHash(value?: string) {
+  if (!value) return "-";
+  return value.length > 20 ? `${value.slice(0, 10)}...${value.slice(-8)}` : value;
+}
+
+function getColdChainStatusChip(status: Batch["coldChainStatus"], t: (key: string) => string) {
+  switch (status) {
+    case "PASS":
+      return { label: t("Đạt chuẩn"), cls: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    case "EXCURSION":
+      return { label: t("Vượt ngưỡng nhiệt"), cls: "border-red-200 bg-red-50 text-red-700" };
+    case "IN_TRANSIT":
+      return { label: t("Đang vận chuyển"), cls: "border-blue-200 bg-blue-50 text-blue-700" };
+    default:
+      return { label: t("Chưa có dữ liệu"), cls: "border-zinc-200 bg-zinc-50 text-zinc-500" };
+  }
+}
+
+function getLegStatusChip(status: string, t: (key: string) => string) {
+  switch (status) {
+    case "SEALED":
+      return { label: t("Đã niêm phong"), cls: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    case "SEALING":
+      return { label: t("Đang niêm phong"), cls: "border-blue-200 bg-blue-50 text-blue-700" };
+    case "CLOSED_PENDING_SEAL":
+      return { label: t("Chờ niêm phong"), cls: "border-amber-200 bg-amber-50 text-amber-700" };
+    default:
+      return { label: t("Đang mở"), cls: "border-zinc-200 bg-zinc-50 text-zinc-600" };
+  }
+}
+
+function LotMerkleSection({ batch, t }: { batch: Batch; t: (key: string) => string }) {
+  const lotIdHash = batch.lotIdHash;
+  const chip = getColdChainStatusChip(batch.coldChainStatus, t);
+
+  const { data: subLots = [], isLoading: subLotsLoading } = useQuery<SubLot[]>({
+    queryKey: ["sub-lots", lotIdHash],
+    queryFn: () => getSubLots(lotIdHash as string),
+    enabled: Boolean(lotIdHash),
+  });
+
+  const { data: legs = [], isLoading: legsLoading } = useQuery<ColdChainLeg[]>({
+    queryKey: ["cold-chain-legs", lotIdHash],
+    queryFn: () => getColdChainLegs(lotIdHash),
+    enabled: Boolean(lotIdHash),
+  });
+
+  if (!lotIdHash) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:grid-cols-2">
+        <div className="flex items-center justify-between sm:col-span-2">
+          <h2 className="font-semibold text-zinc-800">{t("Commission on-chain (lot-Merkle)")}</h2>
+          <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${chip.cls}`}>
+            {chip.label}
+          </span>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">Lot ID Hash</p>
+          <p className="mt-1 break-all font-mono text-xs text-zinc-500" title={lotIdHash}>
+            {truncateHash(lotIdHash)}
+          </p>
+        </div>
+        <div>
+          <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">Aggregation Root</p>
+          <p className="mt-1 break-all font-mono text-xs text-zinc-500" title={batch.aggregationRoot}>
+            {truncateHash(batch.aggregationRoot)}
+          </p>
+        </div>
+        {typeof batch.unitCount === "number" && (
+          <div>
+            <p className="font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+              {t("Số đơn vị đã anchor")}
+            </p>
+            <p className="mt-1 font-semibold text-zinc-800">{batch.unitCount}</p>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 className="mb-3 font-semibold text-zinc-800">
+          {t("Lô con đã tách")}
+          {subLots.length > 0 && <span className="ml-2 font-normal text-zinc-400">({subLots.length})</span>}
+        </h2>
+        {subLotsLoading ? (
+          <div className="h-16 animate-pulse rounded-xl bg-zinc-100" />
+        ) : subLots.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-zinc-300 py-6 text-center text-sm text-zinc-400">
+            {t("Lô này chưa được tách.")}
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="border-b border-zinc-100 bg-zinc-50">
+                <tr>
+                  {["Sub-lot ID", t("Số lượng"), t("Vai trò nhận"), t("Trạng thái")].map((heading) => (
+                    <th key={heading} className="px-4 py-3 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {subLots.map((sub) => (
+                  <tr key={sub.subLotIdHash} className="hover:bg-zinc-50">
+                    <td className="px-4 py-3 font-mono text-xs text-zinc-700" title={sub.subLotIdHash}>
+                      {truncateHash(sub.subLotIdHash)}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-zinc-500">{sub.quantity}</td>
+                    <td className="px-4 py-3 text-xs text-zinc-500">{sub.toRole}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-600">
+                        {sub.status === "ACTIVE" ? t("Đang hoạt động") : t("Đã tiêu thụ")}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h2 className="mb-3 font-semibold text-zinc-800">
+          {t("Chặng bảo quản lạnh")}
+          {legs.length > 0 && <span className="ml-2 font-normal text-zinc-400">({legs.length})</span>}
+        </h2>
+        {legsLoading ? (
+          <div className="h-16 animate-pulse rounded-xl bg-zinc-100" />
+        ) : legs.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-zinc-300 py-6 text-center text-sm text-zinc-400">
+            {t("Chưa có chặng bảo quản lạnh nào cho lô này.")}
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm">
+            <table className="w-full text-sm">
+              <thead className="border-b border-zinc-100 bg-zinc-50">
+                <tr>
+                  {["Leg ID", t("Ngưỡng nhiệt"), t("Số lần đọc"), t("Vượt ngưỡng"), t("Trạng thái"), ""].map((heading) => (
+                    <th key={heading} className="px-4 py-3 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-zinc-400">
+                      {heading}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-zinc-100">
+                {legs.map((leg) => {
+                  const legChip = getLegStatusChip(leg.status, t);
+                  return (
+                    <tr key={leg.legId} className="hover:bg-zinc-50">
+                      <td className="px-4 py-3 font-mono text-xs text-zinc-700" title={leg.legId}>
+                        {truncateHash(leg.legId)}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-zinc-500">
+                        {leg.thresholdMinC}°C – {leg.thresholdMaxC}°C
+                      </td>
+                      <td className="px-4 py-3 text-xs text-zinc-500">{leg.readingCount}</td>
+                      <td className="px-4 py-3 text-xs text-zinc-500">
+                        {leg.excursionCount > 0 ? (
+                          <span className="font-semibold text-red-600">{leg.excursionCount}</span>
+                        ) : (
+                          "0"
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${legChip.cls}`}>
+                          {legChip.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/dashboard/coldchain/${encodeURIComponent(leg.legId)}`}
+                          className="flex items-center gap-1 rounded-lg border border-zinc-200 px-2 py-1 text-[11px] font-semibold text-zinc-600 hover:bg-zinc-50"
+                        >
+                          <ExternalLink className="h-3 w-3" /> {t("Chi tiết")}
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -250,6 +441,8 @@ export default function BatchDetailPage({ params }: PageProps) {
             </div>
           )}
         </div>
+
+        <LotMerkleSection batch={batch} t={t} />
 
         <div>
           <div className="mb-3 flex items-center justify-between">

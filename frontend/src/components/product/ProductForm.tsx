@@ -8,7 +8,8 @@ import { keccak256, toBytes, type Hex } from "viem";
 import { RefreshCw, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { QrResultCard } from "./QrResultCard";
-import { getApiErrorMessage, getBatches, registerProduct, syncWalletProductRegistration } from "@/lib/api";
+import { LotResultCard } from "./LotResultCard";
+import { getApiErrorMessage, getBatches, registerProduct, syncWalletProductRegistration, type RegisterProductResponse } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import type { Batch } from "@/lib/types";
 import { getZodFieldErrors, productRegistrationSchema } from "@/lib/validation";
@@ -78,6 +79,9 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
   const [generatedSerial, setGeneratedSerial] = useState<string | null>(null);
   const [generatedBatch, setGeneratedBatch] = useState<string | null>(null);
   const [result, setResult] = useState<RegisterProductResult | null>(null);
+  // Đường demo-actor (không phải wallet) giờ commission cả lô — kết quả là
+  // N serial + aggregationRoot, hiển thị qua LotResultCard thay vì 1 QR đơn.
+  const [lotResult, setLotResult] = useState<RegisterProductResponse | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -115,6 +119,7 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
     setGeneratedSerial(null);
     setGeneratedBatch(null);
     setResult(null);
+    setLotResult(null);
     setError(null);
     setFieldErrors({});
     setStatusMsg(null);
@@ -216,12 +221,11 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
           regulatorCertificateId: values.regulatorCertificateId || "",
         } : undefined,
       });
-      setGeneratedSerial(values.serialId);
-      setGeneratedBatch(values.batchId);
-      setResult(data);
-      setStatusMsg(t("Đăng ký thành công."));
-      toast.success(t("Đã đăng ký sản phẩm."));
-      onSuccess?.(values.batchId, values.serialId);
+      setLotResult(data);
+      setGeneratedBatch(data.lot.id);
+      setStatusMsg(`${t("Đăng ký thành công.")} (${data.serials.length} serial)`);
+      toast.success(`${t("Đã commission lô.")} (${data.serials.length} serial)`);
+      onSuccess?.(data.lot.id, data.serials[0] || values.serialId);
     } catch (err: unknown) {
       const message = getApiErrorMessage(err, t("Đăng ký sản phẩm thất bại."));
       setError(message);
@@ -333,12 +337,15 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
               readOnly={batchMode === "existing"}
             />
           </Field>
-          <Field label="Serial ID">
+          <Field label={t("Tiền tố Serial")}>
             <input
               className={monoInputCls}
               value={form.serialId}
               onChange={(e) => setForm({ ...form, serialId: e.target.value })}
             />
+            <p className="mt-1 text-[11px] text-zinc-400">
+              {t("Sẽ sinh")} {form.quantity || 1} serial: {form.serialId || "PREFIX"}-0001 .. {form.serialId || "PREFIX"}-{String(form.quantity || 1).padStart(4, "0")}
+            </p>
           </Field>
           <Field label={t("Ngày hết hạn")}>
             <input
@@ -443,8 +450,10 @@ export function ProductForm({ onSuccess }: { onSuccess?: (batchId: string, seria
         </div>
       </form>
 
-      {/* Right: QR result or placeholder */}
-      {generatedSerial ? (
+      {/* Right: lot summary (demo-actor), single QR (legacy wallet path), or placeholder */}
+      {lotResult ? (
+        <LotResultCard data={lotResult} />
+      ) : generatedSerial ? (
         <QrResultCard
           serialId={generatedSerial}
           txHash={result?.txHash}

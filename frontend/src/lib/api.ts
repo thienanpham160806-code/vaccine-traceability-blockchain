@@ -81,6 +81,23 @@ export type RegisterProductResponse = {
   jobId: string;
 };
 
+// /products/sync-wallet-register is the legacy per-serial wallet-signed
+// path (POST /register itself moved to lot-Merkle commissioning, but this
+// endpoint's on-chain call + response shape were intentionally left as-is —
+// see plan decision #9: wallet-signed lot commissioning isn't built this
+// round).
+export type LegacyRegisterProductResponse = {
+  product: Product;
+  batch: Batch;
+  batchHash: string;
+  metadataHash: string;
+  serialHash: string;
+  ipfsCid?: string;
+  qrContent?: string;
+  qrImage?: string;
+  txHash?: string;
+};
+
 export type BulkRegisterResponse = {
   total: number;
   successful: number;
@@ -358,6 +375,11 @@ export const endpoints = {
   archivedData: "/admin/archived",
 };
 
+export function getApiErrorCode(err: unknown): string | undefined {
+  const error = err as ApiErrorLike;
+  return error?.response?.data?.error?.code;
+}
+
 export function getApiErrorMessage(err: unknown, fallback = "Request failed.") {
   if (axios.isAxiosError(err)) {
     if (err.code === "ECONNABORTED") {
@@ -609,7 +631,7 @@ export async function syncWalletProductRegistration(payload: {
   importDocHash?: string;
   zkpProof?: string;
 }) {
-  const res = await api.post<ApiResponse<RegisterProductResponse>>(endpoints.syncWalletProductRegistration, payload);
+  const res = await api.post<ApiResponse<LegacyRegisterProductResponse>>(endpoints.syncWalletProductRegistration, payload);
   return requireApiData(res.data.data, "Wallet registration sync response did not include data.");
 }
 

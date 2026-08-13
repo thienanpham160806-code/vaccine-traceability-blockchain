@@ -5,6 +5,8 @@ const transferInitiators = new Set(["MANUFACTURER", "IMPORTER", "DISTRIBUTOR", "
 const transferReceivers = new Set(["IMPORTER", "DISTRIBUTOR", "CLINIC", "PHARMACY", "ADMIN", "RECALL_AUTHORITY"]);
 const productRegistrars = new Set(["MANUFACTURER", "IMPORTER", "ADMIN"]);
 const endUserRoles = new Set(["CLINIC", "PHARMACY"]);
+const coldChainSealers = new Set(["DISTRIBUTOR", "CLINIC", "PHARMACY", "ADMIN"]);
+const dispensers = new Set(["CLINIC", "PHARMACY", "ADMIN", "RECALL_AUTHORITY"]);
 
 function userRoles(user: DemoUser | null | undefined) {
   return new Set([user?.role, ...(user?.roles || [])].filter(Boolean) as string[]);
@@ -73,6 +75,14 @@ export function canEditProductMetadata(user: DemoUser | null | undefined) {
   return canRegisterProducts(user);
 }
 
+export function canSealColdChainLeg(user: DemoUser | null | undefined) {
+  return hasAnyRole(user, coldChainSealers);
+}
+
+export function canDispenseProduct(user: DemoUser | null | undefined) {
+  return hasAnyRole(user, dispensers);
+}
+
 export function canViewInternalProducts(user: DemoUser | null | undefined) {
   return !isPublicUser(user);
 }
@@ -98,6 +108,8 @@ export function canAccessDashboardPath(user: DemoUser | null | undefined, pathna
     return canRegisterProducts(user);
   }
   if (pathname.startsWith("/dashboard/products")) return canViewInternalProducts(user);
+
+  if (pathname.startsWith("/dashboard/coldchain")) return canViewInternalProducts(user);
 
   if (pathname.startsWith("/dashboard/transfers/create")) return canInitiateTransfer(user);
   if (

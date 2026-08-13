@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { administerProduct, archiveProducts, getApiErrorMessage, getProductDetail, reregisterProduct, updateProduct } from "@/lib/api";
+import { administerProduct, archiveProducts, dispenseProduct, getApiErrorMessage, getProductDetail, reregisterProduct, updateProduct } from "@/lib/api";
 import { getStoredUser } from "@/lib/auth";
 import type { ProductDetailResponse } from "@/lib/types";
 import { ProductStatusBadge, RiskLevelBadge } from "@/components/product/ProductStatusBadge";
@@ -12,7 +12,7 @@ import { TransferTimeline } from "@/components/trace/TransferTimeline";
 import { DetailSkeleton } from "@/components/ui/LoadingSkeleton";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ActionSpinner } from "@/components/ui/ActionSpinner";
-import { canEditProductMetadata, canInitiateTransfer, canRegisterProducts, isAdminAuthority } from "@/lib/role-access";
+import { canDispenseProduct, canEditProductMetadata, canInitiateTransfer, canRegisterProducts, isAdminAuthority } from "@/lib/role-access";
 import { getZodFieldErrors, productMetadataSchema } from "@/lib/validation";
 import { useLanguage, useTranslation } from "@/providers/LanguageProvider";
 
@@ -57,6 +57,10 @@ export default function ProductDetailPage({ params }: PageProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [isReregistering, setIsReregistering] = useState(false);
   const [isAdministering, setIsAdministering] = useState(false);
+  const [showDispenseForm, setShowDispenseForm] = useState(false);
+  const [isDispensing, setIsDispensing] = useState(false);
+  const [dispenseForm, setDispenseForm] = useState({ patientToken: "", niisRef: "", reason: "" });
+  const [dispenseResult, setDispenseResult] = useState<{ patientToken: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [editForm, setEditForm] = useState({
@@ -235,10 +239,12 @@ export default function ProductDetailPage({ params }: PageProps) {
     transferableStatuses.includes(product.status);
   const canEdit = canEditProductMetadata(currentUser);
   const canArchive = isAdminAuthority(currentUser);
+  const isDispensableStatus = !product.archivedAt && !["ARCHIVED", "INVALID", "RECALLED", "ADMINISTERED"].includes(product.status);
+  const isLotMerkleUnit = Boolean(product.lotIdHash);
+  const canDispense = isDispensableStatus && isLotMerkleUnit && canDispenseProduct(currentUser);
   const canAdminister =
-    Boolean(currentUser) &&
-    !product.archivedAt &&
-    !["ARCHIVED", "INVALID", "RECALLED", "ADMINISTERED"].includes(product.status) &&
+    isDispensableStatus &&
+    !isLotMerkleUnit &&
     (isAdminAuthority(currentUser) ||
       currentUser?.role === "CLINIC" ||
       currentUser?.role === "PHARMACY" ||
@@ -258,6 +264,35 @@ export default function ProductDetailPage({ params }: PageProps) {
       const msg = getApiErrorMessage(err, t("Không thể ẩn serial."));
       setError(msg);
       toast.error(msg);
+    }
+  };
+
+  const dispenseNow = async () => {
+    if (!detail || isDispensing) return;
+    setIsDispensing(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await dispenseProduct(detail.product.serialId, {
+        patientToken: dispenseForm.patientToken.trim() || undefined,
+        niisRef: dispenseForm.niisRef.trim() || undefined,
+        reason: dispenseForm.reason.trim() || undefined,
+      });
+      setDetail((current) =>
+        current
+          ? { ...current, product: { ...current.product, status: "ADMINISTERED", syncStatus: "PROCESSING" } }
+          : current
+      );
+      setDispenseResult({ patientToken: result.patientToken });
+      setShowDispenseForm(false);
+      setDispenseForm({ patientToken: "", niisRef: "", reason: "" });
+      toast.success(t("Đã dispense on-chain thành công."));
+    } catch (err: unknown) {
+      const msg = getApiErrorMessage(err, t("Không thể dispense sản phẩm."));
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsDispensing(false);
     }
   };
 
@@ -342,14 +377,25 @@ export default function ProductDetailPage({ params }: PageProps) {
               {t("Sửa metadata")}
             </button>
           ) : null}
-          {canAdminister ? (
+          {canDispense ? (
             <button
               className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700 shadow-sm transition hover:bg-emerald-100 disabled:opacity-50"
+              disabled={isDispensing}
+              onClick={() => setShowDispenseForm((current) => !current)}
+              type="button"
+            >
+              {t("Dispense on-chain")}
+            </button>
+          ) : null}
+          {canAdminister ? (
+            <button
+              className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 shadow-sm transition hover:bg-zinc-50 disabled:opacity-50"
               disabled={isAdministering}
               onClick={markAdministered}
               type="button"
+              title={t("Sản phẩm cũ (trước lot-Merkle) — chỉ cập nhật Firebase, không chạm blockchain.")}
             >
-              {isAdministering ? <ActionSpinner label={t("Đang xử lý...")} /> : t("Đánh dấu đã tiêm")}
+              {isAdministering ? <ActionSpinner label={t("Đang xử lý...")} /> : `${t("Đánh dấu đã tiêm")} (legacy)`}
             </button>
           ) : null}
           {canArchive ? (
@@ -392,6 +438,71 @@ export default function ProductDetailPage({ params }: PageProps) {
             <p className="mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-700">
               {error}
             </p>
+          ) : null}
+
+          {dispenseResult ? (
+            <div className="mt-4 rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm">
+              <p className="font-semibold text-emerald-800">
+                {t("Đã dispense on-chain. Đây là mã token bệnh nhân (không phải PII, không suy ra được CCCD/BHYT):")}
+              </p>
+              <p className="mt-2 break-all rounded-md border border-emerald-300 bg-white p-2 font-mono text-sm font-bold text-emerald-900">
+                {dispenseResult.patientToken}
+              </p>
+            </div>
+          ) : null}
+
+          {showDispenseForm ? (
+            <div className="mt-4 space-y-3 rounded-md border border-emerald-200 bg-emerald-50/60 p-4">
+              <p className="text-sm font-semibold text-emerald-800">{t("Dispense on-chain")}</p>
+              <p className="text-xs text-muted-foreground">
+                {t("Xác minh Merkle proof thật trên chain và ghi nhận đã sử dụng. Mã token bệnh nhân là ngẫu nhiên, không chứa thông tin định danh (không PII) — để trống để hệ thống tự sinh.")}
+              </p>
+              <div className="grid gap-3 md:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-700">{t("Mã token bệnh nhân (tuỳ chọn)")}</label>
+                  <input
+                    className="w-full rounded-md border border-zinc-200 bg-white p-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    value={dispenseForm.patientToken}
+                    onChange={(event) => setDispenseForm({ ...dispenseForm, patientToken: event.target.value })}
+                    placeholder={t("Để trống để tự sinh UUID")}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold text-gray-700">NIIS Ref ({t("tuỳ chọn")})</label>
+                  <input
+                    className="w-full rounded-md border border-zinc-200 bg-white p-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    value={dispenseForm.niisRef}
+                    onChange={(event) => setDispenseForm({ ...dispenseForm, niisRef: event.target.value })}
+                  />
+                </div>
+                <div className="space-y-1 md:col-span-2">
+                  <label className="text-xs font-semibold text-gray-700">{t("Ghi chú")} ({t("tuỳ chọn")})</label>
+                  <input
+                    className="w-full rounded-md border border-zinc-200 bg-white p-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    value={dispenseForm.reason}
+                    onChange={(event) => setDispenseForm({ ...dispenseForm, reason: event.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  disabled={isDispensing}
+                  onClick={dispenseNow}
+                  type="button"
+                >
+                  {isDispensing ? <ActionSpinner label={t("Đang xử lý...")} /> : t("Xác nhận dispense")}
+                </button>
+                <button
+                  className="rounded-md border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                  disabled={isDispensing}
+                  onClick={() => setShowDispenseForm(false)}
+                  type="button"
+                >
+                  {t("Hủy")}
+                </button>
+              </div>
+            </div>
           ) : null}
 
           <div className="mt-5 grid gap-4 text-sm md:grid-cols-2">
