@@ -4,6 +4,8 @@ import { WagmiProvider, createConfig, http } from "wagmi";
 import { metaMask } from "wagmi/connectors";
 import { hardhat, sepolia } from "viem/chains";
 import { defineChain } from "viem";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 
 // Polygon Amoy testnet
 const amoy = defineChain({
@@ -22,12 +24,10 @@ const amoy = defineChain({
   blockExplorers: {
     default: {
       name: "PolygonScan",
-      url: "https://www.oklink.com/api/v5/explorer/address?chain univariate=80002&txn=0",
+      url: "https://amoy.polygonscan.com",
     },
   },
 });
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useState } from "react";
 
 const enableLocalChain = process.env.NEXT_PUBLIC_ENABLE_LOCAL_CHAIN === "true";
 const sepoliaRpcUrl = process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || "https://ethereum-sepolia-rpc.publicnode.com";
@@ -44,18 +44,26 @@ const connectors = [
 // Default to Amoy for production, Sepolia for local dev
 const useAmoy = process.env.NEXT_PUBLIC_USE_AMOY !== "false";
 
-const wagmiConfig = createConfig({
-  chains: useAmoy ? [amoy] : (enableLocalChain ? [sepolia, hardhat] : [sepolia]),
-  connectors,
-  transports: useAmoy
-    ? { [amoy.id]: http(amoyRpcUrl) }
-    : enableLocalChain
-    ? {
+const wagmiConfig = useAmoy
+  ? createConfig({
+      chains: [amoy],
+      connectors,
+      transports: { [amoy.id]: http(amoyRpcUrl) },
+    })
+  : enableLocalChain
+  ? createConfig({
+      chains: [sepolia, hardhat],
+      connectors,
+      transports: {
         [sepolia.id]: http(sepoliaRpcUrl),
         [hardhat.id]: http("http://127.0.0.1:8545"),
-      }
-    : { [sepolia.id]: http(sepoliaRpcUrl) },
-});
+      },
+    })
+  : createConfig({
+      chains: [sepolia],
+      connectors,
+      transports: { [sepolia.id]: http(sepoliaRpcUrl) },
+    });
 
 export function Web3Provider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
