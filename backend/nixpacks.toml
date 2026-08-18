@@ -1,0 +1,15 @@
+[nixpacks]
+name = "vaccine-traceability-backend"
+edge = false
+
+[phases.setup]
+nixpacks = ["nodejs-20"]
+
+[phases.install]
+nixpacks = ["npm install"]
+
+[phases.build]
+nixpacks = ["npm run build"]
+
+[start]
+cmd = "npm start"
