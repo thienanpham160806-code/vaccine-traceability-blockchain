@@ -1,17 +1,20 @@
 {
   "network": "sepolia",
   "deployer": "0xcd8E5cb88a3338970DfbfA914A98bC4a8dC0eeB6",
-  "deployedAt": "2026-06-24T02:38:37.352Z",
+  "deployedAt": "2026-08-18T17:00:50.093Z",
   "contracts": {
-    "supplyChainAccessControl": "0x7Adb60A3F2393F68EBeC27774970408D41068De5",
-    "importVerifier": "0x59da47375eF85999C3F400CeEAd2E6503B411083",
-    "productRegistry": "0xf79Ad6CAf242871FCa98987d4745008226A47046",
-    "transferLedger": "0xf9Ae50f3FBC5c70e95D520e7C27cd47dDa1FC2DB"
+    "supplyChainAccessControl": "0x541A773D54b8d8286aEAAbAa73576bB8cF6e5805",
+    "importVerifier": "0xdB526b76bdc4296ECa4967E1704b25847866fAe0",
+    "productRegistry": "0x5cC7A8928EAEce0CE81D18f15fD897E6910eF48F",
+    "transferLedger": "0xD990840d6EA4DE754FC7F8EF2fd8e40D85E928f9",
+    "coldChainRegistry": "0x87ed48bed58c92E558BeC45d5ed3999D987117c2",
+    "coldChainVerifier": "0xCfD460FB6B8A34b516c19485AC36df7883A24973"
   },
   "setup": {
     "transferLedgerLinked": true,
     "importVerifierLinked": true,
     "mvpRoutesConfigured": true,
+    "coldChainRegistryLinked": true,
     "localDemoRolesConfigured": false
   }
 }
