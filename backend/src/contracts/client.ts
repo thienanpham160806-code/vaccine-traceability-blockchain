@@ -1,93 +1,15 @@
 import { ethers } from 'ethers';
 import config from '../config/env';
 import { Logger } from '../utils/logger';
+import ProductRegistryABI from './abis/ProductRegistry.json';
+import TransferLedgerABI from './abis/TransferLedger.json';
+import AccessControlABI from './abis/SupplyChainAccessControl.json';
+import ColdChainRegistryABI from './abis/ColdChainRegistry.json';
 
-// Import ABIs (they will be loaded from artifacts)
-let PRODUCT_REGISTRY_ABI: any[] = [];
-let TRANSFER_LEDGER_ABI: any[] = [];
-let ACCESS_CONTROL_ABI: any[] = [];
-let COLD_CHAIN_REGISTRY_ABI: any[] = [];
-
-// Try to load ABIs from JSON files
-try {
-  const ProductRegistryABI = require('./abis/ProductRegistry.json');
-  const TransferLedgerABI = require('./abis/TransferLedger.json');
-  const AccessControlABI = require('./abis/SupplyChainAccessControl.json');
-
-  PRODUCT_REGISTRY_ABI = ProductRegistryABI.abi || ProductRegistryABI;
-  TRANSFER_LEDGER_ABI = TransferLedgerABI.abi || TransferLedgerABI;
-  ACCESS_CONTROL_ABI = AccessControlABI.abi || AccessControlABI;
-
-  try {
-    const ColdChainRegistryABI = require('./abis/ColdChainRegistry.json');
-    COLD_CHAIN_REGISTRY_ABI = ColdChainRegistryABI.abi || ColdChainRegistryABI;
-  } catch {
-    // Optional: cold-chain module may not be deployed/configured yet.
-    COLD_CHAIN_REGISTRY_ABI = [
-      'function anchorEnv(bytes32 lotIdHash, bytes32 legId, bytes32 envMerkleRoot, uint256 windowStart, uint256 windowEnd, bool complianceFlag, bytes zkProof, uint256 timestamp) external',
-    ];
-  }
-} catch (error) {
-  Logger.warn('⚠️ Could not load ABIs from JSON files, using fallback');
-  // Fallback to minimal ABIs
-  PRODUCT_REGISTRY_ABI = [
-    'function registerProduct(bytes32 serialID, bytes32 batchHash, bytes32 metadataHash, bytes32 importDocHash, bytes zkpProof) external',
-    'function registerImportedProductZK(bytes32 serialID, bytes32 batchHash, bytes32 metadataHash, uint[2] a, uint[2][2] b, uint[2] c, uint[5] input) external',
-    'function approvedImportRoot() external view returns (uint256)',
-    'function setApprovedImportRoot(uint256 newApprovedImportRoot) external',
-    'function setImportVerifier(address newImportVerifier) external',
-    'function getProduct(bytes32 serialID) external view returns (tuple(bytes32, bytes32, bytes32, bytes32, uint256, uint256, address, address, uint8, uint8, bool, bool, uint8, bytes32, uint256, bool))',
-    'function getStatus(bytes32 serialID) external view returns (uint8)',
-    'function getRiskLevel(bytes32 serialID) external view returns (uint8)',
-    'function productExists(bytes32 serialID) external view returns (bool)',
-    'function getCurrentOwner(bytes32 serialID) external view returns (address)',
-    'function setTransferLedger(address newTransferLedger) external',
-    'function recallBatch(bytes32 batchHash, bytes32 reasonHash) external',
-    'function commissionLot(bytes32 lotIdHash, bytes32 aggregationRoot, bytes32 metadataHash, bytes zkProof, uint256 timestamp) external',
-    'function recallLot(bytes32 lotIdHash, bytes32 reasonHash) external',
-    'function lotExists(bytes32 lotIdHash) external view returns (bool)',
-    'function lots(bytes32 lotIdHash) external view returns (bytes32, bytes32, bytes32, bool, bool, uint256)',
-    'event ProductRegistered(bytes32 indexed serialID, bytes32 indexed batchHash, address indexed owner, bool isImported, bool zkpVerified, uint8 status)',
-    'event ProductFlagged(bytes32 indexed serialID, uint8 riskLevel, bytes32 indexed reason)',
-    'event BatchRecalled(bytes32 indexed batchHash, bytes32 indexed reasonHash, uint256 totalProducts)',
-    'event LotCommissioned(bytes32 indexed lotIdHash, bytes32 indexed aggregationRoot, bytes32 indexed metadataHash, uint256 timestamp)',
-    'event LotRecalled(bytes32 indexed lotIdHash, bytes32 indexed reasonHash, uint256 timestamp)',
-    'event UnitDecommissioned(bytes32 indexed unitIdHash, bytes32 indexed lotIdHash, bytes32 indexed eventType, uint256 timestamp)',
-    'event LotDisaggregated(bytes32 indexed parentLotIdHash, bytes32 indexed subLotIdHash, bytes32 indexed subLotRoot, bytes32 toActorHash, uint256 timestamp)',
-  ];
-
-  TRANSFER_LEDGER_ABI = [
-    'function createTransferRequest(bytes32 serialID, address receiver, bytes32 fromLocationHash, bytes32 toLocationHash) external',
-    'function confirmTransfer(bytes32 serialID, bytes32 receiverLocationHash) external',
-    'function rejectTransfer(bytes32 serialID, bytes32 reason) external',
-    'function pendingTransfers(bytes32 serialID) external view returns (bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, bool)',
-    'function getTransferHistory(bytes32 serialID) external view returns (tuple(bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, uint256)[])',
-    'function pendingTransfers(bytes32) external view returns (bytes32, address, address, bytes32, bytes32, bytes32, bytes32, uint256, bool)',
-    'function recordEvent(bytes32 lotIdHash, bytes32 fromActorHash, bytes32 toActorHash, bytes32 payloadHash, bytes actorSignature, uint256 timestamp) external',
-    'function anchorEnv(bytes32 lotIdHash, bytes32 legId, bytes32 envMerkleRoot, uint256 windowStart, uint256 windowEnd, bool complianceFlag, bytes zkProof, uint256 timestamp) external',
-    'function disaggregate(bytes32 parentLotIdHash, bytes32 subLotIdHash, bytes32 subLotRoot, bytes32 toActorHash, uint256 timestamp) external',
-    'function decommissionUnit(bytes32 unitIdHash, bytes32 lotIdHash, bytes32[] merkleProof, bytes32 eventType, uint256 timestamp) external',
-    'event TransferRequested(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 fromLocationHash, bytes32 toLocationHash, uint256 requestedAt)',
-    'event TransferConfirmed(bytes32 indexed serialID, address indexed sender, address indexed receiver, uint256 confirmedAt)',
-    'event TransferRejected(bytes32 indexed serialID, address indexed sender, address indexed receiver, bytes32 reason)',
-    'event DoubleScanDetected(bytes32 indexed serialID, bytes32 previousLocationHash, bytes32 newLocationHash, uint256 previousTimestamp, uint256 newTimestamp)',
-  ];
-
-  ACCESS_CONTROL_ABI = [
-    'function hasRole(bytes32 role, address account) external view returns (bool)',
-    'function grantUserRole(address account, bytes32 role) external',
-    'function getPrimaryRole(address account) external view returns (bytes32)',
-    'function isValidRoute(bytes32 fromRole, bytes32 toRole) external view returns (bool)',
-    'function MANUFACTURER_ROLE() external view returns (bytes32)',
-    'function IMPORTER_ROLE() external view returns (bytes32)',
-    'function DISTRIBUTOR_ROLE() external view returns (bytes32)',
-    'function CLINIC_ROLE() external view returns (bytes32)',
-  ];
-
-  COLD_CHAIN_REGISTRY_ABI = [
-    'function anchorEnv(bytes32 lotIdHash, bytes32 legId, bytes32 envMerkleRoot, uint256 windowStart, uint256 windowEnd, bool complianceFlag, bytes zkProof, uint256 timestamp) external',
-  ];
-}
+const PRODUCT_REGISTRY_ABI: any[] = (ProductRegistryABI as any).abi || ProductRegistryABI;
+const TRANSFER_LEDGER_ABI: any[] = (TransferLedgerABI as any).abi || TransferLedgerABI;
+const ACCESS_CONTROL_ABI: any[] = (AccessControlABI as any).abi || AccessControlABI;
+const COLD_CHAIN_REGISTRY_ABI: any[] = (ColdChainRegistryABI as any).abi || ColdChainRegistryABI;
 
 
 /**
