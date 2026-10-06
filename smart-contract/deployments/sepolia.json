@@ -1,14 +1,14 @@
 {
   "network": "sepolia",
   "deployer": "0xcd8E5cb88a3338970DfbfA914A98bC4a8dC0eeB6",
-  "deployedAt": "2026-08-18T17:26:24.959Z",
+  "deployedAt": "2026-10-06T04:06:13.710Z",
   "contracts": {
-    "supplyChainAccessControl": "0x1F3adC06b348d94e4276320D537645dF45d03B96",
-    "importVerifier": "0x3Db1fDeC609be85B607747DB35cd91BDB4bfc40f",
-    "productRegistry": "0x0345fBF3Dce6021F4412E4d8d770116F466F7F03",
-    "transferLedger": "0xe7f150701a2412a372C1AAf5d298000Eeb73f6F7",
-    "coldChainRegistry": "0x6B44eE80ee3bF2E56B03181f6889Ebc8CCA3f662",
-    "coldChainVerifier": "0x13eaa7AE84e2333DE9D09570F8d2ebB2FdC01d1a"
+    "supplyChainAccessControl": "0x834283a80368A17117b5624AF39152919DFb15A9",
+    "importVerifier": "0x198f34D0Cc522c4677FDB392e82ed64e54aC8cf7",
+    "productRegistry": "0x0083D58E800457da6c0A352b8f8280Af29e58330",
+    "transferLedger": "0x247F0C5Ec2cdC88587795A4B947a0E071bD3B90F",
+    "coldChainRegistry": "0x06FaCC6060a93AFfB6DD60DAC7676a9C339394D2",
+    "coldChainVerifier": "0x177b19b7965f634376B69020D2E48E516980804d"
   },
   "setup": {
     "transferLedgerLinked": true,
