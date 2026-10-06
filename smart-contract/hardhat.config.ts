@@ -37,6 +37,15 @@ const config: HardhatUserConfig = {
     },
   },
 
+  // Enabled with `npm run test:gas`. Offline: reports gas units only, no
+  // price API calls, so it runs the same locally and in CI.
+  gasReporter: {
+    enabled: process.env.REPORT_GAS === "true",
+    offline: true,
+    noColors: true,
+    excludeContracts: ["MockColdChainVerifier", "DemoImportZKPVerifier"],
+  },
+
   etherscan: {
     apiKey: {
       sepolia: process.env.ETHERSCAN_API_KEY || "",
