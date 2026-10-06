@@ -1,25 +1,192 @@
-# Vaccine Traceability Blockchain MVP
+# VaxiTrust — Vaccine Traceability on Blockchain
 
-MVP system for blockchain-based vaccine traceability.
+**🏆 Top 10 – Incubation Track, [Competition name, year]**
 
-The project focuses on tracking vaccine products across the supply chain, including product registration, batch management, transfer, verification, risk detection, and batch recall.
+[![CI](https://github.com/thienanpham160806-code/vaccine-traceability-blockchain/actions/workflows/ci.yml/badge.svg)](https://github.com/thienanpham160806-code/vaccine-traceability-blockchain/actions/workflows/ci.yml)
 
-## Project Structure
+VaxiTrust tracks vaccines from manufacturer or importer through distributors
+to clinics and pharmacies. Every hand-over is a two-step, role-checked
+transfer on Ethereum. Recalls apply to a whole batch in one transaction, and
+anyone can scan a QR code to check whether a vial is genuine, recalled or
+already dispensed.
 
-```text
-smart-contract/   Solidity smart contracts, Hardhat tests, deployment scripts
-backend/          Backend API service
-frontend/         Frontend dashboard and consumer verification UI
-docs/             Technical documentation and team handoff
+- **Context:** group course project for the Blockchain course at the
+  University of Economics and Law (UEL), VNU-HCM.
+- **Live demo:** https://vaccine-traceability-blockchain.vercel.app
+  (frontend; contracts on Ethereum Sepolia, addresses in
+  [`smart-contract/deployments/sepolia.json`](smart-contract/deployments/sepolia.json))
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Client["Client"]
+        FE["Next.js frontend<br/>(Vercel)"]
+        WAL["Browser wallet<br/>wagmi / viem"]
+    end
+
+    subgraph Server["Backend (Node.js / Express)"]
+        API["REST API<br/>JWT auth, validation"]
+        Q["txQueue<br/>per-role signer wallets"]
+        EL["eventListener"]
+    end
+
+    subgraph Chain["Ethereum Sepolia"]
+        AC["SupplyChainAccessControl<br/>roles + route matrix"]
+        PR["ProductRegistry<br/>serials, batches, lots, recall"]
+        TL["TransferLedger<br/>2-step transfer, double-scan"]
+        CC["ColdChainRegistry<br/>temperature anchors"]
+        VER["ZKP verifiers<br/>(demo / mock)"]
+    end
+
+    FB[("Firebase Realtime DB<br/>off-chain index, workflow state")]
+    IPFS[("IPFS via Pinata<br/>metadata JSON")]
+
+    FE -->|REST| API
+    FE --> WAL
+    WAL -->|transfer tx| TL
+    WAL -->|register / recall tx| PR
+    API --> Q
+    Q -->|signed tx| PR
+    Q -->|signed tx| TL
+    API <--> FB
+    API -->|pin JSON| IPFS
+    TL -->|status hooks| PR
+    TL -->|anchorEnv| CC
+    PR -->|hasRole| AC
+    TL -->|getPrimaryRole / isValidRoute| AC
+    CC -->|hasRole| AC
+    PR --> VER
+    CC --> VER
+    PR -.->|events| EL
+    TL -.->|events| EL
+    CC -.->|events| EL
+    EL -->|sync| FB
 ```
 
-## Team Setup
+Only hashes go on-chain (serial, batch, metadata, location, document
+commitments). Readable product data lives in IPFS and Firebase, and the chain
+serves as the tamper-evident record those hashes are checked against.
+
+## Quality metrics
+
+All numbers below come from running the tools on this repository; the
+commands are listed under each table. CI
+([`.github/workflows/ci.yml`](.github/workflows/ci.yml)) compiles and tests the
+contracts, runs coverage, and builds and tests the backend and frontend on
+every push and pull request.
+
+### Test coverage
+
+`solidity-coverage` 0.8.17, 146 Hardhat tests (88 before this pass).
+
+| Contract | Statements | Branches | Functions | Lines |
+|---|---|---|---|---|
+| SupplyChainAccessControl | 100% | 100% (was 80.36%) | 100% | 100% |
+| ProductRegistry | 100% (was 71.62%) | 99.56% (was 49.12%) | 100% (was 83.33%) | 100% (was 70.88%) |
+| TransferLedger | 100% (was 83.08%) | 94.29% (was 55.71%) | 100% (was 84.62%) | 100% (was 83.78%) |
+| ColdChainRegistry | 100% | 100% (was 81.25%) | 100% | 100% |
+| **All contracts** | **100%** (was 79.18%) | **98.70%** (was 57.55%) | **100%** (was 86.96%) | **100%** (was 78.88%) |
+
+The 5 uncovered branches cannot be reached through the deployed wiring:
+`TransferLedger` re-checks `FLAGGED` / `IN_TRANSIT` after guards that already
+exclude them (4 branches), and `ProductRegistry._isRecalled` tests a stored
+`RECALLED` status that is never written, because recall is computed from the
+batch flag (1 branch).
+
+New suites cover the paths that matter most: role revoke and primary-role
+switch, every rejection in the two-step transfer, `rejectTransfer`,
+double-scan detection (window and location rules), recall while a transfer is
+in flight, flag/unflag, and the ZK import registration path.
+
+```bash
+cd smart-contract && npm run coverage
+```
+
+### Gas
+
+`hardhat-gas-reporter` 2.3.0 on the Hardhat network; solc 0.8.28, `viaIR`,
+optimizer `runs: 1`. Values are gas units; cost in ETH = gas × gas price.
+
+| Function | Min | Max | Avg | Notes |
+|---|---|---|---|---|
+| `ProductRegistry.registerProduct` | 235,066 | 272,780 | 249,525 | Benchmark: 252,154 for the first serial of a batch, 235,054 for the next. Max is the importer path, which also stores `importDocHash` |
+| `TransferLedger.createTransferRequest` | 276,409 | 313,285 | 298,621 | First hop writes fresh `lastScans` slots |
+| `TransferLedger.confirmTransfer` | 266,403 | 283,503 | 280,394 | Appends a `TransferRecord`, clears the pending entry |
+| `TransferLedger.rejectTransfer` | 70,321 | 70,331 | 70,325 | |
+| `ProductRegistry.recallBatch` | – | – | 79,846 | Same cost for any batch size (below) |
+| `ProductRegistry.commissionLot` | 149,342 | 149,390 | 149,377 | Registers a whole lot as one Merkle root |
+
+**`recallBatch` is O(1) in batch size.** It sets one flag
+(`recalledBatches[batchHash]`) and stores the reason; it does not loop over
+serials. Every read (`getStatus`, `getProduct`, `getRiskLevel`) checks that
+flag, so each serial in the batch reads as `RECALLED` straight away. Measured
+with [`scripts/gas-benchmark.ts`](smart-contract/scripts/gas-benchmark.ts):
+
+| Batch size | `recallBatch` gasUsed | `getBatchSerials` (`eth_call` gas) |
+|---|---|---|
+| 1 | 79,846 | 27,553 |
+| 10 | 79,846 | 47,993 |
+| 100 | 79,846 | 252,465 |
+| 500 | 79,834 | 1,162,750 |
+
+The part that grows with batch size is the read-only `getBatchSerials`, at
+about 2,275 gas per serial. Nothing calls it on-chain, so it cannot block a
+recall. An RPC node with geth's default 50M `eth_call` gas cap could return
+about 21,900 serials in one call (extrapolated from the slope above, not
+measured); larger batches would need paging.
+
+```bash
+cd smart-contract && npm run test:gas        # per-method table
+cd smart-contract && npm run gas:benchmark   # lifecycle + batch-size scaling
+```
+
+### Security (Slither + manual review)
+
+Slither 0.11.6, 102 detectors. Full write-up:
+[`docs/security-review.md`](docs/security-review.md).
+
+| | High | Medium | Low | Info | Optimization |
+|---|---|---|---|---|---|
+| Slither results (37) | 0 | 4 (all false positives) | 23 (22 false positives, 1 accepted) | 5 (style) | 5 (valid, measured, not applied) |
+| Manual review (11) | 1 | 2 | 4 | 4 | – |
+
+- **Fixed in a separate PR** (`fix/contract-access-control`, with regression
+  tests): **H-1** the TransferLedger lot functions had no caller check, so any
+  address could mark any vial as dispensed; **M-1** a recalled lot could still
+  be dispensed through a sub-lot; **M-2** revoking a role via OpenZeppelin's
+  `revokeRole` / `renounceRole` left the account able to transfer. The live
+  Sepolia contracts need a redeploy to pick these up.
+- The Slither Medium results (`reentrancy-no-eth`, `incorrect-equality`) are
+  false positives: the only external callee is the project's own
+  `ProductRegistry`, which makes no callbacks, and the equality compares
+  `bytes32` hashes.
+
+## Team & roles
+
+<!-- Fill in one row per member. -->
+
+| Member | Role | Main contributions | GitHub |
+|---|---|---|---|
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+|  |  |  |  |
+
+## Project structure
+
+```text
+smart-contract/   Solidity contracts, Hardhat tests, deployment and gas scripts
+backend/          Express API, tx queue, event listener, Firebase/IPFS integration
+frontend/         Next.js dashboard and consumer verification UI
+docs/             Technical documentation, security review, team handoff notes
+```
+
+## Team setup
 
 Read the full handoff before running the project:
-
-```text
-docs/frontend-backend-handoff.md
-```
+[`docs/frontend-backend-handoff.md`](docs/frontend-backend-handoff.md).
 
 Quick run summary:
 
@@ -31,27 +198,10 @@ Quick run summary:
 
 Validation commands:
 
-```powershell
-cd backend
-npm.cmd run build
-```
-
-```powershell
-cd ../frontend
-npm.cmd run build
-```
-
-```powershell
-cd ../smart-contract
-npm.cmd test
-```
-vaccine-traceability-blockchain/
-├── smart-contract/     Solidity contracts, Hardhat tests, deployment scripts
-├── frontend/           Next.js frontend dashboard and consumer verification UI
-├── backend/            Backend API service
-├── docs/               Technical documentation and handoff notes
-├── README.md           Root project documentation
-└── .gitignore
+```bash
+cd smart-contract && npm test && npm run coverage
+cd backend && npm run build && npm test
+cd frontend && npm run build
 ```
 
 ## Main Components
