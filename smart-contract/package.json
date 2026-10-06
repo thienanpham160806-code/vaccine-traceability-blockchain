@@ -5,6 +5,9 @@
   "main": "index.js",
   "scripts": {
     "test": "hardhat test",
+    "test:gas": "cross-env REPORT_GAS=true hardhat test",
+    "coverage": "hardhat coverage",
+    "gas:benchmark": "hardhat run scripts/gas-benchmark.ts",
     "compile": "hardhat compile",
     "clean": "hardhat clean",
     "zkp:setup": "node scripts/setup-import-zkp.js",
@@ -30,8 +33,11 @@
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^6.1.2",
     "@types/node": "^25.6.2",
+    "cross-env": "^7.0.3",
     "dotenv": "^17.4.2",
     "hardhat": "^2.29.1",
+    "hardhat-gas-reporter": "^2.3.0",
+    "solidity-coverage": "^0.8.17",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   },

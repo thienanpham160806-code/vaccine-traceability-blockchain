@@ -62,3 +62,6 @@ Thumbs.db
 
 # Local deployment output
 **/deployments/hardhat.json
+# Personal AI/editor tool config (not part of the product)
+.claude/
+.continue/
