@@ -116,6 +116,9 @@ contract TransferLedger {
     uint8 public constant RISK_HIGH = 3;
 
     bytes32 public constant DEFAULT_ADMIN_ROLE = bytes32(0);
+    bytes32 public constant CLINIC_ROLE = keccak256("CLINIC_ROLE");
+    bytes32 public constant PHARMACY_ROLE = keccak256("PHARMACY_ROLE");
+    bytes32 public constant RECALL_AUTHORITY_ROLE = keccak256("RECALL_AUTHORITY_ROLE");
     bytes32 public constant REASON_DOUBLE_SCAN = keccak256("DOUBLE_SCAN");
     bytes32 public constant REASON_INVALID_ROUTE = keccak256("INVALID_ROUTE");
 
@@ -174,6 +177,45 @@ contract TransferLedger {
 
     modifier onlyAdmin() {
         require(accessControl.hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Not admin");
+        _;
+    }
+
+    // ProductRegistry and ColdChainRegistry only check that msg.sender is this
+    // ledger for the lot functions below, so the caller must be authorised
+    // here. Role sets mirror the backend route guards; admin is always allowed.
+
+    // Any physical custody party: manufacturer, importer, distributor, clinic, pharmacy.
+    modifier onlyCustodyActor() {
+        bytes32 role = accessControl.getPrimaryRole(msg.sender);
+        require(
+            accessControl.canInitiateTransfer(role) ||
+                accessControl.canReceiveTransfer(role) ||
+                accessControl.hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Not custody actor"
+        );
+        _;
+    }
+
+    // Parties that split lots for onward shipment: manufacturer, importer, distributor.
+    modifier onlyLotSender() {
+        require(
+            accessControl.canInitiateTransfer(accessControl.getPrimaryRole(msg.sender)) ||
+                accessControl.hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Not lot sender"
+        );
+        _;
+    }
+
+    // Parties that take units out of circulation: clinic, pharmacy, recall authority.
+    modifier onlyDispenser() {
+        bytes32 role = accessControl.getPrimaryRole(msg.sender);
+        require(
+            role == CLINIC_ROLE ||
+                role == PHARMACY_ROLE ||
+                role == RECALL_AUTHORITY_ROLE ||
+                accessControl.hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Not dispenser"
+        );
         _;
     }
 
@@ -352,7 +394,7 @@ contract TransferLedger {
         bytes32 payloadHash,
         bytes calldata actorSignature,
         uint256 timestamp
-    ) external {
+    ) external onlyCustodyActor {
         productRegistry.recordEvent(
             lotIdHash,
             fromActorHash,
@@ -372,7 +414,7 @@ contract TransferLedger {
         bool complianceFlag,
         bytes calldata zkProof,
         uint256 timestamp
-    ) external {
+    ) external onlyCustodyActor {
         require(coldChainRegistry != address(0), "Cold chain registry not set");
 
         IColdChainRegistry(coldChainRegistry).anchorEnv(
@@ -393,7 +435,7 @@ contract TransferLedger {
         bytes32 subLotRoot,
         bytes32 toActorHash,
         uint256 timestamp
-    ) external {
+    ) external onlyLotSender {
         productRegistry.disaggregate(
             parentLotIdHash,
             subLotIdHash,
@@ -409,7 +451,7 @@ contract TransferLedger {
         bytes32[] calldata merkleProof,
         bytes32 eventType,
         uint256 timestamp
-    ) external {
+    ) external onlyDispenser {
         productRegistry.decommissionUnit(
             unitIdHash,
             lotIdHash,

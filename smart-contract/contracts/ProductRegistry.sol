@@ -438,6 +438,9 @@ function verifyProof(
         require(lotIdHash != bytes32(0), "Invalid lot id");
         require(lots[lotIdHash].exists || lotToParent[lotIdHash] != bytes32(0), "Lot not found");
         require(!lots[lotIdHash].recalled, "Lot recalled");
+        // Sub-lots have no Lot entry of their own, so a recall of the parent
+        // must also block dispensing from any sub-lot split off from it.
+        require(!lots[lotToParent[lotIdHash]].recalled, "Lot recalled");
         require(!unitDecommissioned[unitIdHash], "Unit already decommissioned");
 
         // NOTE: merkleProof may legitimately be an empty array — a lot with
