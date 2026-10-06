@@ -178,6 +178,19 @@
   },
   {
     "inputs": [],
+    "name": "CLINIC_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "DEFAULT_ADMIN_ROLE",
     "outputs": [
       {
@@ -204,6 +217,19 @@
   },
   {
     "inputs": [],
+    "name": "PHARMACY_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "REASON_DOUBLE_SCAN",
     "outputs": [
       {
@@ -218,6 +244,19 @@
   {
     "inputs": [],
     "name": "REASON_INVALID_ROUTE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "RECALL_AUTHORITY_ROLE",
     "outputs": [
       {
         "internalType": "bytes32",

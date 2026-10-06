@@ -75,12 +75,23 @@ contract SupplyChainAccessControl is AccessControl {
 
         revokeRole(role, account);
 
-        if (primaryRoles[account] == role) {
+        emit UserRoleRevoked(account, role);
+    }
+
+    // Every revocation path (revokeUserRole, the inherited revokeRole and
+    // renounceRole) ends here, so the primary role used by TransferLedger can
+    // never outlive the underlying role grant.
+    function _revokeRole(bytes32 role, address account)
+        internal
+        override
+        returns (bool revoked)
+    {
+        revoked = super._revokeRole(role, account);
+
+        if (role != DEFAULT_ADMIN_ROLE && primaryRoles[account] == role) {
             primaryRoles[account] = bytes32(0);
             emit PrimaryRoleSet(account, bytes32(0));
         }
-
-        emit UserRoleRevoked(account, role);
     }
 
     function setPrimaryRole(address account, bytes32 role)
