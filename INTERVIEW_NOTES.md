@@ -290,7 +290,7 @@ dữ liệu lớn*.
 
 1. Kể về dự án trong 1 phút. *(Bài toán vắc-xin giả và recall chậm → giải
    pháp chuyển giao hai bước + recall O(1) + xác minh bằng QR → kết quả: Top
-   10 Incubation Track, 146 test, phát hiện và sửa 3 lỗi phân quyền.)*
+   10 Bảng Ươm mầm cuộc thi ATTACKER 2026, 146 test, phát hiện và sửa 3 lỗi phân quyền.)*
 2. Vì sao dùng blockchain mà không dùng database thường? *(Nhiều bên không
    tin nhau, không ai muốn một bên giữ database và sửa được lịch sử; cần nhật
    ký không thể sửa lén mà các bên cùng kiểm tra được.)*
