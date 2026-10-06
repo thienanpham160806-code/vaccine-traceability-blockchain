@@ -370,7 +370,7 @@ test wallets.
 | Part | How |
 |---|---|
 | Contracts | `npm run deploy:sepolia` (or `npx hardhat run scripts/deploy.ts --network amoy`). Writes `deployments/<network>.json` and syncs ABIs |
-| Backend | Railway (`railway.json`, `backend/nixpacks.toml`) or Render ([`docs/deploy-backend-render.md`](docs/deploy-backend-render.md)) |
+| Backend | Railway: service Root Directory = `backend`, config in `backend/railway.toml` (build `npm ci && npm run build`, start `npm start`, healthcheck `/health`); set the variables from `backend/.env.example`. Or Render ([`docs/deploy-backend-render.md`](docs/deploy-backend-render.md)) |
 | Frontend | Vercel, project root `frontend/` ([`docs/deploy-frontend-vercel.md`](docs/deploy-frontend-vercel.md)) |
 | Firebase rules | `database.rules.json`, deployed with `cd backend && npm run deploy:rules` ([`docs/firebase-rules-audit.md`](docs/firebase-rules-audit.md)) |
 
