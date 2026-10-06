@@ -19,8 +19,7 @@ npm run build                      # production build (also run in CI)
 ```
 
 The backend (`../backend`) must be running for login and data. For a local
-Hardhat chain, set `NEXT_PUBLIC_USE_AMOY=false` and
-`NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=true`.
+Hardhat chain, set `NEXT_PUBLIC_ENABLE_LOCAL_CHAIN=true`.
 
 ## Environment variables
 
@@ -28,7 +27,7 @@ Hardhat chain, set `NEXT_PUBLIC_USE_AMOY=false` and
 |---|---|
 | `NEXT_PUBLIC_API_URL` | Backend base URL |
 | `NEXT_PUBLIC_CONSUMER_VERIFY_BASE_URL` | Base URL encoded into consumer QR codes |
-| `NEXT_PUBLIC_USE_AMOY` | `true` (default) uses Polygon Amoy; `false` uses Sepolia (plus Hardhat if local chain is enabled) |
+| `NEXT_PUBLIC_USE_AMOY` | Unset or `false` (default) uses Sepolia, where the contracts are deployed, plus Hardhat if the local chain is enabled. `true` switches to Polygon Amoy (no deployment there yet) |
 | `NEXT_PUBLIC_ENABLE_LOCAL_CHAIN` | Adds the Hardhat chain (`127.0.0.1:8545`) when not using Amoy |
 | `NEXT_PUBLIC_SEPOLIA_RPC_URL`, `NEXT_PUBLIC_AMOY_RPC_URL` | RPC endpoints for wallet reads/writes |
 | `NEXT_PUBLIC_PRODUCT_REGISTRY_ADDRESS`, `NEXT_PUBLIC_TRANSFER_LEDGER_ADDRESS` | Contract addresses for wallet-signed transactions |

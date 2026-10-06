@@ -1,8 +1,12 @@
+# Railway service config. In the Railway service settings, set
+# Root Directory = backend so this file and backend/package.json are used.
 [build]
 builder = "nixpacks"
-buildCommand = "npm install && npm run build"
+buildCommand = "npm ci && npm run build"
 
 [deploy]
 startCommand = "npm start"
+healthcheckPath = "/health"
+healthcheckTimeout = 120
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3

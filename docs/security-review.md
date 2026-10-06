@@ -30,15 +30,16 @@ except real security fixes".
 
 All three real security issues (H-1, M-1, M-2) came from manual review, not
 from Slither. They are **fixed on branch `fix/contract-access-control`
-(separate PR, with tests)**. That PR is not merged yet, and the contracts
-currently deployed on Sepolia stay vulnerable until they are redeployed from
-it.
+(separate PR, with tests)**. The contracts were redeployed to Sepolia from that
+branch on 2026-10-06, and the fix was confirmed against the live contracts:
+an address without a role is refused with `Not dispenser`, `Not lot sender`
+and `Not custody actor`.
 
 | ID | Severity | Title | Status |
 |---|---|---|---|
-| H-1 | High | TransferLedger lot functions callable by anyone | Fixed in separate PR |
-| M-1 | Medium | Recalled lot can still be dispensed through a sub-lot | Fixed in separate PR |
-| M-2 | Medium | Revoking a role via `revokeRole`/`renounceRole` keeps the primary role | Fixed in separate PR |
+| H-1 | High | TransferLedger lot functions callable by anyone | Fixed (separate PR), deployed 2026-10-06 |
+| M-1 | Medium | Recalled lot can still be dispensed through a sub-lot | Fixed (separate PR), deployed 2026-10-06 |
+| M-2 | Medium | Revoking a role via `revokeRole`/`renounceRole` keeps the primary role | Fixed (separate PR), deployed 2026-10-06 |
 | L-1 | Low | Mock proof check in `registerProduct` / `commissionLot` | Acknowledged (MVP) |
 | L-2 | Low | Invalid-route flag is rolled back by the revert | Acknowledged |
 | L-3 | Low | Pending transfer can only be cleared by the receiver | Acknowledged |

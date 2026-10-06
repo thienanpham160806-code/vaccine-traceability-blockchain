@@ -190,8 +190,10 @@ Slither 0.11.6, 102 detectors. Full write-up:
   tests): **H-1** the TransferLedger lot functions had no caller check, so any
   address could mark any vial as dispensed; **M-1** a recalled lot could still
   be dispensed through a sub-lot; **M-2** revoking a role via OpenZeppelin's
-  `revokeRole` / `renounceRole` left the account able to transfer. The live
-  Sepolia contracts need a redeploy to pick these up.
+  `revokeRole` / `renounceRole` left the account able to transfer. The
+  contracts were redeployed to Sepolia from that branch on 2026-10-06, and the
+  fix was confirmed on-chain: an address without a role is refused by all
+  three new checks.
 - The Slither Medium results (`reentrancy-no-eth`, `incorrect-equality`) are
   false positives: the only external callee is the project's own
   `ProductRegistry`, which makes no callbacks, and the equality compares
@@ -361,14 +363,14 @@ test wallets.
 |---|---|
 | `smart-contract/.env` | `SEPOLIA_RPC_URL`, `AMOY_RPC_URL`, `PRIVATE_KEY` (deployer), `ETHERSCAN_API_KEY`, `POLYGONSCAN_API_KEY` |
 | `backend/.env` | `BLOCKCHAIN_RPC_URL` (`http://127.0.0.1:8545` locally); `BACKEND_PRIVATE_KEY`, `ADMIN_` / `MANUFACTURER_` / `IMPORTER_` / `DISTRIBUTOR_` / `CLINIC_` / `PHARMACY_` / `RECALL_AUTHORITY_PRIVATE_KEY`; `PRODUCT_REGISTRY_ADDRESS`, `TRANSFER_LEDGER_ADDRESS`, `ACCESS_CONTROL_ADDRESS`, `COLD_CHAIN_REGISTRY_ADDRESS`; `SYSTEM_SALT`; `PINATA_JWT`; `FIREBASE_*`; `JWT_SECRET`; `PORT` (default 5000) |
-| `frontend/.env.local` | `NEXT_PUBLIC_API_URL` (`http://localhost:5000` locally), `NEXT_PUBLIC_CONSUMER_VERIFY_BASE_URL`, `NEXT_PUBLIC_USE_AMOY` (set `false` for Sepolia / local), `NEXT_PUBLIC_ENABLE_LOCAL_CHAIN`, `NEXT_PUBLIC_SEPOLIA_RPC_URL`, `NEXT_PUBLIC_AMOY_RPC_URL`, `NEXT_PUBLIC_PRODUCT_REGISTRY_ADDRESS`, `NEXT_PUBLIC_TRANSFER_LEDGER_ADDRESS`, `NEXT_PUBLIC_IPFS_GATEWAY_URL` |
+| `frontend/.env.local` | `NEXT_PUBLIC_API_URL` (`http://localhost:5000` locally), `NEXT_PUBLIC_CONSUMER_VERIFY_BASE_URL`, `NEXT_PUBLIC_USE_AMOY` (leave unset or `false`: Sepolia is the default), `NEXT_PUBLIC_ENABLE_LOCAL_CHAIN`, `NEXT_PUBLIC_SEPOLIA_RPC_URL`, `NEXT_PUBLIC_AMOY_RPC_URL`, `NEXT_PUBLIC_PRODUCT_REGISTRY_ADDRESS`, `NEXT_PUBLIC_TRANSFER_LEDGER_ADDRESS`, `NEXT_PUBLIC_IPFS_GATEWAY_URL` |
 
 ## Deployment
 
 | Part | How |
 |---|---|
 | Contracts | `npm run deploy:sepolia` (or `npx hardhat run scripts/deploy.ts --network amoy`). Writes `deployments/<network>.json` and syncs ABIs |
-| Backend | Railway (`railway.json`, `backend/nixpacks.toml`) or Render ([`docs/deploy-backend-render.md`](docs/deploy-backend-render.md)) |
+| Backend | Railway: service Root Directory = `backend`, config in `backend/railway.toml` (build `npm ci && npm run build`, start `npm start`, healthcheck `/health`); set the variables from `backend/.env.example`. Or Render ([`docs/deploy-backend-render.md`](docs/deploy-backend-render.md)) |
 | Frontend | Vercel, project root `frontend/` ([`docs/deploy-frontend-vercel.md`](docs/deploy-frontend-vercel.md)) |
 | Firebase rules | `database.rules.json`, deployed with `cd backend && npm run deploy:rules` ([`docs/firebase-rules-audit.md`](docs/firebase-rules-audit.md)) |
 
@@ -411,8 +413,8 @@ test wallets.
   mock proof check in `registerProduct` / `commissionLot` accepts any
   non-empty proof. The Groth16 circuit (`circuits/import_registration.circom`)
   exists, but its verifier is not deployed.
-- **Security fixes are pending.** H-1, M-1 and M-2 are fixed on
-  `fix/contract-access-control`, but the deployed contracts predate the fix.
+- **Nothing is deployed on Polygon Amoy yet.** The configs support it, but
+  the only live deployment is on Sepolia.
 - **Double-scan alerts are on-chain only.** The backend does not yet
   subscribe to `DoubleScanDetected`.
 - **Single admin key.** A multisig or timelock is recommended outside demos.
