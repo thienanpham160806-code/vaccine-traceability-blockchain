@@ -41,8 +41,9 @@ const connectors = [
   }),
 ] as const;
 
-// Default to Amoy for production, Sepolia for local dev
-const useAmoy = process.env.NEXT_PUBLIC_USE_AMOY !== "false";
+// The contracts are deployed on Sepolia (smart-contract/deployments/sepolia.json),
+// so Sepolia is the default. Set NEXT_PUBLIC_USE_AMOY=true only after deploying to Amoy.
+const useAmoy = process.env.NEXT_PUBLIC_USE_AMOY === "true";
 
 const wagmiConfig = useAmoy
   ? createConfig({
